@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capabilities for desktop windows","local":true,"windows":["main"],"permissions":["core:default","core:webview:default","core:window:default","core:event:default","dialog:default","fs:default","opener:default","updater:default"]}}
