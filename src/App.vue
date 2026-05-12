@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import HomeView from './views/HomeView.vue'
 import SettingsView from './views/SettingsView.vue'
+import brandLogo from './assets/brand-logo.png'
 import {
   globalDragActive,
   pendingDrop,
@@ -81,12 +82,31 @@ onUnmounted(() => {
   <div class="app-shell" :class="{ 'drag-active': globalDragActive }">
     <aside class="sidebar">
       <div class="brand">
-        <strong>CC字幕压制工作站</strong>
-        <span>CSubtitleWorkstation</span>
+        <img :src="brandLogo" alt="CC字幕压制工作站" class="brand-logo" />
+        <div class="brand-text">
+          <strong>CC字幕压制工作站</strong>
+          <span class="brand-sub">Subtitle WorkStation</span>
+        </div>
       </div>
       <nav>
-        <button :class="{ active: active === 'home' }" @click="active = 'home'">压制</button>
-        <button :class="{ active: active === 'settings' }" @click="active = 'settings'">设置</button>
+        <button :class="{ active: active === 'home' }" @click="active = 'home'">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M7 11h4M7 15h7" />
+            </svg>
+          </span>
+          <span>压制</span>
+        </button>
+        <button :class="{ active: active === 'settings' }" @click="active = 'settings'">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.4 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </svg>
+          </span>
+          <span>设置</span>
+        </button>
       </nav>
     </aside>
     <KeepAlive>

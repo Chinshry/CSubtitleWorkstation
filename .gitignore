@@ -7,3 +7,7 @@ src-tauri/target*.old-path-cache/
 .env
 .env.*
 !.env.example
+
+# IDE / 工具缓存
+.history/
+.spec-workflow/

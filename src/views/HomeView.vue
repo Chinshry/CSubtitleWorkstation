@@ -447,7 +447,7 @@ onUnmounted(() => {
     />
     <CompressForm v-model="job" />
 
-    <CommandPreviewCard :command="command" />
+    <CommandPreviewCard v-if="command.length" :command="command" />
 
     <section class="actions">
       <button v-if="running" class="danger" @click="cancelJob">取消压制</button>

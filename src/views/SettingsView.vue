@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
 import { setFfmpegPath, resetFfmpegToSystem } from '../api/ffmpeg'
 import { checkAppUpdate, getCurrentAppVersion } from '../api/updater'
@@ -121,6 +121,37 @@ async function checkUpdate() {
   updateMessage.value = version ? `发现新版本：${version}` : '当前已是最新版本'
 }
 
+// 异步按钮 loading 状态管理：
+// - 延迟 180ms 才显示 spinner：耗时极短的操作（如 mock 检测）完全跳过 spinner，避免一闪
+// - 一旦显示，至少停留 400ms：消除"显示瞬间又消失"造成的布局闪烁
+const busy = reactive<Record<string, boolean>>({})
+const isBusy = (key: string) => !!busy[key]
+
+const SPINNER_SHOW_DELAY = 180
+const SPINNER_MIN_DURATION = 400
+
+async function withBusy<T>(key: string, fn: () => Promise<T>): Promise<T | undefined> {
+  if (busy[key]) return
+  let shownAt: number | null = null
+  const timer = window.setTimeout(() => {
+    busy[key] = true
+    shownAt = Date.now()
+  }, SPINNER_SHOW_DELAY)
+  try {
+    return await fn()
+  } finally {
+    if (shownAt !== null) {
+      const elapsed = Date.now() - shownAt
+      if (elapsed < SPINNER_MIN_DURATION) {
+        await new Promise<void>((r) => window.setTimeout(r, SPINNER_MIN_DURATION - elapsed))
+      }
+      busy[key] = false
+    } else {
+      window.clearTimeout(timer)
+    }
+  }
+}
+
 onMounted(async () => {
   appVersion.value = await getCurrentAppVersion()
   // 切到设置页不再重复检测，仅在首次进入时跑一次
@@ -179,9 +210,20 @@ onMounted(async () => {
         <div><dt>版本</dt><dd>{{ status?.ffmpegVersion ?? '—' }}</dd></div>
       </dl>
       <div class="actions left">
-        <button @click="chooseFfmpeg">选择 ffmpeg</button>
-        <button class="secondary" @click="useSystemPath">使用系统 PATH</button>
-        <button class="secondary" @click="refresh">重新检测</button>
+        <button
+          :class="{ 'is-busy': isBusy('chooseFfmpeg') }"
+          @click="withBusy('chooseFfmpeg', chooseFfmpeg)"
+        >选择 ffmpeg</button>
+        <button
+          class="secondary"
+          :class="{ 'is-busy': isBusy('useSystemPath') }"
+          @click="withBusy('useSystemPath', useSystemPath)"
+        >使用系统 PATH</button>
+        <button
+          class="secondary"
+          :class="{ 'is-busy': isBusy('ffmpegRefresh') }"
+          @click="withBusy('ffmpegRefresh', refresh)"
+        >重新检测</button>
         <button class="secondary" @click="guideOpen = !guideOpen">
           {{ guideOpen ? '收起安装手册' : '没有 ffmpeg？查看安装手册' }}
         </button>
@@ -314,7 +356,11 @@ onMounted(async () => {
         ⚠ {{ avsStatus.message ?? 'AVS 环境不可用，将无法启用 AVS 压制' }}
       </p>
       <div class="actions left">
-        <button class="secondary" @click="refreshAvsStatus">重新检测</button>
+        <button
+          class="secondary"
+          :class="{ 'is-busy': isBusy('avsRefresh') }"
+          @click="withBusy('avsRefresh', refreshAvsStatus)"
+        >重新检测</button>
         <button class="secondary" @click="avsGuideOpen = !avsGuideOpen">
           {{ avsGuideOpen ? '收起安装手册' : '没有 AviSynth+？查看安装手册' }}
         </button>
@@ -378,7 +424,10 @@ onMounted(async () => {
         <span class="badge">v{{ appVersion }}</span>
       </div>
       <div class="actions left">
-        <button @click="checkUpdate">检查应用更新</button>
+        <button
+          :class="{ 'is-busy': isBusy('checkUpdate') }"
+          @click="withBusy('checkUpdate', checkUpdate)"
+        >检查应用更新</button>
       </div>
       <p class="notice" v-if="updateMessage">{{ updateMessage }}</p>
     </section>

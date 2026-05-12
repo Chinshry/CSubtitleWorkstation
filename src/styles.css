@@ -52,46 +52,124 @@ button.danger {
 }
 
 .sidebar {
-  background: #14212b;
+  background: linear-gradient(180deg, #182735 0%, #111c25 100%);
   color: #fff;
   bottom: 0;
   left: 0;
-  padding: 22px 14px;
+  padding: 20px 12px;
   position: fixed;
   top: 0;
   width: 220px;
   z-index: 20;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .brand {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 26px;
+  align-items: center;
+  display: flex;
+  gap: 11px;
+  padding: 4px 6px 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.brand strong {
-  font-size: 18px;
+.brand-logo {
+  display: block;
+  flex-shrink: 0;
+  height: 40px;
+  object-fit: contain;
+  width: 40px;
 }
 
-.brand span {
-  color: #9fb1bf;
-  font-size: 12px;
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brand-text strong {
+  color: #f1f5f9;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.brand-text .brand-sub {
+  color: #6f8595;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 nav {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 nav button {
+  align-items: center;
   background: transparent;
-  color: #d8e0e7;
+  border-radius: 8px;
+  color: #aebccb;
+  display: flex;
+  font-size: 13.5px;
+  font-weight: 500;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  position: relative;
   text-align: left;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
-nav button.active,
+nav button .nav-icon {
+  align-items: center;
+  color: #7a8a9a;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 16px;
+  justify-content: center;
+  transition: color 0.16s ease;
+  width: 16px;
+}
+
 nav button:hover {
-  background: #243746;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e6edf3;
+}
+
+nav button:hover .nav-icon {
+  color: #b6c4d2;
+}
+
+nav button.active {
+  background: linear-gradient(135deg, rgba(23, 107, 135, 0.22) 0%, rgba(23, 107, 135, 0.08) 100%);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(56, 159, 191, 0.18);
+}
+
+nav button.active::before {
+  background: linear-gradient(180deg, #38bdf8 0%, #176b87 100%);
+  border-radius: 2px;
+  content: '';
+  height: 18px;
+  left: -12px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+}
+
+nav button.active .nav-icon {
+  color: #6dd3f0;
 }
 
 .workspace {
@@ -344,20 +422,77 @@ h2 {
 
 input:not([type="radio"]):not([type="checkbox"]),
 select {
-  border: 1px solid #cfd8df;
-  border-radius: 6px;
+  background-color: #fff;
+  border: 1px solid #d6dee5;
+  border-radius: 8px;
   color: #18202a;
-  min-height: 36px;
-  padding: 0 10px;
-  padding-right: 32px;
+  min-height: 38px;
+  padding: 0 12px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
   width: 100%;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2318202a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 20px;
+}
+
+input:not([type="radio"]):not([type="checkbox"]):hover,
+select:hover {
+  border-color: #a8c8d2;
+}
+
+input:not([type="radio"]):not([type="checkbox"]):focus,
+select:focus {
+  border-color: #176b87;
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.15);
+  outline: none;
+}
+
+select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23687582' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 18px;
+  cursor: pointer;
+  font-weight: 500;
+  padding-right: 36px;
+}
+
+select:hover {
+  background-color: #f9fbfc;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23176b87' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+}
+
+select:disabled {
+  background-color: #f4f6f8;
+  color: #9aa7b1;
+  cursor: not-allowed;
+  border-color: #e3e9ed;
+}
+
+select option {
+  background-color: #ffffff;
+  color: #18202a;
+  font-size: 13.5px;
+  padding: 8px 12px;
+}
+
+/* === 按钮交互反馈（统一加在 actions 工具栏中的按钮，避免污染导航/sidebar） === */
+.actions button {
+  transition: filter 0.16s ease, transform 0.12s ease, background-color 0.16s ease;
+}
+
+.actions button:not(:disabled):not(.is-busy):hover {
+  filter: brightness(1.06);
+}
+.actions button:not(:disabled):not(.is-busy):active {
+  transform: translateY(1px);
+}
+
+/* 异步操作期间的按钮态：保持原文与原色，仅压暗+下沉+等待光标，宽度/位置不变，零布局抖动 */
+.actions button.is-busy {
+  cursor: wait;
+  filter: brightness(0.82) saturate(0.92);
+  transform: translateY(1px);
 }
 
 .switch-row {
@@ -885,14 +1020,8 @@ select {
 .log-head {
   align-items: center;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin: 4px 0 8px;
-}
-
-.log-head-title {
-  color: #43515c;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .command-preview .command-head {

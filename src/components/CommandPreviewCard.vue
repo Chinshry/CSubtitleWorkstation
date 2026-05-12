@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { isWindows } from '../stores/platformStore'
+import AppSelect from './AppSelect.vue'
 
 const props = defineProps<{
   command: string[]
@@ -84,12 +85,17 @@ async function copyCommand() {
         <p>{{ viewHintText }}</p>
       </div>
       <div class="command-tools">
-        <select v-model="quoting" class="quote-select" title="选择终端方言">
-          <option value="auto">自动（按本机平台）</option>
-          <option value="windows">Windows · cmd/PowerShell</option>
-          <option value="posix">POSIX · bash/zsh</option>
-          <option value="raw">原始（数组拼接，不转义）</option>
-        </select>
+        <AppSelect
+          v-model="quoting"
+          class="quote-select"
+          title="选择终端方言"
+          :options="[
+            { value: 'auto', label: '自动（按本机平台）' },
+            { value: 'windows', label: 'Windows · cmd/PowerShell' },
+            { value: 'posix', label: 'POSIX · bash/zsh' },
+            { value: 'raw', label: '原始（数组拼接，不转义）' }
+          ]"
+        />
         <button
           class="copy-btn"
           :class="{ active: copyHint }"

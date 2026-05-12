@@ -153,7 +153,6 @@ const estimatedSizeKb = computed(() => {
     <div v-if="statusLine" class="status-line" :title="statusLine">{{ statusLine }}</div>
 
     <div class="log-head">
-      <span class="log-head-title">压制日志</span>
       <button class="copy-btn" :class="{ active: copyHint }" @click="copyAll" data-tip="复制全部日志">
         <span v-if="copyHint">{{ copyHint }}</span>
         <span v-else>复制</span>

@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue'
 import type { CompressJob } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus } from '../stores/avsStore'
+import AppSelect from './AppSelect.vue'
 
 const job = defineModel<CompressJob>({ required: true })
 
@@ -106,11 +107,15 @@ const customBitrate = computed<number | undefined>({
             ></span>
           </span>
           <div class="bitrate-control">
-            <select v-model="bitrateMode" class="bitrate-select">
-              <option value="none">不限制</option>
-              <option value="auto">自动（视频原码率 + 1000 Kbps）</option>
-              <option value="custom">自定义</option>
-            </select>
+            <AppSelect
+              v-model="bitrateMode"
+              class="bitrate-select"
+              :options="[
+                { value: 'none', label: '不限制' },
+                { value: 'auto', label: '自动（视频原码率 + 1000 Kbps）' },
+                { value: 'custom', label: '自定义' }
+              ]"
+            />
             <input
               v-if="bitrateMode === 'custom'"
               v-model.number="customBitrate"
@@ -129,12 +134,15 @@ const customBitrate = computed<number | undefined>({
               :data-tip="`对应命令：-c:v ${job.encoder}\n\nlibx264：CPU 软编，兼容性最好、画质稳定，支持 AVS。\nh264_nvenc：NVIDIA 显卡硬编，速度快，不支持 AVS。\nh264_amf：AMD 显卡硬编，速度快，不支持 AVS。\nh264_videotoolbox：macOS 硬编，不支持 AVS。`"
             ></span>
           </span>
-          <select v-model="job.encoder">
-            <option value="libx264">CPU libx264（CPU 软编，兼容性最好，支持 AVS）</option>
-            <option value="h264_nvenc">NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）</option>
-            <option value="h264_amf">AMD h264_amf（A 卡硬编，速度快，不支持 AVS）</option>
-            <option value="h264_videotoolbox">macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）</option>
-          </select>
+          <AppSelect
+            v-model="job.encoder"
+            :options="[
+              { value: 'libx264', label: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）' },
+              { value: 'h264_nvenc', label: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）' },
+              { value: 'h264_amf', label: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）' },
+              { value: 'h264_videotoolbox', label: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）' }
+            ]"
+          />
         </label>
       </div>
 

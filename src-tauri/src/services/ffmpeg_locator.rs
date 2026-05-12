@@ -103,11 +103,6 @@ fn run_version(path: &Path) -> Option<String> {
     text.lines().next().map(|line| line.trim().to_string())
 }
 
-pub fn ffprobe_path_for(config: &AppConfig) -> Option<String> {
-    let status = detect(config);
-    status.ffprobe_path
-}
-
 pub fn normalize_user_path(raw_path: &str) -> String {
     let path = PathBuf::from(raw_path);
     if path.is_dir() {
