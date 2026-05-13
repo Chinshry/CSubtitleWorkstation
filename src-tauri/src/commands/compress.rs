@@ -6,7 +6,6 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -136,14 +135,14 @@ pub fn start_compress(
 
     let stderr = child.stderr.take();
     let stdout = child.stdout.take();
-    let child = Arc::new(Mutex::new(child));
+    let pid = child.id();
 
     {
         let mut jobs = state
             .jobs
             .lock()
             .map_err(|_| "Job state is poisoned.".to_string())?;
-        jobs.insert(job.id.clone(), child.clone());
+        jobs.insert(job.id.clone(), pid);
     }
 
     if let Some(stderr) = stderr {
@@ -169,16 +168,18 @@ pub fn start_compress(
     }
 
     let app_for_wait = app.clone();
+    let job_id_for_wait = job.id.clone();
     thread::spawn(move || {
-        // 用 wait() 阻塞直到进程真正退出，确保 stderr/stdout 读取线程有时间完成
-        let status = match child.lock() {
-            Ok(mut locked) => locked.wait(),
-            Err(_) => {
-                let _ = app_for_wait.emit("compress-log", "Failed to lock ffmpeg process.");
-                cleanup_temp_dir(&app_for_wait, &temp_dir);
-                return;
+        // wait 线程独占 child，不再放进 Mutex；cancel_compress 通过 pid + OS 调用终止进程，
+        // 不会与本线程互相阻塞，彻底避开死锁。
+        let status = child.wait();
+
+        // wait 返回 → 进程已结束（正常退出或被 cancel kill 掉），从 jobs 表中移除该 id
+        if let Some(state) = app_for_wait.try_state::<AppState>() {
+            if let Ok(mut jobs) = state.jobs.lock() {
+                jobs.remove(&job_id_for_wait);
             }
-        };
+        }
 
         match status {
             Ok(status) if status.success() => {
@@ -205,7 +206,7 @@ pub fn start_compress(
 
 #[tauri::command]
 pub fn cancel_compress(state: State<AppState>, job_id: String) -> Result<(), String> {
-    let child = {
+    let pid = {
         let mut jobs = state
             .jobs
             .lock()
@@ -213,16 +214,46 @@ pub fn cancel_compress(state: State<AppState>, job_id: String) -> Result<(), Str
         jobs.remove(&job_id)
     };
 
-    let Some(child) = child else {
+    let Some(pid) = pid else {
         return Err("No running job matched the requested id.".to_string());
     };
 
-    let mut locked = child
-        .lock()
-        .map_err(|_| "Failed to lock ffmpeg process.".to_string())?;
-    locked
-        .kill()
-        .map_err(|err| format!("Failed to cancel ffmpeg: {err}"))
+    kill_process_tree(pid)
+}
+
+#[cfg(windows)]
+fn kill_process_tree(pid: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut cmd = Command::new("taskkill");
+    cmd.args(["/F", "/T", "/PID"]).arg(pid.to_string());
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd
+        .output()
+        .map_err(|err| format!("启动 taskkill 失败: {err}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // pid 已退出 / 不存在时 taskkill 返回非零；属于幂等行为，不视为错误
+        if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("不存在") {
+            return Ok(());
+        }
+        return Err(format!("taskkill 失败: {stderr}"));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn kill_process_tree(pid: u32) -> Result<(), String> {
+    let status = Command::new("kill")
+        .arg("-9")
+        .arg(pid.to_string())
+        .status()
+        .map_err(|err| format!("启动 kill 失败: {err}"))?;
+    if !status.success() {
+        // 进程已退出时 kill 返回非零，不视为错误
+        return Ok(());
+    }
+    Ok(())
 }
 
 fn job_temp_dir(app: &AppHandle, job_id: &str) -> Result<PathBuf, String> {

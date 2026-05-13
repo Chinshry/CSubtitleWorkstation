@@ -7,6 +7,17 @@ import AppSelect from './AppSelect.vue'
 
 const job = defineModel<CompressJob>({ required: true })
 
+const props = defineProps<{
+  /** 配置 LOGO 按钮是否禁用（一般在视频未就绪时禁用） */
+  logoButtonDisabled?: boolean
+  /** 配置 LOGO 按钮禁用原因（用于 tooltip） */
+  logoButtonDisabledReason?: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'open-logo-editor'): void
+}>()
+
 // 副标题：仅 Windows 提示可启用 AVS，其它平台说明走 filter 模式
 const avsHint = computed(() =>
   isWindows.value
@@ -70,6 +81,50 @@ const customBitrate = computed<number | undefined>({
     if (typeof v === 'number' && v > 0) job.value.maxBitrate = v
   }
 })
+
+// 已配置 LOGO 的摘要文案
+// 直接给百分比对用户不直观，改成「方位（九宫格） + 像素尺寸」
+const logoSummary = computed(() => {
+  const layout = job.value.logoLayout
+  if (!layout || !layout.path) return ''
+  const name = logoBasename(layout.path)
+  return `已配置：${name} · ${describeLogoPosition(layout)} · ${describeLogoSize(layout)}`
+})
+
+function describeLogoPosition(layout: NonNullable<typeof job.value.logoLayout>): string {
+  // LOGO 中心点占视频画面的百分比（取中心点更符合"摆在哪个角落"的语感）
+  const cx = layout.xPct + layout.wPct / 2
+  const cy = layout.yPct + layout.hPct / 2
+  const horiz = cx < 0.34 ? '左' : cx < 0.67 ? '中' : '右'
+  const vert = cy < 0.34 ? '上' : cy < 0.67 ? '中' : '下'
+  if (horiz === '中' && vert === '中') return '画面中央'
+  if (horiz === '中') return vert === '上' ? '顶部居中' : '底部居中'
+  if (vert === '中') return horiz === '左' ? '左侧居中' : '右侧居中'
+  return `${horiz}${vert}角` // 左上角 / 右上角 / 左下角 / 右下角
+}
+
+function describeLogoSize(layout: NonNullable<typeof job.value.logoLayout>): string {
+  const vw = job.value.videoWidth
+  const vh = job.value.videoHeight
+  if (vw && vh && vw > 0 && vh > 0) {
+    const w = Math.round(layout.wPct * vw)
+    const h = Math.round(layout.hPct * vh)
+    return `${w} × ${h} 像素`
+  }
+  // 视频分辨率未就绪时退回到百分比
+  return `${(layout.wPct * 100).toFixed(1)}% × ${(layout.hPct * 100).toFixed(1)}%`
+}
+
+function logoBasename(p: string): string {
+  if (!p) return ''
+  const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
+  return idx >= 0 ? p.slice(idx + 1) : p
+}
+
+function onOpenLogoEditor() {
+  if (props.logoButtonDisabled) return
+  emit('open-logo-editor')
+}
 </script>
 
 <template>
@@ -150,7 +205,10 @@ const customBitrate = computed<number | undefined>({
         <label class="switch-row">
           <input v-model="job.needLogo" type="checkbox" />
           <span class="switch"></span>
-          <span>解析并压制 ASS logo</span>
+          <span>压制 LOGO</span>
+          <span class="hint" data-tip="在视频画面上叠加一张 LOGO 图片。
+点击右侧「配置 LOGO」按钮可视化设置图片、位置与大小。
+开关关闭时即使已配置布局也不会叠加。"></span>
         </label>
         <label class="switch-row">
           <input v-model="job.needYadif" type="checkbox" />
@@ -179,10 +237,49 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
         </label>
       </div>
 
-      <label v-if="job.needLogo" class="wide">
-        <span>logo 检测目录</span>
-        <input v-model="job.logoDir" placeholder="例如：E:\Project\CBash\VIDEO_COMPRESSION\@@压制工作站\res\logo" />
-      </label>
+      <div v-if="job.needLogo" class="logo-config-row wide">
+        <button
+          type="button"
+          class="secondary logo-config-btn"
+          :class="{ disabled: logoButtonDisabled }"
+          :disabled="logoButtonDisabled"
+          :title="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
+          @click="onOpenLogoEditor"
+        >
+          {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
+        </button>
+        <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
+        <span v-else class="logo-summary muted">尚未配置 LOGO</span>
+      </div>
     </div>
   </section>
 </template>
+
+<style scoped>
+.logo-config-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.logo-config-btn {
+  min-height: 34px;
+  padding: 0 14px;
+}
+.logo-config-btn.disabled {
+  background: #f4f6f8;
+  border-color: #e3e9ed;
+  color: #9aa7b1;
+  cursor: not-allowed;
+}
+.logo-summary {
+  color: #176b87;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.logo-summary.muted {
+  color: #9aa7b1;
+}
+</style>

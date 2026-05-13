@@ -4,4 +4,5 @@ pub mod avs_workspace;
 pub mod command_builder;
 pub mod ffmpeg_locator;
 pub mod config_store;
+pub mod frame_extractor;
 pub mod video_meta;

@@ -3,12 +3,13 @@ mod models;
 mod services;
 
 use std::collections::HashMap;
-use std::process::Child;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
+/// 运行中的压制任务索引：job_id -> ffmpeg 进程 pid。
+/// 用 pid 而不是 Arc<Mutex<Child>> 是为了避免 wait 线程长期持锁导致 cancel_compress 死锁。
 #[derive(Default)]
 pub struct AppState {
-    pub jobs: Mutex<HashMap<String, Arc<Mutex<Child>>>>,
+    pub jobs: Mutex<HashMap<String, u32>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,6 +31,8 @@ pub fn run() {
             commands::compress::start_compress,
             commands::compress::cancel_compress,
             commands::video::inspect_video_meta,
+            commands::video::extract_video_frame,
+            commands::video::clear_frame_cache,
             commands::updater::get_current_app_version,
             commands::updater::check_app_update
         ])

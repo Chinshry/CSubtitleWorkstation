@@ -158,8 +158,17 @@ fn fill_video_stream(s: &Value, meta: &mut VideoMeta) {
     meta.pixel_format = s.get("pix_fmt").and_then(|v| v.as_str()).map(|s| s.to_string());
     meta.color_range = s.get("color_range").and_then(|v| v.as_str()).map(|s| s.to_string());
     meta.color_space = s.get("color_space").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.width = s.get("width").and_then(|v| v.as_i64()).map(|n| n as i32);
-    meta.height = s.get("height").and_then(|v| v.as_i64()).map(|n| n as i32);
+    let raw_w = s.get("width").and_then(|v| v.as_i64()).map(|n| n as i32);
+    let raw_h = s.get("height").and_then(|v| v.as_i64()).map(|n| n as i32);
+    // 手机竖屏视频常存为 1920x1080 + rotation=90，ffmpeg 解码后会自动旋转为 1080x1920。
+    // 这里把 width/height 修正为旋转后的"显示尺寸"，使后续 overlay 像素换算与前端预览一致。
+    if is_rotated_90(s) {
+        meta.width = raw_h;
+        meta.height = raw_w;
+    } else {
+        meta.width = raw_w;
+        meta.height = raw_h;
+    }
     meta.sar = s.get("sample_aspect_ratio").and_then(|v| v.as_str()).map(|s| s.to_string());
     meta.dar = s.get("display_aspect_ratio").and_then(|v| v.as_str()).map(|s| s.to_string());
 
@@ -227,6 +236,47 @@ fn parse_rational(s: &str) -> Option<f64> {
         return None;
     }
     Some(n / d)
+}
+
+/// ffprobe JSON stream 中的 rotation 信息可能位于：
+/// - tags.rotate（旧版 mov 容器）："90" / "180" / "270"
+/// - side_data_list[].rotation（新版 ffprobe，displaymatrix）：数值，例如 -90
+/// 任一通道命中 ±90 / ±270 都视为需要交换宽高。
+fn is_rotated_90(s: &Value) -> bool {
+    let Some(deg) = extract_rotation_degrees(s) else {
+        return false;
+    };
+    let norm = ((deg.round() as i64) % 360 + 360) % 360;
+    norm == 90 || norm == 270
+}
+
+fn extract_rotation_degrees(s: &Value) -> Option<f64> {
+    if let Some(v) = s.get("tags").and_then(|t| t.get("rotate")) {
+        if let Some(s) = v.as_str() {
+            if let Ok(r) = s.parse::<f64>() {
+                return Some(r);
+            }
+        }
+        if let Some(r) = v.as_f64() {
+            return Some(r);
+        }
+    }
+    if let Some(list) = s.get("side_data_list").and_then(|v| v.as_array()) {
+        for sd in list {
+            if let Some(r) = sd.get("rotation").and_then(|v| v.as_f64()) {
+                return Some(r);
+            }
+            if let Some(r) = sd.get("rotation").and_then(|v| v.as_i64()) {
+                return Some(r as f64);
+            }
+            if let Some(s) = sd.get("rotation").and_then(|v| v.as_str()) {
+                if let Ok(r) = s.parse::<f64>() {
+                    return Some(r);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn round2(v: f64) -> f64 {
@@ -354,6 +404,47 @@ fn parse_video_stream(text: &str, meta: &mut VideoMeta) {
             meta.tbr = rest.trim().parse::<f64>().ok();
         }
     }
+
+    // 文本解析得到的 width/height 仍是 codec 帧尺寸，需要按 rotation 修正为显示尺寸。
+    if let Some(deg) = parse_rotation_from_ffmpeg_text(text) {
+        let norm = ((deg.round() as i64) % 360 + 360) % 360;
+        if norm == 90 || norm == 270 {
+            if let (Some(w), Some(h)) = (meta.width, meta.height) {
+                meta.width = Some(h);
+                meta.height = Some(w);
+            }
+        }
+    }
+}
+
+/// 从 `ffmpeg -i` stderr 中找 rotation：
+/// - 优先 Side data 的 `displaymatrix: rotation of -90.00 degrees`
+/// - 回退到 metadata 的 `rotate          : 90`
+fn parse_rotation_from_ffmpeg_text(text: &str) -> Option<f64> {
+    for line in text.lines() {
+        let l = line.trim();
+        if let Some(idx) = l.find("rotation of") {
+            let rest = &l[idx + "rotation of".len()..];
+            let num = rest.split_whitespace().next().unwrap_or("");
+            if let Ok(r) = num.parse::<f64>() {
+                return Some(r);
+            }
+        }
+    }
+    for line in text.lines() {
+        let l = line.trim();
+        if l.to_ascii_lowercase().starts_with("rotate") {
+            if let Some(after_key) = l.splitn(2, ':').nth(1) {
+                let v = after_key.trim();
+                if !v.is_empty() {
+                    if let Ok(r) = v.parse::<f64>() {
+                        return Some(r);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 struct PixInfo {

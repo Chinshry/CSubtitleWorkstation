@@ -1,3 +1,8 @@
+// 旧 BAT 兼容入口：解析 ASS 文件中带 .png 的 LOGO 行。主流程已切到可视化编辑器
+// （commands/video.rs::extract_video_frame + LogoEditor.vue），这里保留供"从 ASS 导入"
+// 一类的辅助功能后续接入。
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

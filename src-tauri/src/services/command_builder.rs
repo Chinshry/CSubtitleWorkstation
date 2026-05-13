@@ -1,5 +1,5 @@
+use crate::models::app_config::LogoLayout;
 use crate::models::compress_job::CompressJob;
-use crate::services::ass_logo;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -15,6 +15,10 @@ pub fn build_with_options(
     avs_input_override: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let video_info = inspect_video(ffmpeg_path, &job.video_path).unwrap_or_default();
+    // LOGO overlay 像素换算优先使用前端传入的"显示尺寸"（inspect_video_meta 已应用 rotation）。
+    // 旧路径的 ffmpeg -i 文本解析拿到的是 codec 帧尺寸，旋转视频会算错，故仅作 fallback。
+    let display_width = job.video_width.or(video_info.width);
+    let display_height = job.video_height.or(video_info.height);
 
     // AVS 模式：ffmpeg 输入改为 .avs 脚本；字幕由脚本内部 TextSubMod 渲染，不再加 subtitles filter
     let input_path: String = if job.use_avs {
@@ -34,39 +38,26 @@ pub fn build_with_options(
 
     let mut filters = Vec::new();
 
-    // LOGO overlay 与 AVS 共存：AVS 处理字幕，LOGO 仍由 ffmpeg movie+overlay 叠加（与原 BAT 行为一致）
-    if job.need_logo && subtitle_is_ass(&job.subtitle_path) {
-        if let Some(logo) = ass_logo::parse_ass_logo(
-            &job.subtitle_path,
-            video_info.width,
-            video_info.height,
-            job.logo_dir.as_deref(),
-        )? {
-            if job.use_avs {
-                filters.push(format!(
-                    "movie='{}',scale={}:{}[wm];[in][wm]overlay={}:{}",
-                    escape_filter_path(&logo.image_path),
-                    logo.width,
-                    logo.height,
-                    logo.position_x,
-                    logo.position_y,
-                ));
-            } else {
-                filters.push(format!(
-                    "movie='{}',scale={}:{}[wm];[in][wm]overlay={}:{},subtitles='{}'",
-                    escape_filter_path(&logo.image_path),
-                    logo.width,
-                    logo.height,
-                    logo.position_x,
-                    logo.position_y,
-                    escape_filter_path(&job.subtitle_path)
-                ));
-            }
-        } else if !job.use_avs {
-            filters.push(subtitle_filter(&job.subtitle_path));
+    // LOGO 叠加：仅当用户在编辑器中保存了 logo_layout 时启用。
+    // AVS 模式下字幕由 TextSubMod 渲染，filter 链里仍可包含 movie+overlay。
+    let logo_overlay = build_logo_overlay(job, display_width, display_height);
+    let subtitle_path = job.subtitle_path.trim();
+    let has_subtitle = !job.use_avs && !subtitle_path.is_empty();
+
+    match (logo_overlay, has_subtitle) {
+        (Some(overlay), true) => {
+            filters.push(format!(
+                "{overlay},subtitles='{}'",
+                escape_filter_path(subtitle_path)
+            ));
         }
-    } else if !job.use_avs && !job.subtitle_path.trim().is_empty() {
-        filters.push(subtitle_filter(&job.subtitle_path));
+        (Some(overlay), false) => {
+            filters.push(overlay);
+        }
+        (None, true) => {
+            filters.push(subtitle_filter(subtitle_path));
+        }
+        (None, false) => {}
     }
 
     if job.need_yadif {
@@ -114,6 +105,51 @@ pub fn build_with_options(
     ]);
 
     Ok(args)
+}
+
+/// 把 LogoLayout 百分比换算为像素并构造 `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段。
+/// 当 need_logo=false、未保存布局、或视频分辨率未知时返回 None。
+fn build_logo_overlay(
+    job: &CompressJob,
+    video_width: Option<i32>,
+    video_height: Option<i32>,
+) -> Option<String> {
+    if !job.need_logo {
+        return None;
+    }
+    let layout = job.logo_layout.as_ref()?;
+    let trimmed_path = layout.path.trim();
+    if trimmed_path.is_empty() {
+        return None;
+    }
+    let (vw, vh) = match (video_width, video_height) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => (w as f64, h as f64),
+        // 预览阶段视频分辨率未知时按 1920x1080 估算，仅用于预览展示。
+        _ => (1920.0, 1080.0),
+    };
+    let layout = clamp_layout(layout);
+    let w = (layout.w_pct * vw).round().max(1.0) as i32;
+    let h = (layout.h_pct * vh).round().max(1.0) as i32;
+    let x = (layout.x_pct * vw).round() as i32;
+    let y = (layout.y_pct * vh).round() as i32;
+    Some(format!(
+        "movie='{}',scale={}:{}[wm];[in][wm]overlay={}:{}",
+        escape_filter_path(trimmed_path),
+        w,
+        h,
+        x,
+        y
+    ))
+}
+
+fn clamp_layout(layout: &LogoLayout) -> LogoLayout {
+    LogoLayout {
+        path: layout.path.clone(),
+        x_pct: layout.x_pct.clamp(-1.0, 1.0),
+        y_pct: layout.y_pct.clamp(-1.0, 1.0),
+        w_pct: layout.w_pct.clamp(0.001, 1.0),
+        h_pct: layout.h_pct.clamp(0.001, 1.0),
+    }
 }
 
 #[derive(Default)]
@@ -291,10 +327,6 @@ fn parse_video_size(text: &str) -> Option<(i32, i32)> {
 
 fn subtitle_filter(path: &str) -> String {
     format!("subtitles='{}'", escape_filter_path(path))
-}
-
-fn subtitle_is_ass(path: &str) -> bool {
-    path.to_ascii_lowercase().ends_with(".ass")
 }
 
 pub fn normalize_output_path(video_path: &str, output_path: &str) -> String {

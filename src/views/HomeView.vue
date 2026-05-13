@@ -3,13 +3,16 @@ import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { cancelCompress, previewFfmpegCommand, startCompress } from '../api/compress'
 import { loadConfig, saveConfig } from '../api/config'
-import { inspectVideoMeta } from '../api/video'
+import { inspectVideoMeta, clearFrameCache } from '../api/video'
 import { pendingDrop, pushDiag } from '../stores/dropStore'
 import { ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
 import type {
   AppConfig,
   CompressJob,
   CompressStatus,
+  LogoLayout,
+  LogoLayoutEntry,
+  RecentLogo,
   VideoMeta
 } from '../types'
 
@@ -17,6 +20,7 @@ import CompressForm from '../components/CompressForm.vue'
 import JobLogPanel from '../components/JobLogPanel.vue'
 import VideoMetaCard from '../components/VideoMetaCard.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
+import LogoEditor from '../components/LogoEditor.vue'
 
 const loading = ref(false)
 const running = ref(false)
@@ -36,7 +40,12 @@ const lastAutoOutput = ref('')
 // 记录上一次的 videoPath，用于在视频变化时根据用户对 outputPath 的修改推断"后缀模板"
 const prevVideoPath = ref('')
 const appConfig = ref<AppConfig | null>(null)
-let logoDirSaveTimer: ReturnType<typeof setTimeout> | null = null
+// LOGO 编辑器状态
+const logoEditorOpen = ref(false)
+const recentLogos = ref<RecentLogo[]>([])
+// 按 (分辨率桶, LOGO 路径) 维度独立记忆的布局列表
+const logoLayouts = ref<LogoLayoutEntry[]>([])
+let logoConfigSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 // 壁钟耗时 / 平滑速度 / ETA
 const startedAt = ref<number | null>(null)
@@ -93,6 +102,16 @@ const displayVideoMeta = computed<VideoMeta | null>(() => {
 
 const job = ref<CompressJob>(createJob())
 
+const logoButtonDisabled = computed(() => {
+  return !job.value.videoPath || !videoMeta.value?.width || !videoMeta.value?.height
+})
+
+const logoButtonDisabledReason = computed(() => {
+  if (!job.value.videoPath) return '请先选择视频文件'
+  if (!videoMeta.value?.width || !videoMeta.value?.height) return '视频分辨率未解析完毕'
+  return ''
+})
+
 function createJob(): CompressJob {
   return {
     id: crypto.randomUUID(),
@@ -104,8 +123,8 @@ function createJob(): CompressJob {
     needLogo: true,
     needYadif: false,
     encoder: 'libx264',
-    logoDir: '',
-    useAvs: false
+    useAvs: false,
+    logoLayout: null
   }
 }
 
@@ -327,36 +346,86 @@ watch(
   { immediate: false }
 )
 
-// logoDir 改动 → debounce 保存为默认值
+// 把 videoMeta 的"显示尺寸"（后端已应用 rotation）同步到 job，
+// 让 command_builder 用同一份尺寸做 LOGO overlay 像素换算，避免横竖屏旋转视频压制时 LOGO 尺寸错位。
 watch(
-  () => job.value.logoDir,
+  () => [videoMeta.value?.width, videoMeta.value?.height] as const,
+  ([w, h]) => {
+    job.value.videoWidth = typeof w === 'number' && w > 0 ? w : undefined
+    job.value.videoHeight = typeof h === 'number' && h > 0 ? h : undefined
+  },
+  { immediate: true }
+)
+
+// logoLayout 改动 → debounce 同步到 AppConfig.lastLogoLayout / logoLayouts / recentLogos
+watch(
+  () => job.value.logoLayout,
   (newVal) => {
     if (!appConfig.value) return
-    const current = (newVal ?? '').trim()
-    const stored = (appConfig.value.defaultLogoDir ?? '').trim()
-    if (current === stored) return
-    if (logoDirSaveTimer) clearTimeout(logoDirSaveTimer)
-    logoDirSaveTimer = setTimeout(async () => {
-      const cfg = { ...(appConfig.value as AppConfig), defaultLogoDir: current || undefined }
+    if (logoConfigSaveTimer) clearTimeout(logoConfigSaveTimer)
+    logoConfigSaveTimer = setTimeout(async () => {
+      const cfg: AppConfig = {
+        ...(appConfig.value as AppConfig),
+        lastLogoLayout: newVal ?? null,
+        recentLogos: recentLogos.value,
+        logoLayouts: logoLayouts.value
+      }
       try {
         await saveConfig(cfg)
         appConfig.value = cfg
-        pushDiag(`默认 logo 目录已保存：${current || '(已清空)'}`)
+        pushDiag('LOGO 布局已保存为默认配置')
       } catch (err) {
-        pushDiag(`保存 logoDir 默认值失败：${formatError(err)}`)
+        pushDiag(`保存 LOGO 布局失败：${formatError(err)}`)
       }
-    }, 600)
-  }
+    }, 400)
+  },
+  { deep: true }
 )
+
+// LOGO 编辑器：打开 / 保存 / 取消
+function openLogoEditor() {
+  if (logoButtonDisabled.value) return
+  logoEditorOpen.value = true
+}
+
+function onLogoEditorSave(
+  layout: LogoLayout,
+  nextRecent: RecentLogo[],
+  nextLogoLayouts: LogoLayoutEntry[]
+) {
+  job.value.logoLayout = layout
+  recentLogos.value = nextRecent
+  logoLayouts.value = nextLogoLayouts
+  logoEditorOpen.value = false
+  pushDiag(`LOGO 配置已保存：${layout.path}`)
+  // 关闭时清理后端抽帧缓存（异步，失败可忽略）
+  void clearFrameCache().catch(() => undefined)
+}
+
+function onLogoEditorCancel() {
+  logoEditorOpen.value = false
+  void clearFrameCache().catch(() => undefined)
+}
+
+// 即时同步最近 LOGO 列表（删除场景）；HomeView 的 watch 会 debounce 写回 AppConfig。
+function onLogoEditorUpdateRecent(next: RecentLogo[]) {
+  recentLogos.value = next
+}
 
 onMounted(async () => {
   pushDiag('HomeView mounted')
-  // 先取配置，把默认 logoDir 填入表单
+  // 先取配置，把默认 LOGO 布局/最近列表填入状态
   try {
     appConfig.value = await loadConfig()
-    if (appConfig.value?.defaultLogoDir) {
-      job.value.logoDir = appConfig.value.defaultLogoDir
-      pushDiag(`已载入默认 logo 目录：${appConfig.value.defaultLogoDir}`)
+    if (appConfig.value?.lastLogoLayout) {
+      job.value.logoLayout = appConfig.value.lastLogoLayout
+      pushDiag(`已载入上次 LOGO 布局：${appConfig.value.lastLogoLayout.path}`)
+    }
+    if (Array.isArray(appConfig.value?.recentLogos)) {
+      recentLogos.value = appConfig.value.recentLogos
+    }
+    if (Array.isArray(appConfig.value?.logoLayouts)) {
+      logoLayouts.value = appConfig.value.logoLayouts
     }
     if (typeof appConfig.value?.defaultUseAvs === 'boolean') {
       job.value.useAvs = appConfig.value.defaultUseAvs
@@ -445,7 +514,12 @@ onUnmounted(() => {
       @pick-video="(p: string) => (job.videoPath = p)"
       @pick-subtitle="(p: string) => (job.subtitlePath = p)"
     />
-    <CompressForm v-model="job" />
+    <CompressForm
+      v-model="job"
+      :logo-button-disabled="logoButtonDisabled"
+      :logo-button-disabled-reason="logoButtonDisabledReason"
+      @open-logo-editor="openLogoEditor"
+    />
 
     <CommandPreviewCard v-if="command.length" :command="command" />
 
@@ -469,6 +543,20 @@ onUnmounted(() => {
       :eta-seconds="etaSeconds"
       :remaining-seconds="remainingSeconds"
       :running="running"
+    />
+
+    <LogoEditor
+      v-if="logoEditorOpen"
+      :video-path="job.videoPath"
+      :video-width="videoMeta?.width"
+      :video-height="videoMeta?.height"
+      :video-duration="videoMeta?.durationSeconds"
+      :initial-layout="job.logoLayout"
+      :recent-logos="recentLogos"
+      :logo-layouts="logoLayouts"
+      @save="onLogoEditorSave"
+      @cancel="onLogoEditorCancel"
+      @update-recent="onLogoEditorUpdateRecent"
     />
   </main>
 </template>
