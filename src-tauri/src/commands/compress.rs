@@ -1,12 +1,13 @@
 use crate::models::compress_job::CompressJob;
 use crate::services::{avs_detector, avs_workspace, command_builder, config_store, ffmpeg_locator};
-use crate::AppState;
+use crate::{AppState, JobHandle};
 use serde::Serialize;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Debug, Clone, Serialize)]
@@ -116,11 +117,13 @@ pub fn start_compress(
         return Err("Generated ffmpeg command is incomplete.".to_string());
     }
 
-    // 安全 spawn：stdin null 防止 ffmpeg 卡读输入；Windows 下禁止弹出黑窗
+    // 安全 spawn：
+    // - stdin 用 piped，cancel_compress 通过写 b"q\n" 让 ffmpeg 优雅退出（写文件尾，部分输出可播放）。
+    // - Windows 下禁止弹出黑窗。
     let mut builder = Command::new(&command[0]);
     builder
         .args(&command[1..])
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(windows)]
@@ -135,6 +138,7 @@ pub fn start_compress(
 
     let stderr = child.stderr.take();
     let stdout = child.stdout.take();
+    let stdin = child.stdin.take();
     let pid = child.id();
 
     {
@@ -142,7 +146,7 @@ pub fn start_compress(
             .jobs
             .lock()
             .map_err(|_| "Job state is poisoned.".to_string())?;
-        jobs.insert(job.id.clone(), pid);
+        jobs.insert(job.id.clone(), JobHandle { pid, stdin });
     }
 
     if let Some(stderr) = stderr {
@@ -205,8 +209,12 @@ pub fn start_compress(
 }
 
 #[tauri::command]
-pub fn cancel_compress(state: State<AppState>, job_id: String) -> Result<(), String> {
-    let pid = {
+pub fn cancel_compress(
+    app: AppHandle,
+    state: State<AppState>,
+    job_id: String,
+) -> Result<(), String> {
+    let handle = {
         let mut jobs = state
             .jobs
             .lock()
@@ -214,11 +222,42 @@ pub fn cancel_compress(state: State<AppState>, job_id: String) -> Result<(), Str
         jobs.remove(&job_id)
     };
 
-    let Some(pid) = pid else {
+    let Some(mut handle) = handle else {
         return Err("No running job matched the requested id.".to_string());
     };
 
-    kill_process_tree(pid)
+    let pid = handle.pid;
+
+    // 优雅退出路径：通过 stdin 给 ffmpeg 写 'q'，让它停止编码、写完文件尾、自然退出。
+    // 这与命令行 Ctrl+C 等效，已编码部分仍然可播放。
+    let mut graceful = false;
+    if let Some(mut stdin) = handle.stdin.take() {
+        if stdin.write_all(b"q\n").is_ok() && stdin.flush().is_ok() {
+            graceful = true;
+        }
+        // 显式 drop 关闭 stdin，向 ffmpeg 传递 EOF
+        drop(stdin);
+    }
+
+    if graceful {
+        let _ = app.emit(
+            "compress-log",
+            "已发送取消信号：等待 ffmpeg 写入文件尾后退出（已压制部分仍可播放）。",
+        );
+        // 兜底：超时仍未退出则强制结束，避免僵尸进程。
+        // kill_process_tree 对"找不到 pid"已做幂等处理，进程正常退出后调用是安全的。
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(10));
+            let _ = kill_process_tree(pid);
+        });
+        Ok(())
+    } else {
+        let _ = app.emit(
+            "compress-log",
+            "无法通过 stdin 通知 ffmpeg，将直接结束进程（输出文件可能不完整）。",
+        );
+        kill_process_tree(pid)
+    }
 }
 
 #[cfg(windows)]

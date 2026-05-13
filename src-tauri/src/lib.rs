@@ -3,13 +3,22 @@ mod models;
 mod services;
 
 use std::collections::HashMap;
+use std::process::ChildStdin;
 use std::sync::Mutex;
 
-/// 运行中的压制任务索引：job_id -> ffmpeg 进程 pid。
-/// 用 pid 而不是 Arc<Mutex<Child>> 是为了避免 wait 线程长期持锁导致 cancel_compress 死锁。
+/// 运行中的压制任务句柄。
+/// - `pid`：ffmpeg 进程 id，用于兜底强制终止。
+/// - `stdin`：ffmpeg 的标准输入。取消时写入 b"q\n" 触发 ffmpeg 优雅退出（写完文件尾、关流），
+///    模拟命令行 Ctrl+C 行为，保证已编码的部分输出仍然可播放。
+/// 不保存 Child 本身是为避免 wait 线程长期持锁，与 cancel_compress 形成死锁。
+pub struct JobHandle {
+    pub pid: u32,
+    pub stdin: Option<ChildStdin>,
+}
+
 #[derive(Default)]
 pub struct AppState {
-    pub jobs: Mutex<HashMap<String, u32>>,
+    pub jobs: Mutex<HashMap<String, JobHandle>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
