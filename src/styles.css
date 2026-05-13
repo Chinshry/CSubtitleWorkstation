@@ -1075,6 +1075,16 @@ select option {
   color: #757575;
 }
 
+.status-badge.status-cancelling {
+  background: #fff4e0;
+  color: #b45309;
+}
+
+.status-badge.status-cancelled {
+  background: #eceff1;
+  color: #455a64;
+}
+
 .command-preview .command-head {
   align-items: flex-start;
   display: flex;

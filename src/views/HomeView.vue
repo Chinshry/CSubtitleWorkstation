@@ -24,6 +24,8 @@ import LogoEditor from '../components/LogoEditor.vue'
 
 const loading = ref(false)
 const running = ref(false)
+// 主动取消标志：仅作徽章语义（取消中 / 已取消）。状态收尾交给 compress-log 监听器统一处理。
+const cancelled = ref(false)
 // ffmpeg 状态来自全局 store（首次 init 后缓存，避免每次切页面重复检测；调试 mock 也通过 store 透传过来）
 const command = ref<string[]>([])
 const logs = ref<string[]>([])
@@ -239,6 +241,7 @@ async function runJob() {
     return
   }
   running.value = true
+  cancelled.value = false
   // 不立即启动 ticker，等收到第一条进度事件再启动
   startedAt.value = null
   try {
@@ -259,10 +262,15 @@ async function runJob() {
 async function cancelJob() {
   try {
     await cancelCompress(job.value.id)
+    cancelled.value = true
     logs.value.push('已发送取消请求')
+    // 注意：不在此处置 running=false / stopElapsedTicker。
+    // ffmpeg 收到 q 后要花时间写文件尾，期间仍在运行；
+    // 状态收尾统一由 compress-log 中匹配 "Compression (completed|failed|exited)" 的监听器处理，
+    // 避免出现"短暂回到待开始再跳到已完成"的闪烁。
   } catch (error) {
     logs.value.push(formatError(error))
-  } finally {
+    // 取消 RPC 失败（通常是 jobs 表已空，任务实际已结束）：直接复位本地状态。
     running.value = false
     if (startedAt.value !== null) {
       elapsedSeconds.value = (Date.now() - startedAt.value) / 1000
@@ -543,6 +551,7 @@ onUnmounted(() => {
       :eta-seconds="etaSeconds"
       :remaining-seconds="remainingSeconds"
       :running="running"
+      :cancelled="cancelled"
     />
 
     <LogoEditor

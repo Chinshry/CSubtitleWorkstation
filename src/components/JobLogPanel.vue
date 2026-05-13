@@ -16,11 +16,14 @@ const props = defineProps<{
   etaSeconds?: number
   remainingSeconds?: number
   running?: boolean
+  cancelled?: boolean
 }>()
 
 // 根据日志判断最终状态
 const finalStatus = computed(() => {
-  if (props.running) return 'running'
+  // 取消优先级最高：运行中表示"取消中..."，已停止表示"已取消"
+  if (props.running) return props.cancelled ? 'cancelling' : 'running'
+  if (props.cancelled) return 'cancelled'
   if (!props.lines.length) return 'idle'
   const lastLine = props.lines[props.lines.length - 1]
   if (lastLine.includes('❌')) return 'failed'
@@ -31,6 +34,8 @@ const finalStatus = computed(() => {
 const statusLabel = computed(() => {
   switch (finalStatus.value) {
     case 'running': return '运行中'
+    case 'cancelling': return '取消中…'
+    case 'cancelled': return '已取消'
     case 'completed': return '已完成'
     case 'failed': return '已失败'
     default: return '待开始'
@@ -40,14 +45,18 @@ const statusLabel = computed(() => {
 const statusClass = computed(() => {
   switch (finalStatus.value) {
     case 'running': return 'status-running'
+    case 'cancelling': return 'status-cancelling'
+    case 'cancelled': return 'status-cancelled'
     case 'completed': return 'status-completed'
     case 'failed': return 'status-failed'
     default: return 'status-idle'
   }
 })
 
-// 真正的“待开始空态”：未运行且无任何历史日志
-const isIdleEmpty = computed(() => finalStatus.value === 'idle' && !props.lines.length)
+// 真正的“待开始空态”：未运行、未取消，且无任何历史日志
+const isIdleEmpty = computed(
+  () => finalStatus.value === 'idle' && !props.lines.length
+)
 
 const copyHint = ref('')
 
