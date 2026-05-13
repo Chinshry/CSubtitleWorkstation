@@ -988,6 +988,52 @@ select option {
   min-height: 240px;
 }
 
+/* 待开始空态：取消最小高度，缩成轻量引导卡 */
+.log-panel.is-idle-empty {
+  min-height: 0;
+  padding-bottom: 22px;
+}
+
+.idle-hero {
+  align-items: center;
+  color: #67737f;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 18px 12px 6px;
+  text-align: center;
+}
+
+.idle-hero-icon {
+  align-items: center;
+  background: #eef4f7;
+  border-radius: 999px;
+  color: #176b87;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.idle-hero-icon svg {
+  /* 播放三角形重心偏左，向右挪 1px 视觉上更居中 */
+  transform: translateX(1px);
+}
+
+.idle-hero-title {
+  color: #2f3a44;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 4px 0 0;
+}
+
+.idle-hero-tip {
+  color: #8593a0;
+  font-size: 12.5px;
+  margin: 0;
+}
+
 .heading-title {
   display: flex;
   align-items: center;
