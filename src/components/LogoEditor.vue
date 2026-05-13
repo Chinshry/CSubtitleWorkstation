@@ -637,8 +637,8 @@ onBeforeUnmount(() => {
   <div class="logo-editor-overlay" @pointermove="onPointerMove" @pointerup="onPointerUp">
     <div class="logo-editor" role="dialog" aria-modal="true">
       <header class="le-header">
+        <!-- 关闭入口收敛到底部「取消」按钮 + ESC 键，避免三个重复出口 -->
         <h2>配置 LOGO 位置</h2>
-        <button class="le-close" type="button" @click="onCancel" aria-label="关闭">✕</button>
       </header>
 
       <div class="le-body">
@@ -853,25 +853,11 @@ export default { name: 'LogoEditor' }
   align-items: center;
   border-bottom: 1px solid #eef2f5;
   display: flex;
-  justify-content: space-between;
   padding: 10px 18px;
 }
 .le-header h2 {
   font-size: 16px;
   margin: 0;
-}
-.le-close {
-  background: transparent;
-  border-radius: 6px;
-  color: #5b6772;
-  cursor: pointer;
-  font-size: 16px;
-  height: 30px;
-  width: 30px;
-}
-.le-close:hover {
-  background: #f1f5f8;
-  color: #18202a;
 }
 
 .le-body {

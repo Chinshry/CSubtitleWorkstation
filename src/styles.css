@@ -13,7 +13,8 @@
 body {
   margin: 0;
   min-width: 960px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 button,
@@ -48,7 +49,8 @@ button.danger {
 
 .app-shell {
   display: block;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -56,7 +58,8 @@ button.danger {
   color: #fff;
   bottom: 0;
   left: 0;
-  padding: 24px 14px;
+  /* 顶部 36px 让出给自定义标题栏的隐形拖拽区，避免品牌区被遮在控件下 */
+  padding: 36px 14px 24px;
   position: fixed;
   top: 0;
   width: 260px;
@@ -163,29 +166,31 @@ nav button.active {
   box-shadow: inset 0 0 0 1px rgba(56, 159, 191, 0.18);
 }
 
-nav button.active::before {
-  background: linear-gradient(180deg, #38bdf8 0%, #176b87 100%);
-  border-radius: 2px;
-  content: '';
-  height: 24px;
-  left: -14px;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-}
-
 nav button.active .nav-icon {
   color: #6dd3f0;
 }
 
 .workspace {
   display: grid;
+  /* minmax(0, 1fr) 关键：让 grid item 不被超长内容（如日志里的长 Windows 路径）撑大，
+     超长内容由内部 .log-lines / .command 自身的 overflow:auto 出滚动条 */
+  grid-template-columns: minmax(0, 1fr);
+  /* max-content 关键：workspace 自身有 height: calc(100vh - 36px) 固定高度，
+     若不显式约束 grid-auto-rows，浏览器会把隐式行均分到容器高度（每行被压缩成均等高度），
+     导致 .log-panel 高度小于其内容（heading + 进度 + status-line + max-height:260px 日志区），
+     .log-lines 视觉上溢出 .panel 白色卡片下边界。
+     max-content 让每行严格按内容撑开，超出容器由 overflow-y:auto 滚动。*/
+  grid-auto-rows: max-content;
   align-content: start;
   gap: 16px;
   margin-left: 260px;
-  min-height: 100vh;
-  padding: 22px;
+  /* 顶部 36px 让出给自定义标题栏的悬浮控件，避免首屏面板被遮；
+     滚动归属在此容器，避免 body 级滚动条覆盖到右上角窗口控件区域 */
+  margin-top: 36px;
+  height: calc(100vh - 36px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 22px 22px;
   position: relative;
 }
 
@@ -1022,13 +1027,6 @@ select option {
 .status-badge.status-idle {
   background: #f5f5f5;
   color: #757575;
-}
-
-.log-head {
-  align-items: center;
-  display: flex;
-  justify-content: flex-end;
-  margin: 4px 0 8px;
 }
 
 .command-preview .command-head {

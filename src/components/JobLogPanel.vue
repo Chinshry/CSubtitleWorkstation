@@ -100,6 +100,10 @@ const estimatedSizeKb = computed(() => {
         <h2>压制进度</h2>
         <span :class="['status-badge', statusClass]">{{ statusLabel }}</span>
       </div>
+      <button class="copy-btn" :class="{ active: copyHint }" @click="copyAll" data-tip="复制全部日志">
+        <span v-if="copyHint">{{ copyHint }}</span>
+        <span v-else>复制</span>
+      </button>
     </div>
 
     <div class="progress-row">
@@ -151,13 +155,6 @@ const estimatedSizeKb = computed(() => {
     </div>
 
     <div v-if="statusLine" class="status-line" :title="statusLine">{{ statusLine }}</div>
-
-    <div class="log-head">
-      <button class="copy-btn" :class="{ active: copyHint }" @click="copyAll" data-tip="复制全部日志">
-        <span v-if="copyHint">{{ copyHint }}</span>
-        <span v-else>复制</span>
-      </button>
-    </div>
 
     <div class="log-lines">
       <p v-for="(line, index) in lines" :key="index">{{ line }}</p>

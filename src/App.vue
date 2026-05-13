@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import HomeView from './views/HomeView.vue'
 import SettingsView from './views/SettingsView.vue'
+import TitleBar from './components/TitleBar.vue'
 import brandLogo from './assets/brand-logo.png'
 import {
   globalDragActive,
@@ -80,6 +81,7 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell" :class="{ 'drag-active': globalDragActive }">
+    <TitleBar />
     <aside class="sidebar">
       <div class="brand">
         <img :src="brandLogo" alt="CC字幕压制工作站" class="brand-logo" />
