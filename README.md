@@ -4,12 +4,29 @@
 
 # CC 字幕压制工作站
 
-[![GitHub Release](https://img.shields.io/github/v/release/Chinshry/CSubtitleWorkstation?include_prereleases&color=blue&label=Release)](https://github.com/Chinshry/CSubtitleWorkstation/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/Chinshry/CSubtitleWorkstation/releases)
-[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-orange.svg)](https://tauri.app/)
-[![License](https://img.shields.io/github/license/Chinshry/CSubtitleWorkstation?color=green)](LICENSE)
+**Tauri 2 + Vue 3 + TypeScript 桌面应用**
 
-Tauri 2 + Vue 3 + TypeScript 桌面应用，用于替代原有字幕压制工作流。把拖入的视频和字幕一键交给本机 `ffmpeg` 压制，并提供实时日志、进度、视频信息解析与可视化的参数配置界面。
+<p>
+  <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases">📥 下载</a> ·
+  <a href="docs/REQUIREMENTS.md">📖 需求文档</a> ·
+  <a href="https://github.com/Chinshry/CSubtitleWorkstation/issues">🐛 反馈问题</a>
+</p>
+
+<p>
+  <a href="https://github.com/Chinshry/CSubtitleWorkstation/stargazers"><img src="https://img.shields.io/github/stars/Chinshry/CSubtitleWorkstation?style=flat-square&logo=github&color=yellow" alt="GitHub Stars"></a>
+  <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases"><img src="https://img.shields.io/github/v/release/Chinshry/CSubtitleWorkstation?include_prereleases&style=flat-square&logo=github&color=blue" alt="Release"></a>
+  <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases"><img src="https://img.shields.io/github/downloads/Chinshry/CSubtitleWorkstation/total?style=flat-square&logo=github&color=orange" alt="Downloads"></a>
+  <a href="https://github.com/Chinshry/CSubtitleWorkstation/blob/master/LICENSE"><img src="https://img.shields.io/github/license/Chinshry/CSubtitleWorkstation?style=flat-square&color=green" alt="License"></a>
+</p>
+
+<p>
+  <img src="https://img.shields.io/badge/Tauri-2-FFC131?style=flat-square&logo=tauri&logoColor=white" alt="Tauri">
+  <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js&logoColor=white" alt="Vue">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Rust-1-CE422B?style=flat-square&logo=rust&logoColor=white" alt="Rust">
+</p>
+
+用可视化界面替代传统字幕压制工作流。拖拽导入 → 自动解析 → 可视化配置 → 实时反馈 → 一键压制。
 
 </div>
 
