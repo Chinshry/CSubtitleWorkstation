@@ -11,3 +11,7 @@ src-tauri/target*.old-path-cache/
 # IDE / 工具缓存
 .history/
 .spec-workflow/
+
+# `tauri icon` 副产物：桌面端不需要移动平台图标
+src-tauri/icons/ios/
+src-tauri/icons/android/
