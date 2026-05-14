@@ -4,12 +4,12 @@
 
 # CC 字幕压制工作站
 
-[![GitHub Release](https://img.shields.io/github/v/release/Chinshry/CSubtitleWorkstation?color=blue&label=Release)](https://github.com/Chinshry/CSubtitleWorkstation/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/Chinshry/CSubtitleWorkstation?include_prereleases&color=blue&label=Release)](https://github.com/Chinshry/CSubtitleWorkstation/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/Chinshry/CSubtitleWorkstation/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-orange.svg)](https://tauri.app/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/github/license/Chinshry/CSubtitleWorkstation?color=green)](LICENSE)
 
-Tauri 2 + Vue 3 + TypeScript 桌面应用，用于替代原有字幕压制 BAT 工作流。把拖入的视频和字幕一键交给本机 `ffmpeg` 压制，并提供实时日志、进度、视频信息解析与可视化的参数配置界面。
+Tauri 2 + Vue 3 + TypeScript 桌面应用，用于替代原有字幕压制工作流。把拖入的视频和字幕一键交给本机 `ffmpeg` 压制，并提供实时日志、进度、视频信息解析与可视化的参数配置界面。
 
 </div>
 
