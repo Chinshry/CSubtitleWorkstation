@@ -151,44 +151,6 @@ npm run build          # 仅前端构建
 </details>
 
 <details>
-<summary><strong>项目结构</strong></summary>
-
-```
-CSubtitleWorkstation/
-├── src/                    # 前端 Vue 3 + TypeScript
-│   ├── App.vue             # 应用外壳 + 全局 Tauri 拖拽监听
-│   ├── views/
-│   │   ├── HomeView.vue    # 压制主页：表单 + 视频信息卡 + 日志
-│   │   └── SettingsView.vue
-│   ├── components/
-│   │   ├── CompressForm.vue
-│   │   ├── VideoMetaCard.vue
-│   │   ├── JobLogPanel.vue
-│   │   ├── FfmpegStatus.vue
-│   │   └── LogoEditor.vue  # 可视化 LOGO 摆放编辑器
-│   ├── api/                # 调用 Tauri 后端命令的薄封装
-│   ├── stores/             # 全局共享状态
-│   └── types.ts            # 与后端共享的类型定义
-└── src-tauri/              # Rust 后端
-    ├── resources/avs/      # 内置 AVS 插件 DLL（仅 Windows）
-    └── src/
-        ├── commands/       # #[tauri::command]
-        │   ├── compress.rs # 启动 / 取消压制
-        │   ├── video.rs    # 解析视频信息 + LOGO 编辑器抽帧
-        │   ├── ffmpeg.rs   # ffmpeg 检测与路径设置
-        │   ├── avs.rs      # AVS 环境检测
-        │   └── config.rs   # 应用配置读写
-        └── services/
-            ├── command_builder.rs # 构建 ffmpeg 参数
-            ├── avs_detector.rs    # 检测 AviSynth+ 与 ffmpeg avisynth demuxer
-            ├── video_meta.rs      # ffprobe / ffmpeg -i 解析视频元数据
-            ├── frame_extractor.rs # LOGO 编辑器的抽帧缓存
-            └── config_store.rs    # 本地 JSON 配置读写
-```
-
-</details>
-
-<details>
 <summary><strong>设计原则</strong></summary>
 
 - **不内置 ffmpeg**：由用户自行安装或指定。推荐 Gyan.dev 的 `ffmpeg-release-full.7z`（包含 ffprobe 与 AviSynth+ 支持）
