@@ -25,14 +25,12 @@ jobs:
           - label: 'windows-x64'
             platform: 'windows-latest'
             args: ''
-          # macOS Apple Silicon (M1/M2/...) 原生构建
-          - label: 'macos-arm64'
+          # macOS Universal: 一个 .dmg 同时兼容 Apple Silicon 与 Intel Mac。
+          # 在 macos-latest (arm64) runner 上交叉编译 x86_64 部分，避免依赖
+          # 资源紧张的 macos-13 (Intel) runner，且用户无需在 Intel/ARM 间选择。
+          - label: 'macos-universal'
             platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-          # macOS Intel：macos-13 仍是 x86_64 runner（macos-latest 已切换到 arm64）
-          - label: 'macos-x86_64'
-            platform: 'macos-13'
-            args: '--target x86_64-apple-darwin'
+            args: '--target universal-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
 
@@ -49,8 +47,8 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          # macOS 矩阵需要追加目标 triple；Windows 用 host 默认即可
-          targets: ${{ startsWith(matrix.platform, 'macos') && (matrix.label == 'macos-arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin') || '' }}
+          # macOS universal 需要两个 darwin triple；Windows 用 host 默认即可
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -74,10 +72,10 @@ jobs:
             ## 安装
 
             - **Windows**：下载 `*-setup.exe` 安装包，双击运行。
-            - **macOS Apple Silicon (M 系列)**：下载 `*_aarch64.dmg`。
-            - **macOS Intel**：下载 `*_x64.dmg`。
+            - **macOS**：下载 `*_universal.dmg`，同时兼容 Apple Silicon (M 系列) 与 Intel Mac。
 
             > macOS 版本不支持 AVS 压制路线（仅 Windows）。
+            > macOS 首次打开如提示「无法验证开发者」，请右键应用 → 选「打开」，详见 README。
 
             ---
             完整变更见提交历史。
