@@ -175,6 +175,7 @@ pub fn start_compress(
 
     let app_for_wait = app.clone();
     let job_id_for_wait = job.id.clone();
+    let duration_for_wait = duration_seconds;
     thread::spawn(move || {
         // wait 线程独占 child，不再放进 Mutex；cancel_compress 通过 pid + OS 调用终止进程，
         // 不会与本线程互相阻塞，彻底避开死锁。
@@ -189,6 +190,23 @@ pub fn start_compress(
 
         match status {
             Ok(status) if status.success() => {
+                // ffmpeg 最后一行 progress 通常 current_seconds 比 duration 略短，
+                // 前端百分比会卡在 99.9。这里在正常退出后补发一次 100% 状态，
+                // 把进度推到完成态；前端无需识别"完成事件"特殊类型。
+                let _ = app_for_wait.emit(
+                    "compress-status",
+                    CompressStatus {
+                        job_id: job_id_for_wait.clone(),
+                        status_line: "Compression completed.".to_string(),
+                        percent: Some(100.0),
+                        current_seconds: duration_for_wait,
+                        duration_seconds: duration_for_wait,
+                        size_kb: None,
+                        bitrate_kbps: None,
+                        speed: None,
+                        fps: None,
+                    },
+                );
                 let _ = app_for_wait.emit("compress-log", "Compression completed.");
             }
             Ok(status) => {
