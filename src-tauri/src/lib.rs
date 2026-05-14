@@ -5,6 +5,7 @@ mod services;
 use std::collections::{HashMap, HashSet};
 use std::process::ChildStdin;
 use std::sync::Mutex;
+use std::env;
 
 /// 运行中的压制任务句柄。
 /// - `pid`：ffmpeg 进程 id，用于兜底强制终止。
@@ -24,6 +25,10 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // macOS: 加载 shell 环境变量，使 Finder/Dock 启动的应用能找到 Homebrew 工具
+    #[cfg(target_os = "macos")]
+    load_shell_env();
+
     tauri::Builder::default()
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
@@ -50,4 +55,43 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(target_os = "macos")]
+fn load_shell_env() {
+    // 尝试从 ~/.zprofile 或 ~/.bash_profile 加载环境变量
+    let home = match env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+
+    let zprofile = std::path::PathBuf::from(&home).join(".zprofile");
+    let bash_profile = std::path::PathBuf::from(&home).join(".bash_profile");
+
+    let profile_path = if zprofile.exists() {
+        zprofile
+    } else if bash_profile.exists() {
+        bash_profile
+    } else {
+        return;
+    };
+
+    // 执行 shell 脚本来获取环境变量
+    if let Ok(output) = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "source '{}' && echo \"$PATH\"",
+            profile_path.display()
+        ))
+        .output()
+    {
+        if output.status.success() {
+            if let Ok(path_str) = String::from_utf8(output.stdout) {
+                let path = path_str.trim();
+                if !path.is_empty() {
+                    env::set_var("PATH", path);
+                }
+            }
+        }
+    }
 }
