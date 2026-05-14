@@ -4,7 +4,7 @@
 
 # CC 字幕压制工作站
 
-**一键压制字幕视频，支持 LOGO 叠加、特效字幕、实时预览**
+**一键压制字幕视频，支持 LOGO 叠加、特效字幕、实时进度反馈**
 
 <p>
   <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases">📥 下载</a> ·
