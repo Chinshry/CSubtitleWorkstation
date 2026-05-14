@@ -4,6 +4,7 @@
   font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --sidebar-width: 240px;
 }
 
 * {
@@ -65,12 +66,53 @@ button.danger {
   bottom: 0;
   left: 0;
   /* 顶部 36px 让出给自定义标题栏的隐形拖拽区，避免品牌区被遮在控件下 */
-  padding: 36px 14px 24px;
+  padding: 36px 18px 18px;
   position: fixed;
   top: 0;
-  width: 260px;
+  width: 240px;
   z-index: 20;
   border-right: 1px solid rgba(255, 255, 255, 0.04);
+  transition: width 0.24s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar.collapsed {
+  width: 80px;
+  align-items: center;
+}
+
+.sidebar-toggle {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #b6c4d2;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  height: 44px;
+  justify-content: center;
+  margin-top: auto;
+  position: relative;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+  width: 44px;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #e6edf3;
+}
+
+.sidebar-toggle svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.sidebar.collapsed .sidebar-toggle svg {
+  transform: scaleX(-1);
 }
 
 .brand {
@@ -80,14 +122,12 @@ button.danger {
   padding: 4px 6px 16px;
   margin-bottom: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  width: 100%;
 }
 
-.brand-logo {
-  display: block;
-  flex-shrink: 0;
-  height: 48px;
-  object-fit: contain;
-  width: 48px;
+.sidebar.collapsed .brand {
+  justify-content: center;
+  width: auto;
 }
 
 .brand-text {
@@ -95,6 +135,21 @@ button.danger {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  transition: opacity 0.24s ease, visibility 0.24s ease;
+}
+
+.sidebar.collapsed .brand-text {
+  opacity: 0;
+  visibility: hidden;
+  display: none;
+}
+
+.brand-logo {
+  display: block;
+  flex-shrink: 0;
+  height: 40px;
+  object-fit: contain;
+  width: 40px;
 }
 
 .brand-text strong {
@@ -108,9 +163,9 @@ button.danger {
 
 .brand-text .brand-sub {
   color: #6f8595;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
@@ -121,6 +176,16 @@ button.danger {
 nav {
   display: grid;
   gap: 6px;
+  width: 100%;
+}
+
+.sidebar.collapsed nav {
+  width: auto;
+}
+
+nav::after {
+  content: '';
+  flex: 1;
 }
 
 nav button {
@@ -132,11 +197,22 @@ nav button {
   font-size: 16.5px;
   font-weight: 500;
   gap: 14px;
-  min-height: 50px;
+  min-height: 56px;
   padding: 0 16px;
   position: relative;
   text-align: left;
   transition: background 0.16s ease, color 0.16s ease;
+}
+
+.sidebar.collapsed nav button {
+  justify-content: center;
+  padding: 0;
+  width: 56px;
+  margin: 0 auto;
+}
+
+.sidebar.collapsed nav button span:not(.nav-icon) {
+  display: none;
 }
 
 nav button .nav-icon {
@@ -144,10 +220,10 @@ nav button .nav-icon {
   color: #7a8a9a;
   display: inline-flex;
   flex-shrink: 0;
-  height: 22px;
+  height: 28px;
   justify-content: center;
   transition: color 0.16s ease;
-  width: 22px;
+  width: 28px;
 }
 
 /* SVG 内联 width/height 写死了 16，这里强制跟随 .nav-icon 容器尺寸放大 */
@@ -189,7 +265,7 @@ nav button.active .nav-icon {
   grid-auto-rows: max-content;
   align-content: start;
   gap: 16px;
-  margin-left: 260px;
+  margin-left: var(--sidebar-width);
   /* 顶部 36px 让出给自定义标题栏的悬浮控件，避免首屏面板被遮；
      滚动归属在此容器，避免 body 级滚动条覆盖到右上角窗口控件区域 */
   margin-top: 36px;
@@ -198,6 +274,7 @@ nav button.active .nav-icon {
   overflow-x: hidden;
   padding: 0 22px 22px;
   position: relative;
+  transition: margin-left 0.24s ease;
 }
 
 .drop-overlay {
