@@ -3,6 +3,15 @@ use crate::models::compress_job::CompressJob;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(windows)]
+fn no_window(builder: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    builder.creation_flags(CREATE_NO_WINDOW);
+}
+#[cfg(not(windows))]
+fn no_window(_: &mut Command) {}
+
 pub fn build_preview(ffmpeg_path: &str, job: &CompressJob) -> Result<Vec<String>, String> {
     build_with_options(ffmpeg_path, job, None)
 }
@@ -173,9 +182,10 @@ pub struct VideoInfo {
 }
 
 pub fn inspect_video(ffmpeg_path: &str, video_path: &str) -> Result<VideoInfo, String> {
-    let output = Command::new(ffmpeg_path)
-        .arg("-i")
-        .arg(video_path)
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.arg("-i").arg(video_path);
+    no_window(&mut cmd);
+    let output = cmd
         .output()
         .map_err(|err| format!("Failed to run ffmpeg inspect: {err}"))?;
     let text = format!(
