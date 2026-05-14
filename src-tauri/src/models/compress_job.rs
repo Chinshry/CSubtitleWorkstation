@@ -22,6 +22,12 @@ pub struct CompressJob {
     /// 不存在则不叠加 LOGO（不再回退到 ASS 行解析）。
     #[serde(default)]
     pub logo_layout: Option<LogoLayout>,
+    /// LOGO 是否叠加在字幕之上。
+    /// - false（默认）：LOGO 在字幕下，字幕可遮挡 LOGO（非 AVS 模式现状）
+    /// - true：LOGO 在字幕上，LOGO 完整可见（AVS 模式现状）
+    /// AVS 模式当前固定按 true 处理（前端会禁用切换），后端不依赖该字段调整 AVS 行为。
+    #[serde(default)]
+    pub logo_on_top: bool,
     /// 前端从 inspect_video_meta 获取的"显示尺寸"（已应用 rotation）。
     /// command_builder 优先用它换算 LOGO overlay 像素，避免再走没 rotation 知识的文本解析。
     #[serde(default)]

@@ -91,6 +91,27 @@ const logoSummary = computed(() => {
   return `已配置：${name} · ${describeLogoPosition(layout)} · ${describeLogoSize(layout)}`
 })
 
+// LOGO 层级：AVS 模式下 VSFilterMod TextSubMod 把字幕烧进 AVS 输出，
+// ffmpeg 滤镜无法再插入到字幕之下，故 AVS 启用时 LOGO 强制在字幕上、禁用切换。
+const logoLayerDisabled = computed(() => !!job.value.useAvs)
+const logoLayerTip = computed(() =>
+  logoLayerDisabled.value
+    ? 'AVS 模式下字幕由 AVS 脚本渲染，LOGO 仅能叠加在字幕之上'
+    : '“字幕在上 LOGO 在下”=LOGO 会被字幕遮挡；“LOGO 在上 字幕在下”=LOGO 完整覆盖字幕'
+)
+// AppSelect 仅接受 string | number，做一层 bool ↔ string 适配。
+// AVS 模式下视觉上锁定为 'top'，不写回 job.logoOnTop（保留用户上次选择）
+const logoLayerValue = computed<'top' | 'bottom'>({
+  get() {
+    if (logoLayerDisabled.value) return 'top'
+    return job.value.logoOnTop ? 'top' : 'bottom'
+  },
+  set(v) {
+    if (logoLayerDisabled.value) return
+    job.value.logoOnTop = v === 'top'
+  }
+})
+
 function describeLogoPosition(layout: NonNullable<typeof job.value.logoLayout>): string {
   // LOGO 中心点占视频画面的百分比（取中心点更符合"摆在哪个角落"的语感）
   const cx = layout.xPct + layout.wPct / 2
@@ -142,7 +163,7 @@ function onOpenLogoEditor() {
           <span>
             CRF
             <span
-              class="hint"
+              class="hint tip-right"
               :data-tip="`对应命令：-crf ${job.crf}\n\n常量码率因子，数值越小画质越好、文件越大。\nlibx264 / libx265 推荐 18 – 28：18 视觉无损，23 默认，28 偏低质量。\n硬件编码器（nvenc / amf / videotoolbox）的 CRF 含义略有不同，仅作近似画质参考。`"
             ></span>
           </span>
@@ -152,7 +173,7 @@ function onOpenLogoEditor() {
           <span>
             最大码率（Kbps）
             <span
-              class="hint"
+              class="hint tip-right"
               data-tip="对应命令：-maxrate {值}k -bufsize {值×2}k
 
 限制视频码率峰值，防止画面剧烈变化时码率失控。
@@ -206,7 +227,7 @@ function onOpenLogoEditor() {
           <input v-model="job.needLogo" type="checkbox" />
           <span class="switch"></span>
           <span>压制 LOGO</span>
-          <span class="hint" data-tip="在视频画面上叠加一张 LOGO 图片。
+          <span class="hint tip-right" data-tip="在视频画面上叠加一张 LOGO 图片。
 点击右侧「配置 LOGO」按钮可视化设置图片、位置与大小。
 开关关闭时即使已配置布局也不会叠加。"></span>
         </label>
@@ -250,6 +271,18 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
         </button>
         <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
         <span v-else class="logo-summary muted">尚未配置 LOGO</span>
+        <div class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }" :title="logoLayerTip">
+          <span class="logo-layer-label">LOGO 层级</span>
+          <AppSelect
+            v-model="logoLayerValue"
+            class="logo-layer-select"
+            :disabled="logoLayerDisabled"
+            :options="[
+              { value: 'bottom', label: '字幕在上 LOGO 在下', title: 'LOGO 会被字幕遮挡' },
+              { value: 'top', label: 'LOGO 在上 字幕在下', title: 'LOGO 完整覆盖字幕' }
+            ]"
+          />
+        </div>
       </div>
     </div>
   </section>
@@ -280,6 +313,23 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
   white-space: nowrap;
 }
 .logo-summary.muted {
+  color: #9aa7b1;
+}
+.logo-layer-control {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.logo-layer-label {
+  color: #4a5560;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.logo-layer-select {
+  min-width: 200px;
+}
+.logo-layer-disabled .logo-layer-label {
   color: #9aa7b1;
 }
 </style>

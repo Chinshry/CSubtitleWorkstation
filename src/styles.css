@@ -43,6 +43,12 @@ button.secondary {
   color: #24313c;
 }
 
+/* 命令预览开关：active 态用深一档底色 + 主品牌色文字，提示当前面板已展开 */
+button.command-toggle.active {
+  background: #c9dde3;
+  color: #0f5268;
+}
+
 button.danger {
   background: #b42318;
 }
@@ -637,6 +643,30 @@ select option {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
   visibility: visible;
+}
+
+/* tip-right 修饰：tooltip 锚点改为 hint 左缘，整体向右展开。
+   用在靠 .workspace 左边界的 hint 上，避免居中展开越过容器被 overflow-x:hidden 裁剪、
+   视觉上"被 sidebar 覆盖"。 */
+.hint.tip-right::after {
+  left: -6px;
+  transform: translateY(-4px);
+}
+.hint.tip-right:hover::after,
+.hint.tip-right:focus::after {
+  transform: translateY(0);
+}
+
+/* tip-left 修饰：tooltip 锚点改为 hint 右缘，整体向左展开。
+   用在靠 .workspace 右边界的 hint 上，避免向右溢出被裁。 */
+.hint.tip-left::after {
+  left: auto;
+  right: -6px;
+  transform: translateY(-4px);
+}
+.hint.tip-left:hover::after,
+.hint.tip-left:focus::after {
+  transform: translateY(0);
 }
 
 .ffmpeg-missing {

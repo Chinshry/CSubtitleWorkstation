@@ -77,6 +77,9 @@ export type CompressJob = {
   logoDir?: string
   useAvs?: boolean
   logoLayout?: LogoLayout | null
+  /** LOGO 是否叠加在字幕之上。false=在字幕下（默认，非 AVS 现状）；true=在字幕上。
+   *  AVS 模式当前固定为在字幕上，前端会禁用切换并提示。 */
+  logoOnTop?: boolean
   /** 前端 inspectVideoMeta 解析出的"显示尺寸"（已应用 rotation），由后端用于 LOGO overlay 像素换算 */
   videoWidth?: number
   videoHeight?: number

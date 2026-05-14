@@ -46,10 +46,22 @@ pub fn build_with_options(
 
     match (logo_overlay, has_subtitle) {
         (Some(overlay), true) => {
-            filters.push(format!(
-                "{overlay},subtitles='{}'",
-                escape_filter_path(subtitle_path)
-            ));
+            // LOGO 与字幕同时存在：按 logo_on_top 决定叠加顺序。
+            // - 在下（默认）：overlay 在前，字幕在 chain 末端，字幕覆盖 LOGO
+            //   `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y,subtitles='...'`
+            // - 在上：先把字幕渲染到命名链 [sub]，再以 [sub] 为底叠加 LOGO
+            //   `[in]subtitles='...'[sub];movie='...',scale=W:H[wm];[sub][wm]overlay=X:Y`
+            //   build_logo_overlay 默认输出含 `[in]` 作为底图标签，这里替换为 `[sub]`
+            //   即可串联到字幕输出之后。
+            let escaped_sub = escape_filter_path(subtitle_path);
+            if job.logo_on_top {
+                let overlay_on_sub = overlay.replace("[in]", "[sub]");
+                filters.push(format!(
+                    "[in]subtitles='{escaped_sub}'[sub];{overlay_on_sub}",
+                ));
+            } else {
+                filters.push(format!("{overlay},subtitles='{escaped_sub}'"));
+            }
         }
         (Some(overlay), false) => {
             filters.push(overlay);

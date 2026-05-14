@@ -26,6 +26,8 @@ const loading = ref(false)
 const running = ref(false)
 // 主动取消标志：仅作徽章语义（取消中 / 已取消）。状态收尾交给 compress-log 监听器统一处理。
 const cancelled = ref(false)
+// 命令预览面板默认折叠；通过 actions 行内的开关按钮显示/隐藏，避免占用首屏纵向空间
+const showCommandPreview = ref(false)
 // ffmpeg 状态来自全局 store（首次 init 后缓存，避免每次切页面重复检测；调试 mock 也通过 store 透传过来）
 const command = ref<string[]>([])
 const logs = ref<string[]>([])
@@ -126,7 +128,8 @@ function createJob(): CompressJob {
     needYadif: false,
     encoder: 'libx264',
     useAvs: false,
-    logoLayout: null
+    logoLayout: null,
+    logoOnTop: false
   }
 }
 
@@ -529,9 +532,19 @@ onUnmounted(() => {
       @open-logo-editor="openLogoEditor"
     />
 
-    <CommandPreviewCard v-if="command.length" :command="command" />
+    <CommandPreviewCard v-if="command.length && showCommandPreview" :command="command" />
 
     <section class="actions">
+      <button
+        type="button"
+        class="secondary command-toggle"
+        :class="{ active: showCommandPreview }"
+        :disabled="!command.length"
+        :title="command.length ? '' : '等待视频与参数就绪后自动生成命令'"
+        @click="showCommandPreview = !showCommandPreview"
+      >
+        {{ showCommandPreview ? '隐藏命令预览' : '显示命令预览' }}
+      </button>
       <button v-if="running" class="danger" @click="cancelJob">取消压制</button>
       <button v-else :disabled="!ffmpegStatus?.available" @click="runJob">开始压制</button>
     </section>
