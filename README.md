@@ -174,6 +174,11 @@ npm run build          # 仅前端构建
 
 Issues 和建议欢迎！提交 PR 前请确保代码通过 linter 和测试。
 
+## 📚 文档
+
+- [需求与技术方案](docs/REQUIREMENTS.md) — 项目设计文档
+- [待办事项](docs/TODO.md) — 功能路线图与已知问题
+
 ## 📄 License
 
 MIT © Chinshry
