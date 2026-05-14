@@ -634,7 +634,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="logo-editor-overlay" @pointermove="onPointerMove" @pointerup="onPointerUp">
+  <div class="logo-editor-overlay app-modal-active" @pointermove="onPointerMove" @pointerup="onPointerUp">
     <div class="logo-editor" role="dialog" aria-modal="true">
       <header class="le-header">
         <!-- 关闭入口收敛到底部「取消」按钮 + ESC 键，避免三个重复出口 -->
@@ -831,6 +831,11 @@ export default { name: 'LogoEditor' }
   position: fixed;
   z-index: 200;
   backdrop-filter: blur(2px);
+  /* 让 flex 居中的弹窗主体避开顶部 36px 标题栏区域：
+     原 inset:0 + 96vh 弹窗导致顶部圆角侵入标题栏，
+     按钮图标垂直跨越「mask 深色 / 弹窗白色」两种背景，对比度断层。
+     overlay 仍覆盖标题栏区，但弹窗下移 36px，视觉层次干净。 */
+  padding-top: 36px;
 }
 
 .logo-editor {
@@ -839,11 +844,13 @@ export default { name: 'LogoEditor' }
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
   display: flex;
   flex-direction: column;
-  /* 强制撑满 96vh：弹窗内 stage-wrap 是 flex:1，
+  /* 强制撑满剩余空间：弹窗内 stage-wrap 是 flex:1，
      竖屏视频的预览框依赖 wrap 实际高度算最大宽度，
-     不撑满高度会让竖屏视频缩成窄长条。*/
-  height: 96vh;
-  max-height: 96vh;
+     不撑满高度会让竖屏视频缩成窄长条。
+     注意：原 96vh 改为减去标题栏 36px 后的可用高度，
+     避免与上方 padding-top:36px 叠加后底部被裁切。 */
+  height: calc(96vh - 36px);
+  max-height: calc(96vh - 36px);
   max-width: 1500px;
   overflow: hidden;
   width: 96vw;

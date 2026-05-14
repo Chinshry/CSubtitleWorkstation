@@ -205,6 +205,31 @@ onUnmounted(() => {
   color: #ffffff;
 }
 
+/* 当页面中存在全屏 modal（标志 class：.app-modal-active）时，
+   按钮区背后是半透明深色遮罩 rgba(15,23,32,0.55) + blur，
+   原本 #43515c 深色图标在该背景下几乎与遮罩同色 → 对比度坍塌。
+   用 :has() 自动探测 modal 存在，切到浅色图标 + 半透明白底 hover：
+   - 关闭按钮的红色 hover 本身高对比，无需特殊处理（继承通用规则被红色覆盖即可）。
+   - 选择 :has() 而非 JS 同步 body class：单一组件内闭环，无跨组件状态。 */
+body:has(.app-modal-active) .title-btn {
+  color: #d6dde5;
+}
+body:has(.app-modal-active) .title-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+body:has(.app-modal-active) .title-btn:active {
+  background: rgba(255, 255, 255, 0.28);
+}
+body:has(.app-modal-active) .title-btn.close-btn:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+body:has(.app-modal-active) .title-btn.close-btn:active {
+  background: #c50f1f;
+  color: #ffffff;
+}
+
 /* 当标题栏覆盖在 sidebar 深色区域时，按钮在浅色背景中已对比明显；
    sidebar 顶部 24px 留白本身就在 36px 拖拽区之内，不会与品牌区冲突 */
 </style>
