@@ -283,11 +283,11 @@ function onOpenLogoEditor() {
             />
           </div>
         </label>
-        <label class="wide encoder-cell">
+        <label class="encoder-cell">
           <span>
-            编码器（GraphicsType）
+            编码器
             <span
-              class="hint"
+              class="hint tip-right"
               :data-tip="`对应命令：-c:v ${job.encoder}\n\nlibx264：CPU 软编，兼容性最好、画质稳定，支持 AVS。\nh264_nvenc：NVIDIA 显卡硬编，速度快，不支持 AVS。\nh264_amf：AMD 显卡硬编，速度快，不支持 AVS。\nh264_videotoolbox：macOS 硬编，不支持 AVS。`"
             ></span>
           </span>
@@ -304,7 +304,7 @@ function onOpenLogoEditor() {
           <span class="switch"></span>
           <span>压制 LOGO</span>
           <span class="hint tip-right" data-tip="在视频画面上叠加一张 LOGO 图片。
-点击右侧「配置 LOGO」按钮可视化设置图片、位置与大小。
+点击「配置 LOGO」按钮可视化设置图片、位置与大小。
 开关关闭时即使已配置布局也不会叠加。"></span>
         </label>
         <label class="switch-row">
@@ -317,7 +317,7 @@ function onOpenLogoEditor() {
 TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开启。
 网络发布的视频通常已经是逐行扫描，不需要开启。"></span>
         </label>
-        <label class="switch-row" :class="{ 'switch-row-disabled': avsToggleDisabled }" :title="avsToggleTip">
+        <label class="switch-row" :class="{ 'switch-row-disabled': avsToggleDisabled }">
           <input
             v-model="job.useAvs"
             type="checkbox"
@@ -326,7 +326,7 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
           <span class="switch"></span>
           <span>AVS 压制模式</span>
           <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
-          <span class="hint" :data-tip="avsToggleTip"></span>
+          <span class="hint tip-left" :data-tip="avsToggleTip"></span>
         </label>
       </div>
 

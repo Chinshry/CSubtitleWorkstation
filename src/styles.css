@@ -538,7 +538,7 @@ select option {
 
 .param-row {
   display: grid;
-  grid-template-columns: 110px minmax(260px, 1fr);
+  grid-template-columns: 90px minmax(220px, 280px) minmax(240px, 1fr);
   gap: 14px 18px;
   align-items: start;
 }
@@ -551,10 +551,6 @@ select option {
 
 .param-row .crf-cell input {
   width: 100%;
-}
-
-.param-row .encoder-cell {
-  grid-column: 1 / -1;
 }
 
 .bitrate-control {
