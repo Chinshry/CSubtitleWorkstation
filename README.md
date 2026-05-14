@@ -4,7 +4,7 @@
 
 # CC 字幕压制工作站
 
-**Tauri 2 + Vue 3 + TypeScript 桌面应用**
+**一键压制字幕视频，支持 LOGO 叠加、特效字幕、实时预览**
 
 <p>
   <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases">📥 下载</a> ·
@@ -107,7 +107,7 @@
 
 下载 `CSubtitleWorkstation_x.y.z_universal.dmg`，**同一个 DMG 同时兼容 Apple Silicon (M1/M2/M3/M4) 与 Intel Mac**，无需区分。
 
-#### 首次打开提示「无法验证开发者」怎么办
+#### macOS首次打开提示「无法验证开发者」怎么办
 
 由于本项目目前没有 Apple 开发者证书签名，macOS Gatekeeper 会在首次打开时拦截：
 
@@ -208,7 +208,3 @@ Issues 和建议欢迎！提交 PR 前请确保代码通过 linter 和测试。
 
 - [需求与技术方案](docs/REQUIREMENTS.md) — 项目设计文档
 - [待办事项](docs/TODO.md) — 功能路线图与已知问题
-
-## 📄 License
-
-MIT © Chinshry
