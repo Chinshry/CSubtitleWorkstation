@@ -23,8 +23,8 @@ Tauri 2 + Vue 3 + TypeScript 桌面应用，用于替代原有字幕压制工作
 - **反馈缺失**：工具窗口闪现即关，看不到实时进度和日志
 - **跨平台困难**：小丸工具箱仅 Windows，macOS/Linux 用户无法使用
 - **视频信息不透明**：需要手动用 ffprobe 查询分辨率、帧率、编码器等
-- **AVS 压制困难**：需要手动编写 AviSynth 脚本，参数复杂，调试困难
-- **LOGO 添加困难**：传统方式需要用 ASS 字幕的 img 标签或矢量绘制命令，这些都需要 AVS 压制才能实现，流程复杂且耗时
+- **AVS 压制困难**：需要手动编写 AviSynth 脚本来处理特效字幕（如复杂特效、矢量绘制等），参数复杂，调试困难，且耗时
+- **LOGO 添加困难**：传统方式需要用 ASS 字幕的 img 标签或矢量绘制命令，这些都需要特效字幕压制才能实现，流程复杂且耗时。本应用采用 ffmpeg overlay filter 直接叠加 LOGO，无需特效压制，速度快得多
 
 **CC 字幕压制工作站** 用可视化界面解决这些问题：拖拽导入 → 自动解析视频 → 可视化配置参数 → 实时进度反馈 → 一键压制。**支持 Windows 和 macOS**，开箱即用。
 
@@ -37,7 +37,7 @@ Tauri 2 + Vue 3 + TypeScript 桌面应用，用于替代原有字幕压制工作
 - 🎨 **可视化参数** — CRF、码率、编码器（x264/NVENC/AMF/VideoToolbox）一目了然
 - 🖼️ **LOGO 可视化编辑 + 布局保存** — 在视频抽帧上拖放 LOGO，支持四角缩放，为不同分辨率（720p/1080p/4K）和屏幕方向（横/竖屏）各自保存一套 LOGO 位置，下次打开自动恢复
 - 🎞️ **反交错处理** — yadif 可选开关，处理交错素材
-- 🔤 **AVS 兼容模式**（仅 Windows）— 使用 AviSynth+ 脚本引擎渲染复杂 ASS 特效，相比 ffmpeg libass 支持更完善
+- 🔤 **特效字幕压制**（仅 Windows）— 使用 AviSynth+ 脚本引擎处理复杂特效字幕（如矢量绘制、img 标签等），相比 ffmpeg libass 支持更完善
 - 👁️ **命令预览** — 开始压制前预览完整 ffmpeg 参数
 - 📈 **实时进度** — 进度条、当前时间/总时长、输出大小、速度、fps、码率、原始 status 行
 - 📝 **完整日志** — ffmpeg stdout/stderr 全程透出，按 `\r` 与 `\n` 两种分隔符切行
@@ -63,11 +63,11 @@ Tauri 2 + Vue 3 + TypeScript 桌面应用，用于替代原有字幕压制工作
 | **视频信息解析** | ✅ | ✅ |
 | **LOGO 叠加** | ✅ 可选层级（字幕上/下） | ✅ 仅字幕在上 LOGO 在下 |
 | **反交错** | ✅ | ✅ |
-| **AVS 兼容模式** | ✅ | ❌ |
+| **特效字幕压制** | ✅ | ❌ |
 | **硬件加速** | NVIDIA NVENC、AMD AMF | Apple VideoToolbox |
 | **安装包格式** | NSIS 安装程序 | Universal DMG（Intel + Apple Silicon） |
 
-> macOS 版本不支持 AVS 压制（AviSynth+ 仅 Windows），统一使用 ffmpeg libass 字幕渲染。
+> macOS 版本不支持特效字幕压制（AviSynth+ 仅 Windows），统一使用 ffmpeg libass 字幕渲染。
 > macOS 版本 LOGO 层级固定为"字幕在上 LOGO 在下"，不支持切换到"LOGO 在上 字幕在下"。
 
 ---
@@ -169,8 +169,8 @@ npm run build          # 仅前端构建
 - **不内置 ffmpeg**：由用户自行安装或指定。推荐 Gyan.dev 的 `ffmpeg-release-full.7z`（包含 ffprobe 与 AviSynth+ 支持）
 - **自动 ffprobe 定位**：选择 ffmpeg 可执行文件时，应用会自动在同目录寻找 ffprobe，无需单独配置
 - **应用更新与 ffmpeg 版本检测独立**：两者互不影响
-- **AVS 兼容模式（仅 Windows）**：需要系统已安装 AviSynth+ 且 ffmpeg 启用了 `--enable-avisynth` 构建
-- **macOS / Linux 不支持 AVS**：统一走 ffmpeg filter 模式（libass 字幕渲染）
+- **特效字幕压制（仅 Windows）**：需要系统已安装 AviSynth+ 且 ffmpeg 启用了 `--enable-avisynth` 构建
+- **macOS / Linux 不支持特效字幕压制**：统一走 ffmpeg filter 模式（libass 字幕渲染）
 - **无 shell 调用**：直接通过 Rust `std::process::Command` 调用 ffmpeg / ffprobe，文件名中包含特殊字符无需转义
 
 </details>
