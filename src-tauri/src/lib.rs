@@ -2,7 +2,7 @@ mod commands;
 mod models;
 mod services;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::ChildStdin;
 use std::sync::Mutex;
 
@@ -19,6 +19,7 @@ pub struct JobHandle {
 #[derive(Default)]
 pub struct AppState {
     pub jobs: Mutex<HashMap<String, JobHandle>>,
+    pub cancelled_jobs: Mutex<HashSet<String>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,11 +33,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::config::load_config,
             commands::config::save_config,
+            commands::encoder::get_supported_encoders,
             commands::ffmpeg::detect_ffmpeg,
             commands::ffmpeg::set_ffmpeg_path,
             commands::ffmpeg::reset_ffmpeg_to_system,
             commands::avs::detect_avs,
             commands::compress::preview_ffmpeg_command,
+            commands::compress::analyze_subtitle,
             commands::compress::start_compress,
             commands::compress::cancel_compress,
             commands::video::inspect_video_meta,

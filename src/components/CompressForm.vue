@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { CompressJob } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus } from '../stores/avsStore'
+import { getSupportedEncoders, type EncoderInfo } from '../api/encoder'
+import { analyzeSubtitle } from '../api/compress'
 import AppSelect from './AppSelect.vue'
 
 const job = defineModel<CompressJob>({ required: true })
@@ -18,20 +20,42 @@ const emit = defineEmits<{
   (e: 'open-logo-editor'): void
 }>()
 
+// 支持的编码器列表和自动启用 AVS 的原因
+const supportedEncoders = ref<EncoderInfo[]>([])
+const avsAutoEnabledReason = ref<string>('')
+
+// 从 avsAutoEnabledReason 中提取检测到的标签
+const detectedTagsDisplay = computed(() => {
+  if (!avsAutoEnabledReason.value) return []
+  const match = avsAutoEnabledReason.value.match(/检测到字幕特效（(.+?)）/)
+  if (!match || !match[1]) return []
+  return match[1].split('、')
+})
+
 // 副标题：仅 Windows 提示可启用 AVS，其它平台说明走 filter 模式
-const avsHint = computed(() =>
-  isWindows.value
-    ? '可启用 AVS 兼容模式；不勾选则走 ffmpeg filter 模式。'
-    : '当前平台不支持 AVS，使用 ffmpeg filter 模式。'
-)
+const avsHint = computed(() => {
+  if (avsAutoEnabledReason.value) {
+    return avsAutoEnabledReason.value
+  }
+  return ''
+})
+
+// AVS 开关的完整提示
+const avsToggleTip = computed(() => {
+  let tip = '启用 AviSynth+ 脚本作为 ffmpeg 输入，字幕由 VSFilterMod 的 TextSubMod 渲染。\n'
+  tip += '仅 Windows 支持；需要本机安装 AviSynth+ 且 ffmpeg 启用了 --enable-avisynth（如 Gyan.dev full 版）。\n'
+  tip += '启用后 LOGO overlay 与 yadif 仍然有效，但 ffmpeg subtitles 滤镜会被跳过。\n\n'
+  tip += '可启用 AVS 压制模式；不勾选则走 ffmpeg filter 模式。'
+  return tip
+})
 
 // AVS 开关启用条件：仅 Windows + 检测通过；缺失依赖时禁用并给出提示
 const avsToggleDisabled = computed(() => !isWindows.value || !avsStatus.value?.available)
-const avsToggleTip = computed(() => {
+const avsToggleDisabledTip = computed(() => {
   if (!isWindows.value) return 'AVS 压制仅 Windows 支持'
   const s = avsStatus.value
   if (!s) return '正在检测 AVS 环境…'
-  if (s.available) return '已检测到 AviSynth+ 与 ffmpeg avisynth demuxer，可启用 AVS 压制'
+  if (s.available) return ''
   return s.message ?? 'AVS 环境不可用'
 })
 
@@ -45,7 +69,39 @@ function syncAvsAvailability() {
 // AVS 状态变化时（含调试 mock 切换）自动同步
 watch(avsToggleDisabled, syncAvsAvailability)
 
+// 字幕分析：检测是否包含特效标签，自动勾选 AVS
+async function analyzeSubtitleForEffects() {
+  const subtitlePath = job.value.subtitlePath?.trim()
+  if (!subtitlePath || !isWindows.value || !avsStatus.value?.available) {
+    avsAutoEnabledReason.value = ''
+    return
+  }
+
+  try {
+    const result = await analyzeSubtitle(subtitlePath)
+    if (result.hasEffects) {
+      avsAutoEnabledReason.value = `检测到字幕特效（${result.detectedTags.join('、')}），已自动启用 AVS 压制`
+      job.value.useAvs = true
+    } else {
+      avsAutoEnabledReason.value = ''
+    }
+  } catch (err) {
+    console.error('Failed to analyze subtitle:', err)
+    avsAutoEnabledReason.value = ''
+  }
+}
+
+// 监听字幕路径变化
+watch(() => job.value.subtitlePath, analyzeSubtitleForEffects, { immediate: false })
+
 onMounted(async () => {
+  // 加载支持的编码器列表
+  try {
+    supportedEncoders.value = await getSupportedEncoders()
+  } catch (err) {
+    console.error('Failed to get supported encoders:', err)
+  }
+
   if (isWindows.value) {
     await initAvsStatus()
   }
@@ -54,6 +110,32 @@ onMounted(async () => {
 
 // 最大码率三选一：none(留空) / auto(=0) / custom(>0)
 type BitrateMode = 'none' | 'auto' | 'custom'
+
+// 生成编码器选项，仅显示当前平台支持的编码器
+const encoderOptions = computed(() => {
+  const encoderDescriptions: Record<string, string> = {
+    libx264: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）',
+    h264_nvenc: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）',
+    h264_amf: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）',
+    h264_videotoolbox: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）'
+  }
+
+  if (supportedEncoders.value.length > 0) {
+    return supportedEncoders.value
+      .filter(e => e.supported)
+      .map(e => ({
+        value: e.name,
+        label: encoderDescriptions[e.name] || e.label
+      }))
+  }
+  // 后端未返回时使用默认选项
+  return [
+    { value: 'libx264', label: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）' },
+    { value: 'h264_nvenc', label: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）' },
+    { value: 'h264_amf', label: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）' },
+    { value: 'h264_videotoolbox', label: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）' }
+  ]
+})
 
 const bitrateMode = computed<BitrateMode>({
   get(): BitrateMode {
@@ -153,7 +235,6 @@ function onOpenLogoEditor() {
     <div class="panel-heading">
       <div>
         <h2>压制参数</h2>
-        <p>{{ avsHint }}</p>
       </div>
     </div>
 
@@ -212,12 +293,7 @@ function onOpenLogoEditor() {
           </span>
           <AppSelect
             v-model="job.encoder"
-            :options="[
-              { value: 'libx264', label: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）' },
-              { value: 'h264_nvenc', label: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）' },
-              { value: 'h264_amf', label: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）' },
-              { value: 'h264_videotoolbox', label: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）' }
-            ]"
+            :options="encoderOptions"
           />
         </label>
       </div>
@@ -248,13 +324,9 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
             :disabled="avsToggleDisabled"
           />
           <span class="switch"></span>
-          <span>AVS 兼容模式</span>
-          <span
-            class="hint"
-            data-tip="启用 AviSynth+ 脚本作为 ffmpeg 输入，字幕由 VSFilterMod 的 TextSubMod 渲染。
-仅 Windows 支持；需要本机安装 AviSynth+ 且 ffmpeg 启用了 --enable-avisynth（如 Gyan.dev full 版）。
-启用后 LOGO overlay 与 yadif 仍然有效，但 ffmpeg subtitles 滤镜会被跳过。"
-          ></span>
+          <span>AVS 压制模式</span>
+          <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
+          <span class="hint" :data-tip="avsToggleTip"></span>
         </label>
       </div>
 
@@ -332,4 +404,64 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
 .logo-layer-disabled .logo-layer-label {
   color: #9aa7b1;
 }
+.avs-hint {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #856404;
+  cursor: help;
+  white-space: nowrap;
+}
+/* 复用 .hint::after 的暗卡片 tooltip 风格 */
+.avs-hint::after {
+  background: #1e293b;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
+  color: #f1f5f9;
+  content: attr(data-tip);
+  font: 400 12.5px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  left: 50%;
+  letter-spacing: 0.1px;
+  max-width: 360px;
+  opacity: 0;
+  padding: 8px 12px;
+  pointer-events: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  visibility: hidden;
+  white-space: pre-line;
+  width: max-content;
+  z-index: 50;
+}
+.avs-hint:hover::after,
+.avs-hint:focus::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  visibility: visible;
+}
+.detected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 8px;
+}
+.tag {
+  display: inline-block;
+  background: #e8f4f8;
+  border: 1px solid #b3d9e8;
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #176b87;
+  font-weight: 500;
+}
+
 </style>

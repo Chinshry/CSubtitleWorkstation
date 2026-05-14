@@ -1,5 +1,5 @@
 use crate::models::compress_job::CompressJob;
-use crate::services::{avs_detector, avs_workspace, command_builder, config_store, ffmpeg_locator};
+use crate::services::{avs_detector, avs_workspace, command_builder, config_store, encoder_detector, ffmpeg_locator, subtitle_analyzer};
 use crate::{AppState, JobHandle};
 use serde::Serialize;
 use std::fs;
@@ -24,6 +24,13 @@ pub struct CompressStatus {
     pub fps: Option<f64>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleAnalysisResult {
+    pub has_effects: bool,
+    pub detected_tags: Vec<String>,
+}
+
 #[tauri::command]
 pub fn preview_ffmpeg_command(app: AppHandle, job: CompressJob) -> Result<Vec<String>, String> {
     let config = config_store::load(&app)?;
@@ -35,11 +42,28 @@ pub fn preview_ffmpeg_command(app: AppHandle, job: CompressJob) -> Result<Vec<St
 }
 
 #[tauri::command]
+pub fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult, String> {
+    let analysis = subtitle_analyzer::analyze_subtitle(&subtitle_path)?;
+    Ok(SubtitleAnalysisResult {
+        has_effects: analysis.has_effects,
+        detected_tags: analysis.detected_tags,
+    })
+}
+
+#[tauri::command]
 pub fn start_compress(
     app: AppHandle,
     state: State<AppState>,
     job: CompressJob,
 ) -> Result<(), String> {
+    // 验证编码器是否在当前平台支持
+    if !encoder_detector::is_encoder_supported(&job.encoder) {
+        return Err(format!(
+            "编码器 {} 在当前平台不支持。",
+            job.encoder
+        ));
+    }
+
     let config = config_store::load(&app)?;
     let status = ffmpeg_locator::detect(&config);
     if !status.available {
@@ -182,32 +206,51 @@ pub fn start_compress(
         let status = child.wait();
 
         // wait 返回 → 进程已结束（正常退出或被 cancel kill 掉），从 jobs 表中移除该 id
-        if let Some(state) = app_for_wait.try_state::<AppState>() {
-            if let Ok(mut jobs) = state.jobs.lock() {
-                jobs.remove(&job_id_for_wait);
-            }
-        }
+        let was_cancelled = if let Some(state) = app_for_wait.try_state::<AppState>() {
+            let mut jobs = if let Ok(j) = state.jobs.lock() {
+                j
+            } else {
+                return;
+            };
+            jobs.remove(&job_id_for_wait);
+
+            let mut cancelled = if let Ok(c) = state.cancelled_jobs.lock() {
+                c
+            } else {
+                return;
+            };
+            let was_cancelled = cancelled.contains(&job_id_for_wait);
+            cancelled.remove(&job_id_for_wait);
+            was_cancelled
+        } else {
+            false
+        };
 
         match status {
             Ok(status) if status.success() => {
-                // ffmpeg 最后一行 progress 通常 current_seconds 比 duration 略短，
-                // 前端百分比会卡在 99.9。这里在正常退出后补发一次 100% 状态，
-                // 把进度推到完成态；前端无需识别"完成事件"特殊类型。
-                let _ = app_for_wait.emit(
-                    "compress-status",
-                    CompressStatus {
-                        job_id: job_id_for_wait.clone(),
-                        status_line: "Compression completed.".to_string(),
-                        percent: Some(100.0),
-                        current_seconds: duration_for_wait,
-                        duration_seconds: duration_for_wait,
-                        size_kb: None,
-                        bitrate_kbps: None,
-                        speed: None,
-                        fps: None,
-                    },
-                );
-                let _ = app_for_wait.emit("compress-log", "Compression completed.");
+                // 如果任务被取消，不发送 100% 完成状态，让前端保持当前进度
+                if was_cancelled {
+                    let _ = app_for_wait.emit("compress-log", "Compression exited.");
+                } else {
+                    // ffmpeg 最后一行 progress 通常 current_seconds 比 duration 略短，
+                    // 前端百分比会卡在 99.9。这里在正常退出后补发一次 100% 状态，
+                    // 把进度推到完成态；前端无需识别"完成事件"特殊类型。
+                    let _ = app_for_wait.emit(
+                        "compress-status",
+                        CompressStatus {
+                            job_id: job_id_for_wait.clone(),
+                            status_line: "Compression completed.".to_string(),
+                            percent: Some(100.0),
+                            current_seconds: duration_for_wait,
+                            duration_seconds: duration_for_wait,
+                            size_kb: None,
+                            bitrate_kbps: None,
+                            speed: None,
+                            fps: None,
+                        },
+                    );
+                    let _ = app_for_wait.emit("compress-log", "Compression completed.");
+                }
             }
             Ok(status) => {
                 let _ = app_for_wait.emit(
@@ -247,6 +290,15 @@ pub fn cancel_compress(
     };
 
     let pid = handle.pid;
+
+    // 标记任务为已取消，wait 线程会检查此标记避免发送 100% 完成状态
+    {
+        let mut cancelled = state
+            .cancelled_jobs
+            .lock()
+            .map_err(|_| "Cancelled jobs state is poisoned.".to_string())?;
+        cancelled.insert(job_id.clone());
+    }
 
     // 优雅退出路径：通过 stdin 给 ffmpeg 写 'q'，让它停止编码、写完文件尾、自然退出。
     // 这与命令行 Ctrl+C 等效，已编码部分仍然可播放。
