@@ -276,8 +276,22 @@ onMounted(async () => {
         <p class="muted" style="margin-top:0;"><em>AVS 仅 Windows 支持，macOS 自动走 ffmpeg filter 模式。</em></p>
         <ul>
           <li>
-            <strong>方法一（推荐）</strong> · 用 Homebrew：终端执行
-            <code>brew install ffmpeg</code>，装好后本工具点「使用系统 PATH」+「重新检测」。
+            <strong>方法一（推荐）</strong> · 用 Homebrew：
+            <ol style="margin:6px 0 0; padding-left:20px;">
+              <li>终端执行 <code>brew install ffmpeg</code></li>
+              <li>
+                配置环境变量到 <code>~/.zprofile</code>（本工具读取此文件获取 PATH，写到 <code>~/.zshrc</code> 不生效）。根据 Mac 芯片选一条执行：
+                <div class="muted" style="margin-top:6px;">Apple Silicon（M 系列芯片）：</div>
+                <div class="cmd-block">echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' &gt;&gt; ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"</div>
+                <div class="muted" style="margin-top:6px;">Intel Mac：</div>
+                <div class="cmd-block">echo 'eval "$(/usr/local/bin/brew shellenv)"' &gt;&gt; ~/.zprofile
+eval "$(/usr/local/bin/brew shellenv)"</div>
+                <div class="muted" style="margin-top:6px;">不确定芯片？终端执行 <code>uname -m</code>：<code>arm64</code> 是 Apple Silicon，<code>x86_64</code> 是 Intel。</div>
+                <div class="muted" style="margin-top:6px;">Homebrew 安装时若已自动写入 <code>~/.zprofile</code>，此步可跳过。</div>
+              </li>
+              <li>装好后本工具点「使用系统 PATH」+「重新检测」</li>
+            </ol>
           </li>
           <li>
             <strong>方法二</strong> · 不想装 Homebrew，从

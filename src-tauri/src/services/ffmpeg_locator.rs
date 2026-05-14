@@ -22,7 +22,55 @@ pub fn detect(config: &AppConfig) -> FfmpegStatus {
         FfmpegMode::System => {}
     }
 
-    inspect_path(Path::new(system_ffmpeg_name()), FfmpegSource::SystemPath)
+    // 1) 先按裸命令名走进程 PATH。Finder/Dock 启动的 App 在 macOS 上可能拿不到 shell PATH，
+    //    `open` 启动虽然继承 shell 环境，但实测仍有偶发"检测到但压制时找不到"的情况——
+    //    任何依赖动态 PATH 查找的方案本质都不够稳定。
+    let path_result = inspect_path(Path::new(system_ffmpeg_name()), FfmpegSource::SystemPath);
+    if path_result.available {
+        return path_result;
+    }
+
+    // 2) PATH 失败时，扫描平台常见安装目录作为兜底，命中即返回绝对路径，
+    //    后续执行不再依赖 PATH，从源头消除"检测✓但执行✗"的不一致。
+    for candidate in well_known_ffmpeg_paths() {
+        let path = Path::new(candidate);
+        if !path.exists() {
+            continue;
+        }
+        let status = inspect_path(path, FfmpegSource::SystemPath);
+        if status.available {
+            return status;
+        }
+    }
+
+    // 全部失败：保留 PATH 查找阶段的失败信息，便于排查
+    path_result
+}
+
+/// 平台常见的 ffmpeg 安装路径，按"出现频次 / 优先级"排序。
+/// 仅在用户未手动指定路径、且系统 PATH 中找不到 ffmpeg 时使用。
+fn well_known_ffmpeg_paths() -> &'static [&'static str] {
+    #[cfg(target_os = "macos")]
+    {
+        &[
+            "/opt/homebrew/bin/ffmpeg", // Apple Silicon (M 系列) Homebrew 默认前缀
+            "/usr/local/bin/ffmpeg",    // Intel Mac Homebrew 默认前缀
+            "/opt/local/bin/ffmpeg",    // MacPorts 默认前缀
+        ]
+    }
+    #[cfg(target_os = "linux")]
+    {
+        &[
+            "/usr/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/snap/bin/ffmpeg",
+        ]
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Windows 没有公认的统一安装位置，仍依赖 PATH 或用户手动选择
+        &[]
+    }
 }
 
 pub fn inspect_path(path: &Path, source: FfmpegSource) -> FfmpegStatus {
