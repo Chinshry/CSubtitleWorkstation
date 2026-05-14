@@ -68,12 +68,14 @@ pub fn start_compress(
     }
     let duration_seconds = video_info.duration_seconds;
 
-    // 非 AVS 模式下，ffmpeg subtitles filter 对路径中的半角单引号解析不可靠。
-    // 复制字幕到 app_local_data_dir 下的 ASCII 临时路径，避免特殊符号导致 filter 打不开文件。
+    // 字幕统一 stage 到 ASCII 临时路径：
+    // - 非 AVS 模式：避开 ffmpeg subtitles filter 对路径中半角单引号的解析问题
+    // - AVS 模式：VSFilterMod 的 TextSubMod 内部用 Win32 ANSI API 打开文件，含
+    //   中文 / `@@` 等非 ASCII 字符的路径会报 "Can't open"，必须先复制到 ASCII 路径
     let mut command_job = job.clone();
     let temp_dir = job_temp_dir(&app, &command_job.id)?;
-    let subtitle_temp_path = if !command_job.use_avs && !command_job.subtitle_path.trim().is_empty() {
-        Some(stage_subtitle_for_filter(&temp_dir, &command_job.subtitle_path)?)
+    let subtitle_temp_path = if !command_job.subtitle_path.trim().is_empty() {
+        Some(stage_subtitle_to_ascii(&temp_dir, &command_job.subtitle_path)?)
     } else {
         None
     };
@@ -306,7 +308,7 @@ fn job_temp_dir(app: &AppHandle, job_id: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn stage_subtitle_for_filter(
+fn stage_subtitle_to_ascii(
     dir: &Path,
     subtitle_path: &str,
 ) -> Result<String, String> {
