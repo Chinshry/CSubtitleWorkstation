@@ -211,7 +211,7 @@ const customVideoArgsTip = computed(() => {
   } else if (encoder === 'libx265') {
     common.push('-x265-params aq-mode=1:psy-rd=2.0:vbv-maxrate=28000:vbv-bufsize=30000')
   } else if (encoder === 'h264_nvenc') {
-    common.push('-rc vbr -cq 19 -b:v 0 -spatial-aq 1 -temporal-aq 1')
+    common.push('-spatial-aq 1 -temporal-aq 1')
   }
   common.push(
     '',
@@ -299,23 +299,23 @@ function onOpenLogoEditor() {
       <div class="param-row wide">
         <label class="crf-cell">
           <span>
-            CRF
+            质量值
             <span
               class="hint tip-right"
-              :data-tip="`对应命令：-crf ${job.crf}\n\n常量码率因子，数值越小画质越好、文件越大。\nlibx264 / libx265 推荐 18 – 28：18 视觉无损，23 默认，28 偏低质量。\n硬件编码器（nvenc / amf / videotoolbox）的 CRF 含义略有不同，仅作近似画质参考。`"
+              :data-tip="`对应命令：x264/x265 使用 -crf ${job.crf}，NVENC 使用 -cq ${job.crf}\n\n数值越小画质越好、文件越大。\nlibx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。\nNVENC 推荐 18-28：通常 19-23 比较均衡。`"
             ></span>
           </span>
           <input v-model.number="job.crf" type="number" min="0" max="51" />
         </label>
         <label class="bitrate-cell">
           <span>
-            最大码率（Kbps）
+            最大码率
             <span
               class="hint tip-right"
               data-tip="对应命令：-maxrate {值}k -bufsize {值×2}k
 
 限制视频码率峰值，防止画面剧烈变化时码率失控。
-不限制：完全跟随 CRF。
+不限制：完全跟随质量值。
 自动：取原视频码率 + 1000 Kbps。
 自定义：按填写的 Kbps 直接生效。"
             ></span>
@@ -330,14 +330,16 @@ function onOpenLogoEditor() {
                 { value: 'custom', label: '自定义' }
               ]"
             />
-            <input
-              v-if="bitrateMode === 'custom'"
-              v-model.number="customBitrate"
-              type="number"
-              min="1"
-              class="bitrate-input"
-              placeholder="Kbps"
-            />
+            <span v-if="bitrateMode === 'custom'" class="bitrate-input-wrap">
+              <input
+                v-model.number="customBitrate"
+                type="number"
+                min="1"
+                class="bitrate-input"
+                placeholder="例如 3000"
+              />
+              <span>Kbps</span>
+            </span>
           </div>
         </label>
         <label class="encoder-cell">

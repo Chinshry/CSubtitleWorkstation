@@ -157,7 +157,7 @@ impl Default for AppConfig {
                     encoder: "h264_nvenc".to_string(),
                     crf: 19,
                     max_bitrate: None,
-                    custom_video_args: Some("-rc vbr -cq 19 -b:v 0 -spatial-aq 1 -temporal-aq 1".to_string()),
+                    custom_video_args: Some("-spatial-aq 1 -temporal-aq 1".to_string()),
                     is_default: false,
                 },
                 VideoEncodePreset {

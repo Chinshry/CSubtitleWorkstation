@@ -653,9 +653,23 @@ select option {
   min-width: 0;
 }
 
+.bitrate-input-wrap {
+  align-items: center;
+  display: flex;
+  flex: 0 0 170px;
+  gap: 6px;
+}
+
+.bitrate-input-wrap > span {
+  color: #52616c;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
 .bitrate-input {
-  width: 140px !important;
-  flex: 0 0 140px;
+  flex: 1;
+  min-width: 0;
+  width: 100% !important;
 }
 
 @media (max-width: 720px) {

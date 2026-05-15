@@ -90,14 +90,20 @@ pub fn build_with_options(
         args.push(filters.join(","));
     }
 
+    let custom_video_args = parse_custom_video_args(job.custom_video_args.as_deref())?;
+
     args.extend([
         "-c:v".to_string(),
         job.encoder.clone(),
-        "-preset".to_string(),
-        "veryfast".to_string(),
-        "-crf".to_string(),
-        job.crf.to_string(),
     ]);
+
+    if supports_x264_style_preset(&job.encoder)
+        && !has_custom_video_option(&custom_video_args, "-preset")
+    {
+        args.extend(["-preset".to_string(), "veryfast".to_string()]);
+    }
+
+    args.extend(build_quality_args(&job.encoder, job.crf, &custom_video_args));
 
     if let Some(max_bitrate) = job.max_bitrate {
         // 语义：留空(None) = 不限制；0 = 视频码率 + 1000；其他正数 = 直接使用该值（Kbps）
@@ -116,7 +122,6 @@ pub fn build_with_options(
         }
     }
 
-    let custom_video_args = parse_custom_video_args(job.custom_video_args.as_deref())?;
     args.extend(custom_video_args);
 
     let output_path = normalize_output_path(&job.video_path, &job.output_path);
@@ -219,6 +224,45 @@ fn validate_custom_video_args(tokens: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn build_quality_args(encoder: &str, crf: u8, custom_video_args: &[String]) -> Vec<String> {
+    match encoder {
+        "h264_nvenc" => {
+            let mut args = Vec::new();
+            if !has_custom_video_option(custom_video_args, "-rc") {
+                args.extend(["-rc".to_string(), "vbr".to_string()]);
+            }
+            if !has_custom_video_option(custom_video_args, "-cq") {
+                args.extend(["-cq".to_string(), crf.to_string()]);
+            }
+            if !has_custom_video_option(custom_video_args, "-b:v") {
+                args.extend(["-b:v".to_string(), "0".to_string()]);
+            }
+            args
+        }
+        _ => {
+            if has_custom_video_option(custom_video_args, "-crf") {
+                Vec::new()
+            } else {
+                vec!["-crf".to_string(), crf.to_string()]
+            }
+        }
+    }
+}
+
+fn has_custom_video_option(tokens: &[String], option: &str) -> bool {
+    tokens.iter().any(|token| {
+        token
+            .split_once('=')
+            .map(|(key, _)| key)
+            .unwrap_or(token)
+            .eq_ignore_ascii_case(option)
+    })
+}
+
+fn supports_x264_style_preset(encoder: &str) -> bool {
+    matches!(encoder, "libx264" | "libx265")
 }
 
 /// 把 LogoLayout 百分比换算为像素并构造 `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段。
