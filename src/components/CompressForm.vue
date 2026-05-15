@@ -4,7 +4,7 @@ import type { CompressJob } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus } from '../stores/avsStore'
 import { getSupportedEncoders, type EncoderInfo } from '../api/encoder'
-import { analyzeSubtitle } from '../api/compress'
+import { analyzeSubtitle, type SubtitleAnalysisResult } from '../api/compress'
 import AppSelect from './AppSelect.vue'
 
 const job = defineModel<CompressJob>({ required: true })
@@ -18,6 +18,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-logo-editor'): void
+  /** 字幕被分析后，把后端结果透传给上层（HomeView 用来做色彩矩阵匹配） */
+  (e: 'subtitle-analyzed', result: SubtitleAnalysisResult | null): void
 }>()
 
 // 支持的编码器列表和自动启用 AVS 的原因
@@ -69,26 +71,34 @@ function syncAvsAvailability() {
 // AVS 状态变化时（含调试 mock 切换）自动同步
 watch(avsToggleDisabled, syncAvsAvailability)
 
-// 字幕分析：检测是否包含特效标签，自动勾选 AVS
+// 字幕分析：检测是否包含特效标签，自动勾选 AVS；同时把结果透传给上层用于色彩矩阵匹配
 async function analyzeSubtitleForEffects() {
   const subtitlePath = job.value.subtitlePath?.trim()
-  if (!subtitlePath || !isWindows.value || !avsStatus.value?.available) {
+  if (!subtitlePath) {
     avsAutoEnabledReason.value = ''
+    emit('subtitle-analyzed', null)
     return
   }
 
+  let result: SubtitleAnalysisResult | null = null
   try {
-    const result = await analyzeSubtitle(subtitlePath)
-    if (result.hasEffects) {
-      avsAutoEnabledReason.value = `检测到字幕特效（${result.detectedTags.join('、')}），已自动启用 AVS 压制`
-      job.value.useAvs = true
-    } else {
-      avsAutoEnabledReason.value = ''
-    }
+    result = await analyzeSubtitle(subtitlePath)
   } catch (err) {
     console.error('Failed to analyze subtitle:', err)
     avsAutoEnabledReason.value = ''
+    emit('subtitle-analyzed', null)
+    return
   }
+
+  // 仅在 Windows 且 AVS 环境可用时自动勾选 AVS；其它平台只是检测信息
+  if (result.hasEffects && isWindows.value && avsStatus.value?.available) {
+    avsAutoEnabledReason.value = `检测到字幕特效（${result.detectedTags.join('、')}），已自动启用 AVS 压制`
+    job.value.useAvs = true
+  } else {
+    avsAutoEnabledReason.value = ''
+  }
+  // 矩阵信息无论平台都需要透传，banner 判定逻辑在外层
+  emit('subtitle-analyzed', result)
 }
 
 // 监听字幕路径变化

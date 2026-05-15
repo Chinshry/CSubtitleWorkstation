@@ -40,7 +40,7 @@
 - **反馈缺失**：工具窗口闪现即关，看不到实时进度和日志
 - **跨平台困难**：小丸工具箱仅 Windows，macOS/Linux 用户无法使用
 - **视频信息不透明**：需要手动用 ffprobe 查询分辨率、帧率、编码器等
-- **AVS 压制困难**：需要手动编写 AviSynth 脚本来处理特效字幕（如复杂特效、矢量绘制等），参数复杂，调试困难，且耗时
+- **AVS 压制困难**：需要手动编写 AviSynth 脚本来处理特效字幕（如复杂特效、矢量绘制等），参数复杂，调试困难，且耗时；普通用户也很难判断一份 ASS 到底"普通"还是"带特效"，常常压完才发现标签没渲染
 - **LOGO 添加困难**：传统方式需要用 ASS 字幕的 img 标签或矢量绘制命令，这些都需要特效字幕压制才能实现，流程复杂且耗时。本应用采用 ffmpeg overlay filter 直接在视频上叠加 LOGO，不需要特效字幕压制，更高效
 
 **CC 字幕压制工作站** 用可视化界面解决这些问题：拖拽导入 → 自动解析视频 → 可视化配置参数 → 实时进度反馈 → 一键压制。**支持 Windows 和 macOS**，开箱即用。
@@ -55,6 +55,7 @@
 - 🖼️ **LOGO 可视化编辑 + 布局保存** — 在视频抽帧上拖放 LOGO，支持四角缩放，为不同分辨率（720p/1080p/4K）和屏幕方向（横/竖屏）各自保存一套 LOGO 位置，下次打开自动恢复
 - 🎞️ **反交错处理** — yadif 可选开关，处理交错素材
 - 🔤 **特效字幕压制**（仅 Windows）— 使用 AviSynth+ 脚本引擎处理复杂特效字幕（如矢量绘制、img 标签等），相比 ffmpeg libass 支持更完善
+- 🧠 **特效标签自动识别**（仅 Windows）— 选定字幕后自动扫描 VSFilterMod 扩展标签（`\fsc` / `\xblur` / `\jitter` / `\distort` / `\img` 等），命中即自动勾选「AVS 压制」并在界面提示具体匹配到的标签，省去人工判断特效字幕的步骤
 - 👁️ **命令预览** — 开始压制前预览完整 ffmpeg 参数
 - 📈 **实时进度** — 进度条、当前时间/总时长、输出大小、速度、fps、码率、原始 status 行
 - 📝 **完整日志** — ffmpeg stdout/stderr 全程透出，按 `\r` 与 `\n` 两种分隔符切行
@@ -138,6 +139,24 @@
 <summary><strong>AVS 模式需要什么环境？</strong></summary>
 
 仅 Windows 支持。需要系统已安装 AviSynth+ 且 ffmpeg 启用了 `--enable-avisynth` 构建。推荐使用 Gyan.dev 的 `ffmpeg-release-full.7z`，其中包含 ffprobe 与 AviSynth+ 支持。
+
+</details>
+
+<details>
+<summary><strong>什么样的字幕会被自动识别为「特效字幕」？</strong></summary>
+
+应用只识别 **VSFilterMod 特有的扩展标签**——这些标签不在标准 ASS/SSA 规范中，libass 渲染不出来，必须走 AVS + VSFilterMod 才能正确显示。命中其一即视为特效字幕：
+
+| 类别 | 标签 |
+|------|------|
+| 缩放 / 模糊 / 偏移 | `\fsc`、`\xblur`、`\yblur`、`\fsvp`、`\fshp` |
+| 四角渐变 | `\1vc`–`\4vc`（颜色）、`\1va`–`\4va`（透明度） |
+| 抖动 / 变形 | `\jitter`、`\rnd*`、`\distort`、`\frs` |
+| 3D / 空间 | `\z`、`\ortho` |
+| 特殊移动 | `\mover`、`\moves3/4`、`\movevc` |
+| 图片填充 | `\1img`–`\4img` |
+
+> 检测在选定字幕后自动进行，前端实时显示"已检测到 \xxx 等特效，已自动启用 AVS 压制"。如果当前平台不支持 AVS（macOS / 未装 AviSynth+），则只提示但不强制启用。普通 ASS（仅含 `\b` / `\i` / `\c` / `\pos` 等标准标签）继续走 ffmpeg libass，不会被误判。
 
 </details>
 

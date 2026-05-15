@@ -4,6 +4,8 @@ import type { CompressJob } from '../types'
 export interface SubtitleAnalysisResult {
   hasEffects: boolean
   detectedTags: string[]
+  /** ASS [Script Info] 段中 YCbCr Matrix 的原始字符串，例如 "TV.709"、"PC.601"；缺失为 undefined */
+  assMatrix?: string
 }
 
 export function previewFfmpegCommand(job: CompressJob) {

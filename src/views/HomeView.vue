@@ -21,6 +21,9 @@ import JobLogPanel from '../components/JobLogPanel.vue'
 import VideoMetaCard from '../components/VideoMetaCard.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import LogoEditor from '../components/LogoEditor.vue'
+import ColorMatrixWarningBanner from '../components/ColorMatrixWarningBanner.vue'
+import type { SubtitleAnalysisResult } from '../api/compress'
+import { checkColorMatrix } from '../utils/colorMatrix'
 
 const loading = ref(false)
 const running = ref(false)
@@ -105,6 +108,26 @@ const displayVideoMeta = computed<VideoMeta | null>(() => {
 })
 
 const job = ref<CompressJob>(createJob())
+
+// 字幕分析结果（来自 CompressForm 的 emit，避免重复调用后端 analyze_subtitle）
+const subtitleAnalysis = ref<SubtitleAnalysisResult | null>(null)
+
+// ASS YCbCr Matrix 与视频色域/色范围匹配检查
+const colorMatrixCheck = computed(() => {
+  const subtitlePath = job.value.subtitlePath ?? ''
+  // 仅 ASS/SSA 才有此字段；其它字幕格式跳过
+  const isAssLike = /\.(ass|ssa)$/i.test(subtitlePath)
+  return checkColorMatrix(
+    subtitleAnalysis.value?.assMatrix,
+    videoMeta.value?.colorSpace,
+    videoMeta.value?.colorRange,
+    isAssLike,
+  )
+})
+
+function onSubtitleAnalyzed(result: SubtitleAnalysisResult | null) {
+  subtitleAnalysis.value = result
+}
 
 const logoButtonDisabled = computed(() => {
   return !job.value.videoPath || !videoMeta.value?.width || !videoMeta.value?.height
@@ -525,11 +548,13 @@ onUnmounted(() => {
       @pick-video="(p: string) => (job.videoPath = p)"
       @pick-subtitle="(p: string) => (job.subtitlePath = p)"
     />
+    <ColorMatrixWarningBanner :check="colorMatrixCheck" />
     <CompressForm
       v-model="job"
       :logo-button-disabled="logoButtonDisabled"
       :logo-button-disabled-reason="logoButtonDisabledReason"
       @open-logo-editor="openLogoEditor"
+      @subtitle-analyzed="onSubtitleAnalyzed"
     />
 
     <CommandPreviewCard v-if="command.length && showCommandPreview" :command="command" />

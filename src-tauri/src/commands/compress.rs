@@ -29,6 +29,8 @@ pub struct CompressStatus {
 pub struct SubtitleAnalysisResult {
     pub has_effects: bool,
     pub detected_tags: Vec<String>,
+    /// ASS [Script Info] 段的 YCbCr Matrix 原始值，前端用于与视频 color_space/color_range 比对
+    pub ass_matrix: Option<String>,
 }
 
 #[tauri::command]
@@ -47,6 +49,7 @@ pub fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult,
     Ok(SubtitleAnalysisResult {
         has_effects: analysis.has_effects,
         detected_tags: analysis.detected_tags,
+        ass_matrix: analysis.ass_matrix,
     })
 }
 
