@@ -116,6 +116,9 @@ pub fn build_with_options(
         }
     }
 
+    let custom_video_args = parse_custom_video_args(job.custom_video_args.as_deref())?;
+    args.extend(custom_video_args);
+
     let output_path = normalize_output_path(&job.video_path, &job.output_path);
 
     args.extend([
@@ -126,6 +129,96 @@ pub fn build_with_options(
     ]);
 
     Ok(args)
+}
+
+fn parse_custom_video_args(raw: Option<&str>) -> Result<Vec<String>, String> {
+    let Some(raw) = raw.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let tokens = split_command_line(raw)?;
+    validate_custom_video_args(&tokens)?;
+    Ok(tokens)
+}
+
+fn split_command_line(raw: &str) -> Result<Vec<String>, String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut chars = raw.chars().peekable();
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+
+    while let Some(ch) = chars.next() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(q) = quote {
+            if ch == q {
+                quote = None;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' => quote = Some(ch),
+            c if c.is_whitespace() => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+                while matches!(chars.peek(), Some(c) if c.is_whitespace()) {
+                    chars.next();
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if escaped {
+        current.push('\\');
+    }
+    if quote.is_some() {
+        return Err("高级视频参数中的引号没有闭合。".to_string());
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    Ok(tokens)
+}
+
+fn validate_custom_video_args(tokens: &[String]) -> Result<(), String> {
+    const BANNED: &[&str] = &[
+        "-i",
+        "-vf",
+        "-filter:v",
+        "-filter_complex",
+        "-c:v",
+        "-codec:v",
+        "-c:a",
+        "-codec:a",
+        "-map",
+        "-y",
+        "-n",
+        "-progress",
+        "-hide_banner",
+    ];
+    for token in tokens {
+        if !token.starts_with('-') {
+            continue;
+        }
+        let key = token.split('=').next().unwrap_or(token);
+        if BANNED.iter().any(|b| key.eq_ignore_ascii_case(b)) {
+            return Err(format!(
+                "高级视频参数不允许包含 {key}。输入、滤镜、编码器、音频和输出路径由本工具管理。"
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// 把 LogoLayout 百分比换算为像素并构造 `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段。

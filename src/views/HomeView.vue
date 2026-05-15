@@ -13,6 +13,7 @@ import type {
   LogoLayout,
   LogoLayoutEntry,
   RecentLogo,
+  VideoEncodePreset,
   VideoMeta
 } from '../types'
 
@@ -21,9 +22,11 @@ import JobLogPanel from '../components/JobLogPanel.vue'
 import VideoMetaCard from '../components/VideoMetaCard.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import LogoEditor from '../components/LogoEditor.vue'
-import ColorMatrixWarningBanner from '../components/ColorMatrixWarningBanner.vue'
+import SubtitleCheckPanel from '../components/SubtitleCheckPanel.vue'
 import type { SubtitleAnalysisResult } from '../api/compress'
 import { checkColorMatrix } from '../utils/colorMatrix'
+import { buildOutputPath, getDefaultOutputTemplate, normalizeOutputTemplates } from '../utils/outputTemplates'
+import { applyEncodePresetToJob, getDefaultEncodePreset, normalizeEncodePresets } from '../utils/encodePresets'
 
 const loading = ref(false)
 const running = ref(false)
@@ -47,6 +50,8 @@ const lastAutoOutput = ref('')
 // 记录上一次的 videoPath，用于在视频变化时根据用户对 outputPath 的修改推断"后缀模板"
 const prevVideoPath = ref('')
 const appConfig = ref<AppConfig | null>(null)
+const selectedOutputTemplateId = ref('default')
+const selectedEncodePresetId = ref('balanced-x264')
 // LOGO 编辑器状态
 const logoEditorOpen = ref(false)
 const recentLogos = ref<RecentLogo[]>([])
@@ -111,6 +116,16 @@ const job = ref<CompressJob>(createJob())
 
 // 字幕分析结果（来自 CompressForm 的 emit，避免重复调用后端 analyze_subtitle）
 const subtitleAnalysis = ref<SubtitleAnalysisResult | null>(null)
+const outputTemplates = computed(() => normalizeOutputTemplates(appConfig.value))
+const encodePresets = computed(() => normalizeEncodePresets(appConfig.value))
+const selectedOutputTemplate = computed(() => {
+  return outputTemplates.value.find((item) => item.id === selectedOutputTemplateId.value)
+    ?? getDefaultOutputTemplate(appConfig.value)
+})
+const selectedEncodePreset = computed<VideoEncodePreset>(() => {
+  return encodePresets.value.find((item) => item.id === selectedEncodePresetId.value)
+    ?? getDefaultEncodePreset(appConfig.value)
+})
 
 // ASS YCbCr Matrix 与视频色域/色范围匹配检查
 const colorMatrixCheck = computed(() => {
@@ -127,6 +142,16 @@ const colorMatrixCheck = computed(() => {
 
 function onSubtitleAnalyzed(result: SubtitleAnalysisResult | null) {
   subtitleAnalysis.value = result
+}
+
+function applyOutputTemplate() {
+  if (!job.value.videoPath) return
+  job.value.outputPath = buildOutputPath(selectedOutputTemplate.value, job.value, videoMeta.value)
+  lastAutoOutput.value = job.value.outputPath
+}
+
+function applyEncodePreset() {
+  applyEncodePresetToJob(job.value, selectedEncodePreset.value)
 }
 
 const logoButtonDisabled = computed(() => {
@@ -150,6 +175,7 @@ function createJob(): CompressJob {
     needLogo: true,
     needYadif: false,
     encoder: 'libx264',
+    customVideoArgs: '',
     useAvs: false,
     logoLayout: null,
     logoOnTop: false
@@ -320,7 +346,9 @@ watch(
 
     // 1) 没填过输出路径或仍是上次自动生成的值 → 直接用默认后缀 "output"
     if (!job.value.outputPath || job.value.outputPath === lastAutoOutput.value) {
-      const next = joinOutput(newParts.dir, newParts.sep, `${newParts.stem} output`, '.mp4')
+      const tpl = selectedOutputTemplate.value
+      const templated = buildOutputPath(tpl, job.value, videoMeta.value)
+      const next = templated || joinOutput(newParts.dir, newParts.sep, `${newParts.stem} output`, '.mp4')
       job.value.outputPath = next
       lastAutoOutput.value = next
       prevVideoPath.value = newVal
@@ -464,6 +492,11 @@ onMounted(async () => {
     if (typeof appConfig.value?.defaultUseAvs === 'boolean') {
       job.value.useAvs = appConfig.value.defaultUseAvs
     }
+    selectedOutputTemplateId.value = appConfig.value?.defaultOutputTemplateId
+      || getDefaultOutputTemplate(appConfig.value).id
+    selectedEncodePresetId.value = appConfig.value?.defaultEncodePresetId
+      || getDefaultEncodePreset(appConfig.value).id
+    applyEncodePreset()
   } catch (err) {
     pushDiag(`loadConfig failed: ${formatError(err)}`)
   }
@@ -542,17 +575,25 @@ onUnmounted(() => {
       :error="videoMetaError"
       :video-path="job.videoPath"
       :subtitle-path="job.subtitlePath"
+      :output-templates="outputTemplates"
+      :selected-output-template-id="selectedOutputTemplateId"
       v-model:output-path="job.outputPath"
+      @update:selected-output-template-id="selectedOutputTemplateId = $event"
+      @apply-output-template="applyOutputTemplate"
       @clear-video="job.videoPath = ''"
       @clear-subtitle="job.subtitlePath = ''"
       @pick-video="(p: string) => (job.videoPath = p)"
       @pick-subtitle="(p: string) => (job.subtitlePath = p)"
     />
-    <ColorMatrixWarningBanner :check="colorMatrixCheck" />
+    <SubtitleCheckPanel :matrix-check="colorMatrixCheck" :analysis="subtitleAnalysis" />
     <CompressForm
       v-model="job"
+      :encode-presets="encodePresets"
+      :selected-encode-preset-id="selectedEncodePresetId"
       :logo-button-disabled="logoButtonDisabled"
       :logo-button-disabled-reason="logoButtonDisabledReason"
+      @update:selected-encode-preset-id="selectedEncodePresetId = $event"
+      @apply-encode-preset="applyEncodePreset"
       @open-logo-editor="openLogoEditor"
       @subtitle-analyzed="onSubtitleAnalyzed"
     />

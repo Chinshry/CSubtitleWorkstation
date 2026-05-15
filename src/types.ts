@@ -27,6 +27,10 @@ export type AppConfig = {
   defaultNeedYadif: boolean
   defaultEncoder: string
   outputNameTemplate: string
+  outputTemplates?: OutputNameTemplate[]
+  defaultOutputTemplateId?: string
+  encodePresets?: VideoEncodePreset[]
+  defaultEncodePresetId?: string
   checkUpdateOnStartup: boolean
   defaultLogoDir?: string
   defaultUseAvs?: boolean
@@ -35,6 +39,25 @@ export type AppConfig = {
   lastLogoLayout?: LogoLayout | null
   /** 按 (分辨率桶, LOGO 路径) 区分的布局记忆 */
   logoLayouts?: LogoLayoutEntry[]
+}
+
+export type VideoEncodePreset = {
+  id: string
+  name: string
+  encoder: CompressJob['encoder']
+  crf: number
+  maxBitrate?: number
+  customVideoArgs?: string
+  isDefault?: boolean
+}
+
+export type OutputNameTemplate = {
+  id: string
+  name: string
+  pattern: string
+  outputDirMode: 'sameAsVideo' | 'fixed' | 'manual'
+  fixedOutputDir?: string
+  isDefault?: boolean
 }
 
 export type RecentLogo = {
@@ -73,7 +96,8 @@ export type CompressJob = {
   maxBitrate?: number
   needLogo: boolean
   needYadif: boolean
-  encoder: 'libx264' | 'h264_nvenc' | 'h264_amf' | 'h264_videotoolbox'
+  encoder: 'libx264' | 'libx265' | 'h264_nvenc' | 'h264_amf' | 'h264_videotoolbox'
+  customVideoArgs?: string
   logoDir?: string
   useAvs?: boolean
   logoLayout?: LogoLayout | null

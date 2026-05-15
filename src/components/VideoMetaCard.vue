@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { VideoMeta } from '../types'
+import type { OutputNameTemplate, VideoMeta } from '../types'
 import { globalDragActive } from '../stores/dropStore'
 
 const props = defineProps<{
@@ -10,6 +10,8 @@ const props = defineProps<{
   error: string
   videoPath: string
   subtitlePath: string
+  outputTemplates?: OutputNameTemplate[]
+  selectedOutputTemplateId?: string
 }>()
 
 const emit = defineEmits<{
@@ -17,6 +19,8 @@ const emit = defineEmits<{
   (e: 'clear-subtitle'): void
   (e: 'pick-video', path: string): void
   (e: 'pick-subtitle', path: string): void
+  (e: 'update:selectedOutputTemplateId', value: string): void
+  (e: 'apply-output-template'): void
 }>()
 
 const outputPath = defineModel<string>('outputPath', { default: '' })
@@ -259,6 +263,11 @@ const containerField = computed(() => {
 
 const hasVideoFields = computed(() => videoFields.value.length > 0)
 const hasAudioFields = computed(() => audioFields.value.length > 0)
+const templateOptions = computed(() => props.outputTemplates ?? [])
+
+function onTemplateChange(event: Event) {
+  emit('update:selectedOutputTemplateId', (event.target as HTMLSelectElement).value)
+}
 </script>
 
 <template>
@@ -347,6 +356,26 @@ const hasAudioFields = computed(() => audioFields.value.length > 0)
               @click="isEditingOutput = !isEditingOutput"
               aria-label="编辑输出"
             >✎</button>
+          </dd>
+        </div>
+        <div v-if="templateOptions.length">
+          <dt>命名模板</dt>
+          <dd class="path-row template-control">
+            <select
+              class="template-select"
+              :value="selectedOutputTemplateId"
+              @change="onTemplateChange"
+            >
+              <option v-for="tpl in templateOptions" :key="tpl.id" :value="tpl.id">
+                {{ tpl.name }}
+              </option>
+            </select>
+            <button
+              class="path-action template-apply"
+              data-tip="按当前模板生成输出路径"
+              @click="emit('apply-output-template')"
+              aria-label="套用命名模板"
+            >套用</button>
           </dd>
         </div>
       </dl>

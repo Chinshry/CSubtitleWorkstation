@@ -10,6 +10,14 @@ pub struct AppConfig {
     pub default_need_yadif: bool,
     pub default_encoder: String,
     pub output_name_template: String,
+    #[serde(default)]
+    pub output_templates: Vec<OutputNameTemplate>,
+    #[serde(default)]
+    pub default_output_template_id: Option<String>,
+    #[serde(default)]
+    pub encode_presets: Vec<VideoEncodePreset>,
+    #[serde(default)]
+    pub default_encode_preset_id: Option<String>,
     pub check_update_on_startup: bool,
     #[serde(default)]
     pub default_logo_dir: Option<String>,
@@ -31,6 +39,21 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct VideoEncodePreset {
+    pub id: String,
+    pub name: String,
+    pub encoder: String,
+    pub crf: u8,
+    #[serde(default)]
+    pub max_bitrate: Option<i32>,
+    #[serde(default)]
+    pub custom_video_args: Option<String>,
+    #[serde(default)]
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecentLogo {
     pub path: String,
     /// Unix 毫秒时间戳
@@ -39,6 +62,27 @@ pub struct RecentLogo {
     /// 老配置文件不含此字段；序列化时若 None 也省略，避免污染存量配置。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputNameTemplate {
+    pub id: String,
+    pub name: String,
+    pub pattern: String,
+    pub output_dir_mode: OutputDirMode,
+    #[serde(default)]
+    pub fixed_output_dir: Option<String>,
+    #[serde(default)]
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OutputDirMode {
+    SameAsVideo,
+    Fixed,
+    Manual,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +131,46 @@ impl Default for AppConfig {
             default_need_logo: true,
             default_need_yadif: false,
             default_encoder: "libx264".to_string(),
-            output_name_template: "{name} 中字.mp4".to_string(),
+            output_name_template: "{video_name} output.mp4".to_string(),
+            output_templates: vec![OutputNameTemplate {
+                id: "default".to_string(),
+                name: "默认".to_string(),
+                pattern: "{video_name} output.mp4".to_string(),
+                output_dir_mode: OutputDirMode::SameAsVideo,
+                fixed_output_dir: None,
+                is_default: true,
+            }],
+            default_output_template_id: Some("default".to_string()),
+            encode_presets: vec![
+                VideoEncodePreset {
+                    id: "balanced-x264".to_string(),
+                    name: "x264 平衡".to_string(),
+                    encoder: "libx264".to_string(),
+                    crf: 18,
+                    max_bitrate: None,
+                    custom_video_args: Some("-preset slow -profile:v high -pix_fmt yuv420p".to_string()),
+                    is_default: true,
+                },
+                VideoEncodePreset {
+                    id: "fast-nvenc".to_string(),
+                    name: "NVENC 快速".to_string(),
+                    encoder: "h264_nvenc".to_string(),
+                    crf: 19,
+                    max_bitrate: None,
+                    custom_video_args: Some("-rc vbr -cq 19 -b:v 0 -spatial-aq 1 -temporal-aq 1".to_string()),
+                    is_default: false,
+                },
+                VideoEncodePreset {
+                    id: "hevc-small".to_string(),
+                    name: "x265 体积优先".to_string(),
+                    encoder: "libx265".to_string(),
+                    crf: 22,
+                    max_bitrate: None,
+                    custom_video_args: Some("-preset medium -pix_fmt yuv420p -x265-params aq-mode=1:psy-rd=2.0".to_string()),
+                    is_default: false,
+                },
+            ],
+            default_encode_preset_id: Some("balanced-x264".to_string()),
             check_update_on_startup: true,
             default_logo_dir: None,
             default_use_avs: false,

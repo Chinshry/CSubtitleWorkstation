@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { CompressJob } from '../types'
+import type { CompressJob, VideoEncodePreset } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus } from '../stores/avsStore'
 import { getSupportedEncoders, type EncoderInfo } from '../api/encoder'
@@ -10,6 +10,8 @@ import AppSelect from './AppSelect.vue'
 const job = defineModel<CompressJob>({ required: true })
 
 const props = defineProps<{
+  encodePresets?: VideoEncodePreset[]
+  selectedEncodePresetId?: string
   /** 配置 LOGO 按钮是否禁用（一般在视频未就绪时禁用） */
   logoButtonDisabled?: boolean
   /** 配置 LOGO 按钮禁用原因（用于 tooltip） */
@@ -18,6 +20,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-logo-editor'): void
+  (e: 'update:selected-encode-preset-id', value: string): void
+  (e: 'apply-encode-preset'): void
   /** 字幕被分析后，把后端结果透传给上层（HomeView 用来做色彩矩阵匹配） */
   (e: 'subtitle-analyzed', result: SubtitleAnalysisResult | null): void
 }>()
@@ -25,6 +29,23 @@ const emit = defineEmits<{
 // 支持的编码器列表和自动启用 AVS 的原因
 const supportedEncoders = ref<EncoderInfo[]>([])
 const avsAutoEnabledReason = ref<string>('')
+const advancedOpen = ref(false)
+
+const encodePresetOptions = computed(() => {
+  return (props.encodePresets ?? []).map((preset) => ({
+    value: preset.id,
+    label: preset.isDefault ? `${preset.name}（默认）` : preset.name,
+  }))
+})
+
+const selectedEncodePresetModel = computed({
+  get() {
+    return props.selectedEncodePresetId ?? encodePresetOptions.value[0]?.value ?? ''
+  },
+  set(value: string | number) {
+    emit('update:selected-encode-preset-id', String(value))
+  }
+})
 
 // 从 avsAutoEnabledReason 中提取检测到的标签
 const detectedTagsDisplay = computed(() => {
@@ -125,6 +146,7 @@ type BitrateMode = 'none' | 'auto' | 'custom'
 const encoderOptions = computed(() => {
   const encoderDescriptions: Record<string, string> = {
     libx264: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）',
+    libx265: 'CPU libx265（H.265/HEVC，体积更小，速度较慢）',
     h264_nvenc: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）',
     h264_amf: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）',
     h264_videotoolbox: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）'
@@ -141,6 +163,7 @@ const encoderOptions = computed(() => {
   // 后端未返回时使用默认选项
   return [
     { value: 'libx264', label: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）' },
+    { value: 'libx265', label: 'CPU libx265（H.265/HEVC，体积更小，速度较慢）' },
     { value: 'h264_nvenc', label: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）' },
     { value: 'h264_amf', label: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）' },
     { value: 'h264_videotoolbox', label: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）' }
@@ -174,13 +197,37 @@ const customBitrate = computed<number | undefined>({
   }
 })
 
+const customVideoArgsTip = computed(() => {
+  const encoder = job.value.encoder
+  const common = [
+    '追加到视频编码参数之后、音频参数之前。',
+    '适合填写 preset/profile/pix_fmt/x264-params/x265-params 等视频编码选项。',
+    '',
+    '示例：',
+    '-preset slow -profile:v high -level 4.1 -pix_fmt yuv420p',
+  ]
+  if (encoder === 'libx264') {
+    common.push('-x264-params ref=8:bframes=10:aq-mode=3:aq-strength=0.7')
+  } else if (encoder === 'libx265') {
+    common.push('-x265-params aq-mode=1:psy-rd=2.0:vbv-maxrate=28000:vbv-bufsize=30000')
+  } else if (encoder === 'h264_nvenc') {
+    common.push('-rc vbr -cq 19 -b:v 0 -spatial-aq 1 -temporal-aq 1')
+  }
+  common.push(
+    '',
+    '不允许填写：-i、-vf、-filter_complex、-c:v、-c:a、-map、-y、输出路径。',
+    '这些由本工具统一管理，避免命令结构被破坏。'
+  )
+  return common.join('\n')
+})
+
 // 已配置 LOGO 的摘要文案
 // 直接给百分比对用户不直观，改成「方位（九宫格） + 像素尺寸」
 const logoSummary = computed(() => {
   const layout = job.value.logoLayout
   if (!layout || !layout.path) return ''
-  const name = logoBasename(layout.path)
-  return `已配置：${name} · ${describeLogoPosition(layout)} · ${describeLogoSize(layout)}`
+  const video_name = logoBasename(layout.path)
+  return `已配置：${video_name} · ${describeLogoPosition(layout)} · ${describeLogoSize(layout)}`
 })
 
 // LOGO 层级：AVS 模式下 VSFilterMod TextSubMod 把字幕烧进 AVS 输出，
@@ -298,7 +345,7 @@ function onOpenLogoEditor() {
             编码器
             <span
               class="hint tip-right"
-              :data-tip="`对应命令：-c:v ${job.encoder}\n\nlibx264：CPU 软编，兼容性最好、画质稳定，支持 AVS。\nh264_nvenc：NVIDIA 显卡硬编，速度快，不支持 AVS。\nh264_amf：AMD 显卡硬编，速度快，不支持 AVS。\nh264_videotoolbox：macOS 硬编，不支持 AVS。`"
+              :data-tip="`对应命令：-c:v ${job.encoder}\n\nlibx264：H.264 CPU 软编，兼容性最好、画质稳定，支持 AVS。\nlibx265：H.265/HEVC CPU 软编，体积更小，速度较慢。\nh264_nvenc：NVIDIA 显卡硬编，速度快，不支持 AVS。\nh264_amf：AMD 显卡硬编，速度快，不支持 AVS。\nh264_videotoolbox：macOS 硬编，不支持 AVS。`"
             ></span>
           </span>
           <AppSelect
@@ -306,6 +353,42 @@ function onOpenLogoEditor() {
             :options="encoderOptions"
           />
         </label>
+      </div>
+
+      <div class="advanced-row wide">
+        <button type="button" class="secondary advanced-toggle" @click="advancedOpen = !advancedOpen">
+          {{ advancedOpen ? '收起高级参数' : '展开高级参数' }}
+        </button>
+        <div v-if="advancedOpen" class="advanced-panel">
+          <div v-if="encodePresetOptions.length" class="preset-row">
+            <label>
+              <span>压制预设</span>
+              <AppSelect
+                v-model="selectedEncodePresetModel"
+                class="preset-select"
+                :options="encodePresetOptions"
+              />
+            </label>
+            <button type="button" class="secondary preset-apply" @click="emit('apply-encode-preset')">
+              应用预设
+            </button>
+          </div>
+          <label class="custom-args-field">
+            <span>
+              附加 ffmpeg 视频参数
+              <span class="hint tip-right" :data-tip="customVideoArgsTip"></span>
+            </span>
+            <textarea
+              v-model="job.customVideoArgs"
+              rows="3"
+              spellcheck="false"
+              placeholder="-preset slow -profile:v high -level 4.1 -pix_fmt yuv420p"
+            ></textarea>
+          </label>
+          <p class="advanced-note">
+            这些参数会追加到视频编码参数后；输入、滤镜、编码器、音频和输出路径仍由工作站管理。
+          </p>
+        </div>
       </div>
 
       <div class="switch-row-wrap wide">
@@ -376,6 +459,72 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+.advanced-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.advanced-toggle {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0 12px;
+}
+.advanced-panel {
+  background: #f8fafb;
+  border: 1px solid #e3e9ed;
+  border-radius: 6px;
+  padding: 12px;
+}
+.preset-row {
+  align-items: flex-end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  margin-bottom: 10px;
+}
+.preset-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.preset-row label > span {
+  color: #43515c;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.preset-apply {
+  min-height: 34px;
+  padding: 0 12px;
+}
+.custom-args-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.custom-args-field > span {
+  align-items: center;
+  color: #43515c;
+  display: inline-flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  gap: 6px;
+}
+.custom-args-field textarea {
+  background: #fff;
+  border: 1px solid #d6e0e6;
+  border-radius: 6px;
+  color: #18202a;
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  min-height: 74px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+.advanced-note {
+  color: #687682;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 0;
 }
 .logo-config-btn {
   min-height: 34px;

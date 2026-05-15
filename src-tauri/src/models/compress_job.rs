@@ -14,6 +14,10 @@ pub struct CompressJob {
     pub need_logo: bool,
     pub need_yadif: bool,
     pub encoder: String,
+    /// 用户在高级参数中追加的视频编码参数。
+    /// 后端会做基础拆分和危险参数拦截后插入到视频编码参数之后、音频参数之前。
+    #[serde(default)]
+    pub custom_video_args: Option<String>,
     #[serde(default)]
     pub logo_dir: Option<String>,
     #[serde(default)]

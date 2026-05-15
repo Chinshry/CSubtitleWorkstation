@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import HomeView from './views/HomeView.vue'
+import PresetsView from './views/PresetsView.vue'
 import SettingsView from './views/SettingsView.vue'
 import TitleBar from './components/TitleBar.vue'
 import brandLogo from './assets/brand-logo.png'
@@ -11,7 +12,7 @@ import {
   pushDiag
 } from './stores/dropStore'
 
-const active = ref<'home' | 'settings'>('home')
+const active = ref<'home' | 'presets' | 'settings'>('home')
 const sidebarCollapsed = ref(true)
 const unlisteners: UnlistenFn[] = []
 
@@ -101,6 +102,19 @@ onUnmounted(() => {
           </span>
           <span>压制</span>
         </button>
+        <button :class="{ active: active === 'presets' }" @click="active = 'presets'" title="预设">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7h16" />
+              <path d="M7 12h10" />
+              <path d="M10 17h4" />
+              <circle cx="8" cy="7" r="2" />
+              <circle cx="16" cy="12" r="2" />
+              <circle cx="12" cy="17" r="2" />
+            </svg>
+          </span>
+          <span>预设</span>
+        </button>
         <button :class="{ active: active === 'settings' }" @click="active = 'settings'" title="设置">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -119,6 +133,7 @@ onUnmounted(() => {
     </aside>
     <KeepAlive>
       <HomeView v-if="active === 'home'" />
+      <PresetsView v-else-if="active === 'presets'" />
       <SettingsView v-else />
     </KeepAlive>
   </div>
