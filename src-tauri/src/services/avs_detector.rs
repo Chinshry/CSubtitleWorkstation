@@ -33,9 +33,7 @@ pub fn detect(ffmpeg_path: Option<&str>) -> AvsStatus {
         };
     }
 
-    let demuxer_available = ffmpeg_path
-        .map(check_ffmpeg_demuxer)
-        .unwrap_or(false);
+    let demuxer_available = ffmpeg_path.map(check_ffmpeg_demuxer).unwrap_or(false);
 
     let detected = detect_avisynth();
     let avisynth_installed = detected.installed;
@@ -105,8 +103,12 @@ fn detect_avisynth() -> DetectedAvisynth {
     // 1) SystemRoot/System32/AviSynth.dll —— AviSynth+ 默认安装位置
     if let Some(system_root) = std::env::var_os("SystemRoot") {
         let candidates = [
-            PathBuf::from(&system_root).join("System32").join("AviSynth.dll"),
-            PathBuf::from(&system_root).join("SysWOW64").join("AviSynth.dll"),
+            PathBuf::from(&system_root)
+                .join("System32")
+                .join("AviSynth.dll"),
+            PathBuf::from(&system_root)
+                .join("SysWOW64")
+                .join("AviSynth.dll"),
         ];
         for path in candidates {
             if path.exists() {

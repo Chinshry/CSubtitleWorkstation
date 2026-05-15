@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "notes": "Initial updater manifest placeholder. Replace this file after publishing a signed release.",
+  "pub_date": "2026-05-15T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.0/CSubtitleWorkstation_0.1.0_x64-setup.exe"
+    }
+  }
+}

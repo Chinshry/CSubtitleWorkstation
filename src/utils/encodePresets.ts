@@ -9,7 +9,6 @@ export const DEFAULT_ENCODE_PRESETS: VideoEncodePreset[] = [
     encoder: 'libx264',
     crf: 18,
     customVideoArgs: '-preset slow -profile:v high -pix_fmt yuv420p',
-    isDefault: true,
   },
   {
     id: 'fast-nvenc',
@@ -17,6 +16,21 @@ export const DEFAULT_ENCODE_PRESETS: VideoEncodePreset[] = [
     encoder: 'h264_nvenc',
     crf: 19,
     customVideoArgs: '-spatial-aq 1 -temporal-aq 1',
+  },
+  {
+    id: 'fast-amf',
+    name: 'AMF 快速',
+    encoder: 'h264_amf',
+    crf: 20,
+    customVideoArgs: '-quality balanced -pix_fmt yuv420p',
+  },
+  {
+    id: 'fast-videotoolbox',
+    name: 'Apple 快速',
+    encoder: 'h264_videotoolbox',
+    crf: 20,
+    maxBitrate: 6000,
+    customVideoArgs: '-profile:v high -pix_fmt yuv420p',
   },
   {
     id: 'hevc-small',
@@ -49,16 +63,12 @@ export function normalizeEncodePresets(config?: AppConfig | null): VideoEncodePr
       return true
     })
   if (!presets.length) return DEFAULT_ENCODE_PRESETS
-  if (!presets.some((item) => item.isDefault)) {
-    return presets.map((item, index) => ({ ...item, isDefault: index === 0 }))
-  }
   return presets
 }
 
 export function getDefaultEncodePreset(config?: AppConfig | null): VideoEncodePreset {
   const presets = normalizeEncodePresets(config)
   return presets.find((item) => item.id === config?.defaultEncodePresetId)
-    ?? presets.find((item) => item.isDefault)
     ?? presets[0]
 }
 

@@ -40,6 +40,54 @@ const items = computed<CheckItem[]>(() => {
     })
   }
 
+  const missingImgPaths = props.analysis?.missingImgPaths ?? []
+  if (missingImgPaths.length > 0) {
+    next.push({
+      id: 'missing-img-paths',
+      level: 'error',
+      label: '错误',
+      title: '字幕引用的图片路径不存在',
+      detail: 'ASS/SSA 中的 \\img / \\1img-\\4img 图片填充标签引用了本机不存在的文件，AVS/VSFilterMod 渲染时会缺图或失败。',
+      suggestion: '请把图片文件放回原路径，或修改字幕中的 img 路径后重新检测。',
+      meta: missingImgPaths.slice(0, 12).map((item) => ({
+        label: `第 ${item.line} 行 ${item.tag}`,
+        value: item.resolvedPath || item.path,
+      })),
+    })
+  }
+
+  const missingFonts = props.analysis?.missingFonts ?? []
+  if (missingFonts.length > 0) {
+    next.push({
+      id: 'missing-fonts',
+      level: 'warn',
+      label: '警告',
+      title: '字幕使用的字体未检测到安装',
+      detail: '缺失字体会触发系统或渲染器字体替换，可能导致字形、字重、排版宽度和特效位置变化。',
+      suggestion: '请安装字幕包附带字体，或把 ASS 样式 Fontname 改为本机已安装字体。',
+      meta: missingFonts.slice(0, 12).map((item) => ({
+        label: item.line ? `第 ${item.line} 行` : item.source,
+        value: item.font,
+      })),
+    })
+  }
+
+  const missingStyles = props.analysis?.missingStyles ?? []
+  if (missingStyles.length > 0) {
+    next.push({
+      id: 'missing-styles',
+      level: 'error',
+      label: '错误',
+      title: '字幕行引用了不存在的样式',
+      detail: 'Events 段中的 Dialogue/Comment 行引用了 Styles 段未定义的样式名，渲染时会回退默认样式或出现异常效果。',
+      suggestion: '请在 [V4+ Styles] 中补齐对应 Style，或把事件行的 Style 字段改为已有样式。',
+      meta: missingStyles.slice(0, 12).map((item) => ({
+        label: `第 ${item.line} 行`,
+        value: item.style,
+      })),
+    })
+  }
+
   const tags = props.analysis?.detectedTags ?? []
   if (tags.length > 0) {
     const hasImg = tags.some((tag) => /img/i.test(tag))
@@ -245,9 +293,9 @@ function toggleItem(id: string) {
   font-weight: 650;
 }
 .check-meta {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin: 8px 0 0;
 }
 .check-meta div {

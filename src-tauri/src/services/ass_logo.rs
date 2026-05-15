@@ -24,7 +24,10 @@ pub fn parse_ass_logo(
     let raw = fs::read_to_string(subtitle_path)
         .map_err(|err| format!("Failed to read subtitle file: {err}"))?;
 
-    let logo_line = match raw.lines().find(|line| line.to_ascii_lowercase().contains(".png")) {
+    let logo_line = match raw
+        .lines()
+        .find(|line| line.to_ascii_lowercase().contains(".png"))
+    {
         Some(line) => line.trim(),
         None => return Ok(None),
     };
@@ -39,7 +42,11 @@ pub fn parse_ass_logo(
         (Some(px), Some(py), Some(vw), Some(vh)) if px > 0 && py > 0 => {
             let sx = vw as f64 / px as f64;
             let sy = vh as f64 / py as f64;
-            if (sx - sy).abs() < 0.01 { sx } else { 1.0 }
+            if (sx - sy).abs() < 0.01 {
+                sx
+            } else {
+                1.0
+            }
         }
         _ => 1.0,
     };
@@ -51,7 +58,9 @@ pub fn parse_ass_logo(
     let (width, height) = extract_size(logo_line)
         .ok_or_else(|| "Could not parse logo size from ASS line.".to_string())?;
 
-    let subtitle_dir = Path::new(subtitle_path).parent().unwrap_or_else(|| Path::new("."));
+    let subtitle_dir = Path::new(subtitle_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
     let image_path = resolve_logo_path(subtitle_dir, &image_name, logo_dir)?;
 
     Ok(Some(AssLogo {

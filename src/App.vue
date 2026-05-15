@@ -5,12 +5,15 @@ import HomeView from './views/HomeView.vue'
 import PresetsView from './views/PresetsView.vue'
 import SettingsView from './views/SettingsView.vue'
 import TitleBar from './components/TitleBar.vue'
+import AppToast from './components/AppToast.vue'
 import brandLogo from './assets/brand-logo.png'
+import { loadConfig } from './api/config'
 import {
   globalDragActive,
   pendingDrop,
   pushDiag
 } from './stores/dropStore'
+import { hasAvailableUpdate, refreshAppUpdate } from './stores/updateStore'
 
 const active = ref<'home' | 'presets' | 'settings'>('home')
 const sidebarCollapsed = ref(true)
@@ -36,6 +39,16 @@ function classifyPaths(paths: string[]) {
 
 onMounted(async () => {
   pushDiag('App mounted, registering Tauri drag-drop listeners...')
+
+  loadConfig()
+    .then((config) => {
+      if (config.checkUpdateOnStartup) {
+        return refreshAppUpdate({ silent: true })
+      }
+    })
+    .catch((err) => {
+      pushDiag(`Startup update check skipped: ${String(err)}`)
+    })
 
   // 直接监听 Tauri 核心拖拽事件，不依赖 webview 封装
   try {
@@ -123,6 +136,7 @@ onUnmounted(() => {
             </svg>
           </span>
           <span>设置</span>
+          <span v-if="hasAvailableUpdate" class="nav-update-dot" aria-hidden="true"></span>
         </button>
       </nav>
       <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? '展开' : '折叠'">
@@ -136,5 +150,6 @@ onUnmounted(() => {
       <PresetsView v-else-if="active === 'presets'" />
       <SettingsView v-else />
     </KeepAlive>
+    <AppToast />
   </div>
 </template>

@@ -50,17 +50,12 @@ pub fn extract_frame(
     // -frames:v 1：只输出一帧。
     // -an：忽略音频流，避免某些容器错误。
     let mut cmd = Command::new(ffmpeg_path);
-    cmd.args([
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-ss",
-    ])
-    .arg(format!("{ts:.3}"))
-    .arg("-i")
-    .arg(video_path)
-    .args(["-frames:v", "1", "-an", "-y"])
-    .arg(&output_path);
+    cmd.args(["-hide_banner", "-loglevel", "error", "-ss"])
+        .arg(format!("{ts:.3}"))
+        .arg("-i")
+        .arg(video_path)
+        .args(["-frames:v", "1", "-an", "-y"])
+        .arg(&output_path);
     no_window(&mut cmd);
 
     let output = cmd

@@ -41,6 +41,15 @@ export type AppConfig = {
   logoLayouts?: LogoLayoutEntry[]
 }
 
+export type AppUpdateInfo = {
+  available: boolean
+  currentVersion: string
+  latestVersion?: string
+  notes?: string
+  pubDate?: string
+  downloadUrl?: string
+}
+
 export type VideoEncodePreset = {
   id: string
   name: string

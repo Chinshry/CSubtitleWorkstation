@@ -6,6 +6,21 @@ export interface SubtitleAnalysisResult {
   detectedTags: string[]
   /** ASS [Script Info] 段中 YCbCr Matrix 的原始字符串，例如 "TV.709"、"PC.601"；缺失为 undefined */
   assMatrix?: string
+  missingImgPaths: Array<{
+    path: string
+    resolvedPath: string
+    line: number
+    tag: string
+  }>
+  missingFonts: Array<{
+    font: string
+    source: string
+    line?: number
+  }>
+  missingStyles: Array<{
+    style: string
+    line: number
+  }>
 }
 
 export function previewFfmpegCommand(job: CompressJob) {
@@ -23,4 +38,3 @@ export function startCompress(job: CompressJob) {
 export function cancelCompress(jobId: string) {
   return invoke<void>('cancel_compress', { jobId })
 }
-

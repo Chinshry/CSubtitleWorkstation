@@ -152,6 +152,14 @@ function applyOutputTemplate() {
 
 function applyEncodePreset() {
   applyEncodePresetToJob(job.value, selectedEncodePreset.value)
+  if (appConfig.value && selectedEncodePresetId.value) {
+    const next = {
+      ...appConfig.value,
+      defaultEncodePresetId: selectedEncodePresetId.value,
+    }
+    appConfig.value = next
+    void saveConfig(next)
+  }
 }
 
 const logoButtonDisabled = computed(() => {
@@ -495,6 +503,7 @@ onMounted(async () => {
     selectedOutputTemplateId.value = appConfig.value?.defaultOutputTemplateId
       || getDefaultOutputTemplate(appConfig.value).id
     selectedEncodePresetId.value = appConfig.value?.defaultEncodePresetId
+      || encodePresets.value[0]?.id
       || getDefaultEncodePreset(appConfig.value).id
     applyEncodePreset()
   } catch (err) {

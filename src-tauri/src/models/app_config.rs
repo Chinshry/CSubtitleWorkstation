@@ -148,7 +148,9 @@ impl Default for AppConfig {
                     encoder: "libx264".to_string(),
                     crf: 18,
                     max_bitrate: None,
-                    custom_video_args: Some("-preset slow -profile:v high -pix_fmt yuv420p".to_string()),
+                    custom_video_args: Some(
+                        "-preset slow -profile:v high -pix_fmt yuv420p".to_string(),
+                    ),
                     is_default: true,
                 },
                 VideoEncodePreset {
@@ -161,12 +163,33 @@ impl Default for AppConfig {
                     is_default: false,
                 },
                 VideoEncodePreset {
+                    id: "fast-amf".to_string(),
+                    name: "AMF 快速".to_string(),
+                    encoder: "h264_amf".to_string(),
+                    crf: 20,
+                    max_bitrate: None,
+                    custom_video_args: Some("-quality balanced -pix_fmt yuv420p".to_string()),
+                    is_default: false,
+                },
+                VideoEncodePreset {
+                    id: "fast-videotoolbox".to_string(),
+                    name: "Apple 快速".to_string(),
+                    encoder: "h264_videotoolbox".to_string(),
+                    crf: 20,
+                    max_bitrate: Some(6000),
+                    custom_video_args: Some("-profile:v high -pix_fmt yuv420p".to_string()),
+                    is_default: false,
+                },
+                VideoEncodePreset {
                     id: "hevc-small".to_string(),
                     name: "x265 体积优先".to_string(),
                     encoder: "libx265".to_string(),
                     crf: 22,
                     max_bitrate: None,
-                    custom_video_args: Some("-preset medium -pix_fmt yuv420p -x265-params aq-mode=1:psy-rd=2.0".to_string()),
+                    custom_video_args: Some(
+                        "-preset medium -pix_fmt yuv420p -x265-params aq-mode=1:psy-rd=2.0"
+                            .to_string(),
+                    ),
                     is_default: false,
                 },
             ],

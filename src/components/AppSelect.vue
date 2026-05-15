@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 interface SelectOption {
   value: string | number
   label: string
+  description?: string
   title?: string
 }
 
@@ -179,7 +180,10 @@ watch(
             @click="pick(opt)"
             @mousemove="highlight = idx"
           >
-            <span class="opt-label">{{ opt.label }}</span>
+            <span class="opt-copy">
+              <span class="opt-label">{{ opt.label }}</span>
+              <span v-if="opt.description" class="opt-description">{{ opt.description }}</span>
+            </span>
             <svg
               v-if="opt.value === modelValue"
               class="opt-check"
@@ -296,12 +300,12 @@ watch(
   color: #18202a;
   cursor: pointer;
   display: flex;
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   gap: 8px;
   justify-content: space-between;
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 36px;
+  padding: 7px 10px;
   text-align: left;
   transition: background 0.12s ease, color 0.12s ease;
   width: 100%;
@@ -313,29 +317,55 @@ watch(
 
 .app-select-option:hover,
 .app-select-option.highlighted {
-  background: #eef7fa;
-  color: #0f5268;
+  background: #f2f7f9;
+  color: #12384a;
 }
 
 .app-select-option.selected {
-  background: #176b87;
-  color: #fff;
+  background: #e4f2f6;
+  color: #0f5268;
 }
 
 .app-select-option.selected:hover,
 .app-select-option.selected.highlighted {
-  background: #145a72;
-  color: #fff;
+  background: #d9edf3;
+  color: #0f5268;
 }
 
-.app-select-option .opt-label {
+.app-select-option .opt-copy {
   flex: 1;
+  min-width: 0;
+}
+
+.app-select-option .opt-label,
+.app-select-option .opt-description {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.app-select-option .opt-description {
+  color: #7a8894;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  margin-top: 3px;
+}
+
+.app-select-option:hover .opt-description,
+.app-select-option.highlighted .opt-description {
+  color: #687782;
+}
+
+.app-select-option.selected .opt-description,
+.app-select-option.selected:hover .opt-description,
+.app-select-option.selected.highlighted .opt-description {
+  color: #5f7580;
+}
+
 .app-select-option .opt-check {
+  color: #176b87;
   flex-shrink: 0;
 }
 

@@ -126,7 +126,13 @@ fn inspect_with_ffprobe(
         if let Some(tags) = format.get("tags") {
             for key in ["creation_time", "date", "DATE"] {
                 if let Some(v) = tags.get(key).and_then(|v| v.as_str()) {
-                    let day = v.split('T').next().unwrap_or(v).split(' ').next().unwrap_or(v);
+                    let day = v
+                        .split('T')
+                        .next()
+                        .unwrap_or(v)
+                        .split(' ')
+                        .next()
+                        .unwrap_or(v);
                     meta.created_at = Some(day.to_string());
                     break;
                 }
@@ -153,11 +159,26 @@ fn inspect_with_ffprobe(
 }
 
 fn fill_video_stream(s: &Value, meta: &mut VideoMeta) {
-    meta.video_codec = s.get("codec_name").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.video_profile = s.get("profile").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.pixel_format = s.get("pix_fmt").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.color_range = s.get("color_range").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.color_space = s.get("color_space").and_then(|v| v.as_str()).map(|s| s.to_string());
+    meta.video_codec = s
+        .get("codec_name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    meta.video_profile = s
+        .get("profile")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    meta.pixel_format = s
+        .get("pix_fmt")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    meta.color_range = s
+        .get("color_range")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    meta.color_space = s
+        .get("color_space")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let raw_w = s.get("width").and_then(|v| v.as_i64()).map(|n| n as i32);
     let raw_h = s.get("height").and_then(|v| v.as_i64()).map(|n| n as i32);
     // 手机竖屏视频常存为 1920x1080 + rotation=90，ffmpeg 解码后会自动旋转为 1080x1920。
@@ -169,11 +190,23 @@ fn fill_video_stream(s: &Value, meta: &mut VideoMeta) {
         meta.width = raw_w;
         meta.height = raw_h;
     }
-    meta.sar = s.get("sample_aspect_ratio").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.dar = s.get("display_aspect_ratio").and_then(|v| v.as_str()).map(|s| s.to_string());
+    meta.sar = s
+        .get("sample_aspect_ratio")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    meta.dar = s
+        .get("display_aspect_ratio")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
-    let r_rate = s.get("r_frame_rate").and_then(|v| v.as_str()).and_then(parse_rational);
-    let a_rate = s.get("avg_frame_rate").and_then(|v| v.as_str()).and_then(parse_rational);
+    let r_rate = s
+        .get("r_frame_rate")
+        .and_then(|v| v.as_str())
+        .and_then(parse_rational);
+    let a_rate = s
+        .get("avg_frame_rate")
+        .and_then(|v| v.as_str())
+        .and_then(parse_rational);
 
     // 帧率显示用 avg（更接近实际播放帧率）；若无则用 r
     meta.fps = a_rate.or(r_rate).map(round2);
@@ -206,8 +239,14 @@ fn fill_video_stream(s: &Value, meta: &mut VideoMeta) {
 }
 
 fn fill_audio_stream(s: &Value, meta: &mut VideoMeta) {
-    meta.audio_codec = s.get("codec_name").and_then(|v| v.as_str()).map(|s| s.to_string());
-    meta.audio_profile = s.get("profile").and_then(|v| v.as_str()).map(|s| s.to_string());
+    meta.audio_codec = s
+        .get("codec_name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    meta.audio_profile = s
+        .get("profile")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     meta.audio_sample_rate = s
         .get("sample_rate")
         .and_then(|v| v.as_str())
@@ -319,7 +358,10 @@ fn inspect_with_ffmpeg(
 }
 
 fn parse_container(text: &str, meta: &mut VideoMeta) {
-    if let Some(line) = text.lines().find(|l| l.trim_start().starts_with("Input #0,")) {
+    if let Some(line) = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("Input #0,"))
+    {
         if let Some(rest) = line.trim_start().strip_prefix("Input #0,") {
             if let Some(fmt) = rest.split(", from").next() {
                 let fmt = fmt.trim().trim_end_matches(',').trim();
@@ -329,7 +371,10 @@ fn parse_container(text: &str, meta: &mut VideoMeta) {
             }
         }
     }
-    if let Some(line) = text.lines().find(|l| l.trim_start().starts_with("Duration:")) {
+    if let Some(line) = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("Duration:"))
+    {
         let line = line.trim_start();
         if let Some(rest) = line.strip_prefix("Duration:") {
             for part in rest.split(',') {
@@ -349,7 +394,9 @@ fn parse_container(text: &str, meta: &mut VideoMeta) {
 }
 
 fn parse_video_stream(text: &str, meta: &mut VideoMeta) {
-    let Some(line) = text.lines().find(|l| l.contains("Video:")) else { return };
+    let Some(line) = text.lines().find(|l| l.contains("Video:")) else {
+        return;
+    };
     let line = line.trim();
     if let Some(after) = line.split("Video:").nth(1) {
         let after = after.trim();
@@ -546,7 +593,9 @@ fn parse_dimensions(line: &str) -> Option<(i32, i32)> {
 }
 
 fn parse_audio_stream(text: &str, meta: &mut VideoMeta) {
-    let Some(line) = text.lines().find(|l| l.contains("Audio:")) else { return };
+    let Some(line) = text.lines().find(|l| l.contains("Audio:")) else {
+        return;
+    };
     let line = line.trim();
     if let Some(after) = line.split("Audio:").nth(1) {
         let after = after.trim();
@@ -578,11 +627,22 @@ fn parse_audio_stream(text: &str, meta: &mut VideoMeta) {
 fn parse_creation_date(text: &str, meta: &mut VideoMeta) {
     for line in text.lines() {
         let l = line.trim();
-        for key in ["date            :", "creation_time   :", "date:", "creation_time:"] {
+        for key in [
+            "date            :",
+            "creation_time   :",
+            "date:",
+            "creation_time:",
+        ] {
             if let Some(rest) = l.strip_prefix(key) {
                 let v = rest.trim();
                 if !v.is_empty() {
-                    let day = v.split('T').next().unwrap_or(v).split(' ').next().unwrap_or(v);
+                    let day = v
+                        .split('T')
+                        .next()
+                        .unwrap_or(v)
+                        .split(' ')
+                        .next()
+                        .unwrap_or(v);
                     meta.created_at = Some(day.to_string());
                     return;
                 }

@@ -92,10 +92,7 @@ pub fn build_with_options(
 
     let custom_video_args = parse_custom_video_args(job.custom_video_args.as_deref())?;
 
-    args.extend([
-        "-c:v".to_string(),
-        job.encoder.clone(),
-    ]);
+    args.extend(["-c:v".to_string(), job.encoder.clone()]);
 
     if supports_x264_style_preset(&job.encoder)
         && !has_custom_video_option(&custom_video_args, "-preset")
@@ -103,7 +100,11 @@ pub fn build_with_options(
         args.extend(["-preset".to_string(), "veryfast".to_string()]);
     }
 
-    args.extend(build_quality_args(&job.encoder, job.crf, &custom_video_args));
+    args.extend(build_quality_args(
+        &job.encoder,
+        job.crf,
+        &custom_video_args,
+    ));
 
     if let Some(max_bitrate) = job.max_bitrate {
         // 语义：留空(None) = 不限制；0 = 视频码率 + 1000；其他正数 = 直接使用该值（Kbps）
@@ -241,6 +242,23 @@ fn build_quality_args(encoder: &str, crf: u8, custom_video_args: &[String]) -> V
             }
             args
         }
+        "h264_amf" => {
+            let mut args = Vec::new();
+            if !has_custom_video_option(custom_video_args, "-rc") {
+                args.extend(["-rc".to_string(), "cqp".to_string()]);
+            }
+            if !has_custom_video_option(custom_video_args, "-qp_i") {
+                args.extend(["-qp_i".to_string(), crf.to_string()]);
+            }
+            if !has_custom_video_option(custom_video_args, "-qp_p") {
+                args.extend(["-qp_p".to_string(), crf.to_string()]);
+            }
+            if !has_custom_video_option(custom_video_args, "-qp_b") {
+                args.extend(["-qp_b".to_string(), crf.to_string()]);
+            }
+            args
+        }
+        "h264_videotoolbox" => Vec::new(),
         _ => {
             if has_custom_video_option(custom_video_args, "-crf") {
                 Vec::new()
@@ -512,7 +530,10 @@ pub fn normalize_output_path(video_path: &str, output_path: &str) -> String {
     }
 
     if output.extension().is_none() {
-        return PathBuf::from(output).join(filename).to_string_lossy().to_string();
+        return PathBuf::from(output)
+            .join(filename)
+            .to_string_lossy()
+            .to_string();
     }
 
     trimmed.to_string()

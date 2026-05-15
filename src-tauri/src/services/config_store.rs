@@ -25,6 +25,7 @@ pub fn load(app: &AppHandle) -> Result<AppConfig, String> {
 
 pub fn save(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     let path = config_path(app)?;
-    let raw = serde_json::to_string_pretty(config).map_err(|err| format!("无法序列化配置: {err}"))?;
+    let raw =
+        serde_json::to_string_pretty(config).map_err(|err| format!("无法序列化配置: {err}"))?;
     fs::write(path, raw).map_err(|err| format!("无法保存配置: {err}"))
 }

@@ -20,7 +20,7 @@
 桌面框架：Tauri 2
 前端：Vue 3 + TypeScript
 后端：Rust commands
-应用更新：Tauri updater plugin
+应用更新：GitHub Pages 静态 JSON + GitHub Releases
 配置存储：本地 JSON / TOML
 外部依赖：用户本机 ffmpeg
 ```
@@ -31,7 +31,7 @@
 - 前端仍可使用 TypeScript、Vue、React 等 Web 技术开发页面。
 - Rust 层适合处理本地文件、子进程、路径、日志流、任务取消等桌面能力。
 - 支持 Windows / macOS 打包。
-- 官方 updater 插件支持应用本体更新。
+- 通过 GitHub Pages 静态 JSON 检测应用本体更新。
 
 不推荐 Electron 作为首选的原因：
 
@@ -216,27 +216,22 @@ ffmpeg 更新：检测用户本机 ffmpeg 版本并提示升级。
 - 启动时可静默检查更新。
 - 设置页提供“检查更新”按钮。
 - 检测到新版本后显示版本号、更新说明。
-- 用户确认后下载并安装。
+- 引导用户前往 GitHub Releases 下载新版安装包。
 - 更新失败时给出明确错误信息。
 
-Tauri 2 updater 支持两种更新源：
-
-- 静态 JSON 文件。
-- 动态更新服务器。
-
-第一版建议使用静态 JSON：
+第一版使用静态 JSON：
 
 ```text
 GitHub Releases / OSS / CDN
         ↓
 latest.json
         ↓
-Tauri updater
+前端更新检测
         ↓
-下载对应平台安装包
+提示用户前往 GitHub Releases 下载
 ```
 
-Tauri updater 要求更新包签名校验，签名不能关闭。需要妥善保存私钥，否则后续已安装用户可能无法继续接收更新。
+当前第一版只做版本检测，不在应用内自动下载和安装。
 
 静态更新 JSON 需要包含：
 
@@ -245,11 +240,6 @@ Tauri updater 要求更新包签名校验，签名不能关闭。需要妥善保
 - `pub_date`
 - `platforms`
 - 各平台安装包 URL
-- 各平台签名 `signature`
-
-参考：
-
-- [Tauri 2 Updater 官方文档](https://v2.tauri.app/zh-cn/plugin/updater/)
 
 ## 4. 页面设计
 
@@ -543,8 +533,6 @@ reset_config()
 ### 8.5 应用更新相关命令
 
 ```text
-check_app_update()
-download_and_install_update()
 get_current_app_version()
 ```
 
@@ -648,11 +636,10 @@ Command::new(ffmpeg_path)
 
 ### 阶段四：应用更新
 
-- 接入 Tauri updater。
-- 配置签名密钥。
-- 配置静态更新 JSON。
-- 测试 Windows 更新。
-- 测试 macOS 更新。
+- 配置 GitHub Pages 静态更新 JSON。
+- 设置页检测新版并展示更新说明。
+- 检测到新版后引导用户打开 GitHub Releases。
+- 测试 Windows 版本检测。
 
 ### 阶段五：打包发布
 
@@ -692,12 +679,13 @@ Command::new(ffmpeg_path)
 - 发布前规划签名与公证。
 - 避免运行时写入应用安装目录。
 
-### 13.5 更新私钥丢失
+### 13.5 更新源不可用
 
 处理：
 
-- 私钥必须离线备份。
-- CI 中只存储必要的安全变量。
+- 检测失败时显示明确错误。
+- GitHub Pages 地址保持稳定。
+- Release 安装包 URL 发布后避免变更。
 
 ## 14. 最终定位
 
@@ -715,5 +703,5 @@ CC字幕压制工作站
 - 降低压制参数配置成本。
 - 保留当前脚本的 ASS logo 解析能力。
 - 提供稳定的跨平台任务执行。
-- 提供应用本体自动更新能力。
+- 提供应用本体更新检测能力。
 - 清晰管理外部 `ffmpeg` 依赖。

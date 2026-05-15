@@ -1,8 +1,9 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
+import { loadConfig, saveConfig } from '../api/config'
 import { setFfmpegPath, resetFfmpegToSystem } from '../api/ffmpeg'
-import { checkAppUpdate, getCurrentAppVersion } from '../api/updater'
+import { getCurrentAppVersion } from '../api/updater'
 import {
   ffmpegStatus,
   initFfmpegStatus,
@@ -28,10 +29,19 @@ import {
   type Platform
 } from '../stores/platformStore'
 import { avsStatus, initAvsStatus, refreshAvsStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
+import {
+  availableUpdateVersion,
+  refreshAppUpdate,
+  updateInfo,
+  updateMessage,
+  updateReleaseUrl,
+  updateState
+} from '../stores/updateStore'
+import type { AppConfig } from '../types'
 
 const status = ffmpegStatus
 const appVersion = ref('')
-const updateMessage = ref('')
+const appConfig = ref<AppConfig | null>(null)
 const guideOpen = ref(false)
 const avsGuideOpen = ref(false)
 const debugPanelOpen = ref(false)
@@ -117,8 +127,17 @@ async function useSystemPath() {
 }
 
 async function checkUpdate() {
-  const version = await checkAppUpdate()
-  updateMessage.value = version ? `发现新版本：${version}` : '当前已是最新版本'
+  await refreshAppUpdate()
+}
+
+async function setStartupUpdateCheck(value: boolean) {
+  if (!appConfig.value) return
+  const next = {
+    ...appConfig.value,
+    checkUpdateOnStartup: value
+  }
+  appConfig.value = next
+  await saveConfig(next)
 }
 
 // 异步按钮 loading 状态管理：
@@ -154,6 +173,7 @@ async function withBusy<T>(key: string, fn: () => Promise<T>): Promise<T | undef
 
 onMounted(async () => {
   appVersion.value = await getCurrentAppVersion()
+  appConfig.value = await loadConfig()
   // 切到设置页不再重复检测，仅在首次进入时跑一次
   await initFfmpegStatus()
   if (isWindows.value) {
@@ -432,18 +452,49 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
     <section class="panel">
       <div class="panel-heading">
         <div>
-          <h2>应用更新</h2>
-          <p>应用本体更新和 ffmpeg 版本检测是两套独立机制。</p>
+          <div class="update-title-row">
+            <h2>应用更新</h2>
+            <span class="current-version">当前版本 v{{ appVersion }}</span>
+          </div>
         </div>
-        <span class="badge">v{{ appVersion }}</span>
       </div>
       <div class="actions left">
         <button
           :class="{ 'is-busy': isBusy('checkUpdate') }"
           @click="withBusy('checkUpdate', checkUpdate)"
         >检查应用更新</button>
+        <a
+          v-if="availableUpdateVersion"
+          class="button-link"
+          :href="updateReleaseUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >前往 GitHub 下载 v{{ availableUpdateVersion }}</a>
+        <label v-if="appConfig" class="switch-row update-startup-toggle">
+          <input
+            type="checkbox"
+            :checked="appConfig.checkUpdateOnStartup"
+            @change="setStartupUpdateCheck(($event.target as HTMLInputElement).checked)"
+          />
+          <span class="switch" aria-hidden="true"></span>
+          <span>启动时自动检查更新</span>
+        </label>
       </div>
-      <p class="notice" v-if="updateMessage">{{ updateMessage }}</p>
+      <div v-if="updateMessage" class="update-result" :class="`update-result-${updateState}`">
+        <span class="update-result-icon">
+          {{ updateState === 'error' ? '!' : updateState === 'success' ? '✓' : 'i' }}
+        </span>
+        <div>
+          <strong>
+            {{ updateState === 'error' ? '无法检查更新' : updateState === 'success' ? '更新状态' : '正在处理' }}
+          </strong>
+          <p>{{ updateMessage }}</p>
+          <p v-if="updateInfo?.notes" class="update-notes">{{ updateInfo.notes }}</p>
+          <p v-if="updateState === 'success' && updateInfo?.available" class="update-notes">
+            请在 GitHub Releases 下载新版安装包，关闭当前应用后安装。
+          </p>
+        </div>
+      </div>
     </section>
 
     <!-- 调试面板：仅开发构建可见 -->

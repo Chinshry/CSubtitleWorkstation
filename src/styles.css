@@ -34,6 +34,22 @@ button {
   padding: 0 14px;
 }
 
+.button-link {
+  align-items: center;
+  background: #176b87;
+  border-radius: 6px;
+  color: #fff;
+  display: inline-flex;
+  font: inherit;
+  min-height: 36px;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  opacity: 0.9;
+}
+
 button:disabled {
   background: #9aa7b1;
   cursor: not-allowed;
@@ -44,7 +60,7 @@ button.secondary {
   color: #24313c;
 }
 
-/* 命令预览开关：active 态用深一档底色 + 主品牌色文字，提示当前面板已展开 */
+/* Command preview toggle: active state uses a stronger background and brand text. */
 button.command-toggle.active {
   background: #c9dde3;
   color: #0f5268;
@@ -226,7 +242,23 @@ nav button .nav-icon {
   width: 28px;
 }
 
-/* SVG 内联 width/height 写死了 16，这里强制跟随 .nav-icon 容器尺寸放大 */
+.nav-update-dot {
+  background: #f97316;
+  border: 2px solid #182735;
+  border-radius: 999px;
+  height: 10px;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  width: 10px;
+}
+
+.sidebar.collapsed .nav-update-dot {
+  right: 9px;
+  top: 9px;
+}
+
+/* Let inline SVGs scale to the nav icon container. */
 nav button .nav-icon svg {
   display: block;
   height: 100%;
@@ -583,22 +615,22 @@ select option {
   padding: 8px 12px;
 }
 
-/* === 按钮交互反馈（统一加在 actions 工具栏中的按钮，避免污染导航/sidebar） === */
+/* Action toolbar button feedback. */
 .actions button {
-  transition: filter 0.16s ease, transform 0.12s ease, background-color 0.16s ease;
+  transition: opacity 0.16s ease, transform 0.12s ease, background-color 0.16s ease;
 }
 
 .actions button:not(:disabled):not(.is-busy):hover {
-  filter: brightness(1.06);
+  opacity: 0.9;
 }
 .actions button:not(:disabled):not(.is-busy):active {
   transform: translateY(1px);
 }
 
-/* 异步操作期间的按钮态：保持原文与原色，仅压暗+下沉+等待光标，宽度/位置不变，零布局抖动 */
+/* Async action state keeps the label and layout stable. */
 .actions button.is-busy {
   cursor: wait;
-  filter: brightness(0.82) saturate(0.92);
+  opacity: 0.78;
   transform: translateY(1px);
 }
 
@@ -696,6 +728,7 @@ select option {
   position: relative;
   text-align: center;
   transition: background 0.15s ease, color 0.15s ease;
+  -webkit-user-select: none;
   user-select: none;
   vertical-align: middle;
   width: 16px;
@@ -712,7 +745,7 @@ select option {
   color: #176b87;
 }
 
-/* 自定义 hover 浮层：暗卡片，左对齐多行 */
+/* Custom hover tooltip. */
 .hint::after {
   background: #1e293b;
   border-radius: 8px;
@@ -899,6 +932,7 @@ select option {
 
 .path-text.readonly {
   color: #43515c;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -917,21 +951,9 @@ select option {
   gap: 8px;
 }
 
-.template-select {
-  background: #fff;
-  border: 1px solid #d6e0e6;
-  border-radius: 6px;
-  color: #18202a;
+.template-select-control {
   flex: 1;
-  font: inherit;
   min-width: 0;
-  padding: 6px 8px;
-}
-
-.template-apply {
-  width: auto;
-  min-width: 52px;
-  padding: 0 10px;
 }
 
 .path-action {
@@ -1131,7 +1153,115 @@ select option {
 }
 
 .actions.left {
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: flex-start;
+}
+
+.update-startup-toggle {
+  color: #52616c;
+  font-size: 13px;
+  min-height: 36px;
+}
+
+.update-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.current-version {
+  align-items: center;
+  background: #eef4f7;
+  border: 1px solid #d8e5eb;
+  border-radius: 999px;
+  color: #0f5268;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 28px;
+  padding: 0 12px;
+}
+
+.update-result {
+  align-items: flex-start;
+  border: 1px solid #d8e2e8;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  max-width: 1120px;
+  padding: 12px 14px;
+  width: min(100%, 1120px);
+}
+
+.update-result-icon {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  margin-top: 1px;
+  width: 22px;
+}
+
+.update-result strong {
+  color: #24313c;
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.update-result p {
+  color: #5d6b76;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.update-result .update-notes {
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  margin-top: 8px;
+  padding-top: 8px;
+  white-space: pre-wrap;
+}
+
+.update-result-idle,
+.update-result-progress {
+  background: #f5f8fa;
+}
+
+.update-result-idle .update-result-icon,
+.update-result-progress .update-result-icon {
+  background: #dbeaf0;
+  color: #0f5268;
+}
+
+.update-result-success {
+  background: #f1f8f4;
+  border-color: #cdebd8;
+}
+
+.update-result-success .update-result-icon {
+  background: #dff3e7;
+  color: #166534;
+}
+
+.update-result-error {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.update-result-error .update-result-icon {
+  background: #ffedd5;
+  color: #c2410c;
 }
 
 .log-panel {

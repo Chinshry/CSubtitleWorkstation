@@ -154,7 +154,10 @@ fn run_version(path: &Path) -> Option<String> {
 pub fn normalize_user_path(raw_path: &str) -> String {
     let path = PathBuf::from(raw_path);
     if path.is_dir() {
-        return path.join(system_ffmpeg_name()).to_string_lossy().to_string();
+        return path
+            .join(system_ffmpeg_name())
+            .to_string_lossy()
+            .to_string();
     }
     raw_path.to_string()
 }

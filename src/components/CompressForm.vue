@@ -3,8 +3,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type { CompressJob, VideoEncodePreset } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus } from '../stores/avsStore'
-import { getSupportedEncoders, type EncoderInfo } from '../api/encoder'
 import { analyzeSubtitle, type SubtitleAnalysisResult } from '../api/compress'
+import { useEncoderOptions } from '../composables/useEncoderOptions'
+import { useToast } from '../composables/useToast'
+import EncodeSettingsFields from './EncodeSettingsFields.vue'
 import AppSelect from './AppSelect.vue'
 
 const job = defineModel<CompressJob>({ required: true })
@@ -27,14 +29,17 @@ const emit = defineEmits<{
 }>()
 
 // 支持的编码器列表和自动启用 AVS 的原因
-const supportedEncoders = ref<EncoderInfo[]>([])
+const { encoderOptions, loadEncoderOptions } = useEncoderOptions()
 const avsAutoEnabledReason = ref<string>('')
 const advancedOpen = ref(false)
+const toast = useToast()
 
 const encodePresetOptions = computed(() => {
   return (props.encodePresets ?? []).map((preset) => ({
     value: preset.id,
-    label: preset.isDefault ? `${preset.name}（默认）` : preset.name,
+    label: preset.name,
+    description: describeEncodePreset(preset),
+    title: buildEncodePresetCommandSummary(preset),
   }))
 })
 
@@ -128,7 +133,7 @@ watch(() => job.value.subtitlePath, analyzeSubtitleForEffects, { immediate: fals
 onMounted(async () => {
   // 加载支持的编码器列表
   try {
-    supportedEncoders.value = await getSupportedEncoders()
+    await loadEncoderOptions()
   } catch (err) {
     console.error('Failed to get supported encoders:', err)
   }
@@ -138,65 +143,6 @@ onMounted(async () => {
   }
   syncAvsAvailability()
 })
-
-// 最大码率三选一：none(留空) / auto(=0) / custom(>0)
-type BitrateMode = 'none' | 'auto' | 'custom'
-
-// 生成编码器选项，仅显示当前平台支持的编码器
-const encoderOptions = computed(() => {
-  const encoderDescriptions: Record<string, string> = {
-    libx264: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）',
-    libx265: 'CPU libx265（H.265/HEVC，体积更小，速度较慢）',
-    h264_nvenc: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）',
-    h264_amf: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）',
-    h264_videotoolbox: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）'
-  }
-
-  if (supportedEncoders.value.length > 0) {
-    return supportedEncoders.value
-      .filter(e => e.supported)
-      .map(e => ({
-        value: e.name,
-        label: encoderDescriptions[e.name] || e.label
-      }))
-  }
-  // 后端未返回时使用默认选项
-  return [
-    { value: 'libx264', label: 'CPU libx264（CPU 软编，兼容性最好，支持 AVS）' },
-    { value: 'libx265', label: 'CPU libx265（H.265/HEVC，体积更小，速度较慢）' },
-    { value: 'h264_nvenc', label: 'NVIDIA h264_nvenc（N 卡硬编，压制更快，不支持 AVS）' },
-    { value: 'h264_amf', label: 'AMD h264_amf（A 卡硬编，速度快，不支持 AVS）' },
-    { value: 'h264_videotoolbox', label: 'macOS h264_videotoolbox（Apple Silicon/Intel 硬编，不支持 AVS）' }
-  ]
-})
-
-const bitrateMode = computed<BitrateMode>({
-  get(): BitrateMode {
-    const v = job.value.maxBitrate
-    if (v === undefined || v === null || (typeof v === 'number' && v < 0)) return 'none'
-    if (v === 0) return 'auto'
-    return 'custom'
-  },
-  set(mode: BitrateMode) {
-    if (mode === 'none') job.value.maxBitrate = undefined
-    else if (mode === 'auto') job.value.maxBitrate = 0
-    else {
-      const cur = job.value.maxBitrate
-      if (!cur || cur <= 0) job.value.maxBitrate = 3000
-    }
-  }
-})
-
-const customBitrate = computed<number | undefined>({
-  get() {
-    const v = job.value.maxBitrate
-    return typeof v === 'number' && v > 0 ? v : undefined
-  },
-  set(v) {
-    if (typeof v === 'number' && v > 0) job.value.maxBitrate = v
-  }
-})
-
 const customVideoArgsTip = computed(() => {
   const encoder = job.value.encoder
   const common = [
@@ -212,6 +158,10 @@ const customVideoArgsTip = computed(() => {
     common.push('-x265-params aq-mode=1:psy-rd=2.0:vbv-maxrate=28000:vbv-bufsize=30000')
   } else if (encoder === 'h264_nvenc') {
     common.push('-spatial-aq 1 -temporal-aq 1')
+  } else if (encoder === 'h264_amf') {
+    common.push('-quality balanced -pix_fmt yuv420p')
+  } else if (encoder === 'h264_videotoolbox') {
+    common.push('-profile:v high -pix_fmt yuv420p')
   }
   common.push(
     '',
@@ -285,6 +235,49 @@ function onOpenLogoEditor() {
   if (props.logoButtonDisabled) return
   emit('open-logo-editor')
 }
+
+function applySelectedEncodePreset() {
+  emit('apply-encode-preset')
+  const presetName = encodePresetOptions.value.find((item) => item.value === selectedEncodePresetModel.value)?.label
+  toast.success(presetName ? `已应用：${presetName}` : '已应用预设', 2500)
+}
+
+function describeEncodePreset(preset: VideoEncodePreset): string {
+  return [
+    preset.encoder,
+    `质量 ${preset.crf}`,
+    describePresetBitrate(preset.maxBitrate),
+  ].join(' · ')
+}
+
+function describePresetBitrate(maxBitrate: number | undefined): string {
+  if (maxBitrate === undefined) return '不限码率'
+  if (maxBitrate === 0) return '自动码率'
+  return `${maxBitrate} Kbps`
+}
+
+function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
+  const args = ['-c:v', preset.encoder]
+  if (preset.encoder === 'h264_nvenc') {
+    args.push('-rc', 'vbr', '-cq', String(preset.crf), '-b:v', '0')
+  } else if (preset.encoder === 'h264_amf') {
+    args.push('-rc', 'cqp', '-qp_i', String(preset.crf), '-qp_p', String(preset.crf), '-qp_b', String(preset.crf))
+  } else if (preset.encoder === 'h264_videotoolbox') {
+    if (typeof preset.maxBitrate === 'number' && preset.maxBitrate > 0) {
+      args.push('-b:v', `${preset.maxBitrate}k`)
+    }
+  } else {
+    args.push('-crf', String(preset.crf))
+  }
+  if (typeof preset.maxBitrate === 'number' && preset.maxBitrate > 0) {
+    args.push('-maxrate', `${preset.maxBitrate}k`, '-bufsize', `${preset.maxBitrate * 2}k`)
+  } else if (preset.maxBitrate === 0) {
+    args.push('-maxrate', '原视频码率+1000k', '-bufsize', '2倍最大码率')
+  }
+  const custom = preset.customVideoArgs?.trim()
+  if (custom) args.push(custom)
+  return args.join(' ')
+}
 </script>
 
 <template>
@@ -295,86 +288,35 @@ function onOpenLogoEditor() {
       </div>
     </div>
 
-    <div class="form-grid">
-      <div class="param-row wide">
-        <label class="crf-cell">
-          <span>
-            质量值
-            <span
-              class="hint tip-right"
-              :data-tip="`对应命令：x264/x265 使用 -crf ${job.crf}，NVENC 使用 -cq ${job.crf}\n\n数值越小画质越好、文件越大。\nlibx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。\nNVENC 推荐 18-28：通常 19-23 比较均衡。`"
-            ></span>
-          </span>
-          <input v-model.number="job.crf" type="number" min="0" max="51" />
-        </label>
-        <label class="bitrate-cell">
-          <span>
-            最大码率
-            <span
-              class="hint tip-right"
-              data-tip="对应命令：-maxrate {值}k -bufsize {值×2}k
-
-限制视频码率峰值，防止画面剧烈变化时码率失控。
-不限制：完全跟随质量值。
-自动：取原视频码率 + 1000 Kbps。
-自定义：按填写的 Kbps 直接生效。"
-            ></span>
-          </span>
-          <div class="bitrate-control">
+    <div class="compress-sections">
+      <section v-if="encodePresetOptions.length" class="form-section preset-section">
+        <div class="preset-row">
+          <label>
+            <span>压制预设</span>
             <AppSelect
-              v-model="bitrateMode"
-              class="bitrate-select"
-              :options="[
-                { value: 'none', label: '不限制' },
-                { value: 'auto', label: '自动（视频原码率 + 1000 Kbps）' },
-                { value: 'custom', label: '自定义' }
-              ]"
+              v-model="selectedEncodePresetModel"
+              class="preset-select"
+              :options="encodePresetOptions"
             />
-            <span v-if="bitrateMode === 'custom'" class="bitrate-input-wrap">
-              <input
-                v-model.number="customBitrate"
-                type="number"
-                min="1"
-                class="bitrate-input"
-                placeholder="例如 3000"
-              />
-              <span>Kbps</span>
-            </span>
-          </div>
-        </label>
-        <label class="encoder-cell">
-          <span>
-            编码器
-            <span
-              class="hint tip-right"
-              :data-tip="`对应命令：-c:v ${job.encoder}\n\nlibx264：H.264 CPU 软编，兼容性最好、画质稳定，支持 AVS。\nlibx265：H.265/HEVC CPU 软编，体积更小，速度较慢。\nh264_nvenc：NVIDIA 显卡硬编，速度快，不支持 AVS。\nh264_amf：AMD 显卡硬编，速度快，不支持 AVS。\nh264_videotoolbox：macOS 硬编，不支持 AVS。`"
-            ></span>
-          </span>
-          <AppSelect
-            v-model="job.encoder"
-            :options="encoderOptions"
-          />
-        </label>
-      </div>
-
-      <div class="advanced-row wide">
-        <button type="button" class="secondary advanced-toggle" @click="advancedOpen = !advancedOpen">
-          {{ advancedOpen ? '收起高级参数' : '展开高级参数' }}
-        </button>
-        <div v-if="advancedOpen" class="advanced-panel">
-          <div v-if="encodePresetOptions.length" class="preset-row">
-            <label>
-              <span>压制预设</span>
-              <AppSelect
-                v-model="selectedEncodePresetModel"
-                class="preset-select"
-                :options="encodePresetOptions"
-              />
-            </label>
-            <button type="button" class="secondary preset-apply" @click="emit('apply-encode-preset')">
+          </label>
+          <div class="preset-actions">
+            <button type="button" class="secondary preset-apply" @click="applySelectedEncodePreset">
               应用预设
             </button>
           </div>
+        </div>
+      </section>
+
+      <section class="form-section settings-section">
+        <EncodeSettingsFields v-model="job" :encoder-options="encoderOptions">
+          <template #encoder-trailing>
+            <button type="button" class="secondary advanced-toggle" @click="advancedOpen = !advancedOpen">
+              {{ advancedOpen ? '隐藏附加参数' : '显示附加参数' }}
+            </button>
+          </template>
+        </EncodeSettingsFields>
+
+        <div v-if="advancedOpen" class="advanced-panel">
           <label class="custom-args-field">
             <span>
               附加 ffmpeg 视频参数
@@ -391,66 +333,69 @@ function onOpenLogoEditor() {
             这些参数会追加到视频编码参数后；输入、滤镜、编码器、音频和输出路径仍由工作站管理。
           </p>
         </div>
-      </div>
+      </section>
 
-      <div class="switch-row-wrap wide">
-        <label class="switch-row">
-          <input v-model="job.needLogo" type="checkbox" />
-          <span class="switch"></span>
-          <span>压制 LOGO</span>
-          <span class="hint tip-right" data-tip="在视频画面上叠加一张 LOGO 图片。
+      <section class="form-section options-section">
+        <div class="section-heading">压制选项</div>
+        <div class="switch-row-wrap">
+          <label class="switch-row">
+            <input v-model="job.needLogo" type="checkbox" />
+            <span class="switch"></span>
+            <span>压制 LOGO</span>
+            <span class="hint tip-right" data-tip="在视频画面上叠加一张 LOGO 图片。
 点击「配置 LOGO」按钮可视化设置图片、位置与大小。
 开关关闭时即使已配置布局也不会叠加。"></span>
-        </label>
-        <label class="switch-row">
-          <input v-model="job.needYadif" type="checkbox" />
-          <span class="switch"></span>
-          <span>使用反交错压制</span>
-          <span class="hint" data-tip="对应命令：-vf yadif
+          </label>
+          <label class="switch-row">
+            <input v-model="job.needYadif" type="checkbox" />
+            <span class="switch"></span>
+            <span>使用反交错压制</span>
+            <span class="hint" data-tip="对应命令：-vf yadif
 
 把交错信号合成连续画面，消除横向锯齿/梳状伪影。
 TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开启。
 网络发布的视频通常已经是逐行扫描，不需要开启。"></span>
-        </label>
-        <label class="switch-row" :class="{ 'switch-row-disabled': avsToggleDisabled }">
-          <input
-            v-model="job.useAvs"
-            type="checkbox"
-            :disabled="avsToggleDisabled"
-          />
-          <span class="switch"></span>
-          <span>AVS 压制模式</span>
-          <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
-          <span class="hint tip-left" :data-tip="avsToggleTip"></span>
-        </label>
-      </div>
-
-      <div v-if="job.needLogo" class="logo-config-row wide">
-        <button
-          type="button"
-          class="secondary logo-config-btn"
-          :class="{ disabled: logoButtonDisabled }"
-          :disabled="logoButtonDisabled"
-          :title="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
-          @click="onOpenLogoEditor"
-        >
-          {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
-        </button>
-        <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
-        <span v-else class="logo-summary muted">尚未配置 LOGO</span>
-        <div class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }" :title="logoLayerTip">
-          <span class="logo-layer-label">LOGO 层级</span>
-          <AppSelect
-            v-model="logoLayerValue"
-            class="logo-layer-select"
-            :disabled="logoLayerDisabled"
-            :options="[
-              { value: 'bottom', label: '字幕在上 LOGO 在下', title: 'LOGO 会被字幕遮挡' },
-              { value: 'top', label: 'LOGO 在上 字幕在下', title: 'LOGO 完整覆盖字幕' }
-            ]"
-          />
+          </label>
+          <label class="switch-row" :class="{ 'switch-row-disabled': avsToggleDisabled }">
+            <input
+              v-model="job.useAvs"
+              type="checkbox"
+              :disabled="avsToggleDisabled"
+            />
+            <span class="switch"></span>
+            <span>AVS 压制模式</span>
+            <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
+            <span class="hint tip-left" :data-tip="avsToggleTip"></span>
+          </label>
         </div>
-      </div>
+
+        <div v-if="job.needLogo" class="logo-config-row">
+          <button
+            type="button"
+            class="secondary logo-config-btn"
+            :class="{ disabled: logoButtonDisabled }"
+            :disabled="logoButtonDisabled"
+            :title="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
+            @click="onOpenLogoEditor"
+          >
+            {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
+          </button>
+          <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
+          <span v-else class="logo-summary muted">尚未配置 LOGO</span>
+          <div class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }" :title="logoLayerTip">
+            <span class="logo-layer-label">LOGO 层级</span>
+            <AppSelect
+              v-model="logoLayerValue"
+              class="logo-layer-select"
+              :disabled="logoLayerDisabled"
+              :options="[
+                { value: 'bottom', label: '字幕在上 LOGO 在下', title: 'LOGO 会被字幕遮挡' },
+                { value: 'top', label: 'LOGO 在上 字幕在下', title: 'LOGO 完整覆盖字幕' }
+              ]"
+            />
+          </div>
+        </div>
+      </section>
     </div>
   </section>
 </template>
@@ -461,39 +406,71 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  margin-top: 14px;
 }
-.advanced-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+
+.compress-sections {
+  display: grid;
+  gap: 0;
+}
+
+.form-section {
+  border-bottom: 1px solid #e3e9ed;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.form-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.section-heading {
+  color: #43515c;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .advanced-toggle {
-  align-self: flex-start;
+  align-self: center;
   min-height: 32px;
   padding: 0 12px;
+  white-space: nowrap;
 }
 .advanced-panel {
   background: #f8fafb;
   border: 1px solid #e3e9ed;
   border-radius: 6px;
   padding: 12px;
+  margin-top: 12px;
 }
 .preset-row {
   align-items: flex-end;
-  display: grid;
+  display: flex;
   gap: 10px;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  margin-bottom: 10px;
 }
+
 .preset-row label {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
+  min-width: 220px;
 }
+
 .preset-row label > span {
   color: #43515c;
   font-size: 12.5px;
   font-weight: 600;
+}
+
+.preset-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
 }
 .preset-apply {
   min-height: 34px;

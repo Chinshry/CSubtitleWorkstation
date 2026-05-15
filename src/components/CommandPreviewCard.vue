@@ -27,6 +27,108 @@ function quotePosix(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`
 }
 
+const STAGED_SUBTITLE_TOKEN = '__CSUBTITLE_PREVIEW_SUBTITLE__'
+
+function parseFilterQuotedPath(filter: string, marker: string): string | null {
+  const start = filter.indexOf(marker)
+  if (start < 0) return null
+
+  let i = start + marker.length
+  let out = ''
+  while (i < filter.length) {
+    if (filter.startsWith("'\\''", i)) {
+      out += "'"
+      i += 4
+      continue
+    }
+
+    const ch = filter[i]
+    if (ch === "'") return out
+    if (ch === '\\' && i + 1 < filter.length) {
+      out += filter[i + 1]
+      i += 2
+      continue
+    }
+    out += ch
+    i += 1
+  }
+
+  return null
+}
+
+function replaceFilterQuotedPath(filter: string, marker: string, nextPath: string): string {
+  const start = filter.indexOf(marker)
+  if (start < 0) return filter
+
+  let i = start + marker.length
+  while (i < filter.length) {
+    if (filter.startsWith("'\\''", i)) {
+      i += 4
+      continue
+    }
+    if (filter[i] === "'") {
+      return `${filter.slice(0, start + marker.length)}${nextPath}${filter.slice(i)}`
+    }
+    if (filter[i] === '\\' && i + 1 < filter.length) {
+      i += 2
+      continue
+    }
+    i += 1
+  }
+
+  return filter
+}
+
+function needsZshSubtitleStage(path: string): boolean {
+  return /[^\x20-\x7e]/.test(path) || path.includes("'")
+}
+
+function subtitleTempName(path: string): string {
+  const match = path.match(/\.([A-Za-z0-9]{1,8})$/)
+  const ext = match?.[1]?.toLowerCase()
+  if (ext && ['ass', 'srt', 'vtt', 'sub'].includes(ext)) return `subtitle.${ext}`
+  return 'subtitle.ass'
+}
+
+function quoteZshDoubleKeepingToken(arg: string): string {
+  const escaped = arg
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$')
+    .replace(STAGED_SUBTITLE_TOKEN, '$tmpdir')
+  return `"${escaped}"`
+}
+
+function renderPosixCommand(args: string[]): string {
+  const vfIndex = args.findIndex((arg) => arg === '-vf')
+  const vfArg = vfIndex >= 0 ? args[vfIndex + 1] : undefined
+  const subtitlePath = vfArg ? parseFilterQuotedPath(vfArg, "subtitles='") : null
+  if (!vfArg || !subtitlePath || !needsZshSubtitleStage(subtitlePath)) {
+    return args.map(quotePosix).join(' ')
+  }
+
+  const tempName = subtitleTempName(subtitlePath)
+  const stagedVf = replaceFilterQuotedPath(
+    vfArg,
+    "subtitles='",
+    `${STAGED_SUBTITLE_TOKEN}/${tempName}`
+  )
+  const commandArgs = args.map((arg, index) => {
+    if (index === vfIndex + 1) return quoteZshDoubleKeepingToken(stagedVf)
+    return quotePosix(arg)
+  })
+
+  return [
+    '(',
+    '  tmpdir=$(mktemp -d)',
+    `  trap ${quotePosix('rm -rf "$tmpdir"')} EXIT`,
+    `  cp ${quotePosix(subtitlePath)} "$tmpdir/${tempName}"`,
+    `  ${commandArgs.join(' ')}`,
+    ')'
+  ].join('\n')
+}
+
 // Windows (cmd / PowerShell 公共子集)：用双引号包裹，内部 " → ""
 // 反斜杠在双引号内部不需要转义（cmd 不要求；PowerShell 字面字符串里也直接传）
 function quoteWindows(arg: string): string {
@@ -45,7 +147,7 @@ const commandText = computed(() => {
       return args.map(quoteWindows).join(' ')
     case 'posix':
     default:
-      return args.map(quotePosix).join(' ')
+      return renderPosixCommand(args)
   }
 })
 

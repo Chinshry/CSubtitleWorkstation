@@ -44,8 +44,7 @@ pub fn resolve(app: &AppHandle) -> Result<AvsWorkspace, String> {
         .app_local_data_dir()
         .map_err(|err| format!("获取 app_local_data_dir 失败: {err}"))?;
     let temp_dir = data_dir.join("avs-temp");
-    fs::create_dir_all(&temp_dir)
-        .map_err(|err| format!("创建 AVS 临时目录失败: {err}"))?;
+    fs::create_dir_all(&temp_dir).map_err(|err| format!("创建 AVS 临时目录失败: {err}"))?;
 
     Ok(AvsWorkspace { dll_dir, temp_dir })
 }
@@ -97,7 +96,10 @@ mod tests {
 
     #[test]
     fn strip_keeps_normal_paths() {
-        assert_eq!(strip_extended_path_prefix("E:\\foo\\bar.dll"), "E:\\foo\\bar.dll");
+        assert_eq!(
+            strip_extended_path_prefix("E:\\foo\\bar.dll"),
+            "E:\\foo\\bar.dll"
+        );
         assert_eq!(strip_extended_path_prefix("/tmp/x.dll"), "/tmp/x.dll");
         assert_eq!(strip_extended_path_prefix(""), "");
     }
@@ -124,7 +126,6 @@ mod tests {
 /// 写入 input.avs 并返回脚本绝对路径
 pub fn write_script(workspace: &AvsWorkspace, content: &str) -> Result<PathBuf, String> {
     let script_path = workspace.temp_dir.join("input.avs");
-    fs::write(&script_path, content)
-        .map_err(|err| format!("写入 AVS 脚本失败: {err}"))?;
+    fs::write(&script_path, content).map_err(|err| format!("写入 AVS 脚本失败: {err}"))?;
     Ok(script_path)
 }

@@ -1011,6 +1011,9 @@ export default { name: 'LogoEditor' }
   cursor: pointer;
   display: flex;
   gap: 8px;
+  /* 锁定行高度：缩略图 28px + 上下 padding 6×2 = 40px。
+     避免 editing 切换时 input 比文本高，导致整行跳动。 */
+  min-height: 40px;
   padding: 6px;
   transition: background 0.12s ease;
 }
@@ -1154,8 +1157,9 @@ export default { name: 'LogoEditor' }
   color: #fff !important;
 }
 
-/* inline 重命名 input：占据原文件名位置，避免列表项高度跳动 */
-.le-recent-input {
+/* inline 重命名 input：占据原文件名位置，避免列表项高度跳动。
+   用 input.le-recent-input 提升特异性，覆盖全局 input { min-height: 38px } */
+input.le-recent-input {
   background: #fff;
   border: 1px solid #176b87;
   border-radius: 4px;
@@ -1163,11 +1167,12 @@ export default { name: 'LogoEditor' }
   flex: 1;
   font-size: 12px;
   height: 22px;
+  min-height: 22px;
   min-width: 0;
   outline: none;
   padding: 0 6px;
 }
-.le-recent-list li.active .le-recent-input {
+.le-recent-list li.active input.le-recent-input {
   background: #fff;
   color: #18202a;
 }

@@ -2,6 +2,11 @@
     "name":  "csubtitle-workstation",
     "private":  true,
     "version":  "0.1.0",
+    "browserslist":  [
+                         "Chrome >= 120",
+                         "Edge >= 120",
+                         "Safari >= 15"
+                     ],
     "type":  "module",
     "scripts":  {
                     "dev":  "vite",

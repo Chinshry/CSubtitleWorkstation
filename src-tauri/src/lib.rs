@@ -3,9 +3,9 @@ mod models;
 mod services;
 
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::process::ChildStdin;
 use std::sync::Mutex;
-use std::env;
 
 /// 运行中的压制任务句柄。
 /// - `pid`：ffmpeg 进程 id，用于兜底强制终止。
@@ -34,10 +34,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::config::load_config,
             commands::config::save_config,
+            commands::config::export_encode_presets,
+            commands::config::import_encode_presets,
             commands::encoder::get_supported_encoders,
             commands::ffmpeg::detect_ffmpeg,
             commands::ffmpeg::set_ffmpeg_path,
@@ -50,8 +51,7 @@ pub fn run() {
             commands::video::inspect_video_meta,
             commands::video::extract_video_frame,
             commands::video::clear_frame_cache,
-            commands::updater::get_current_app_version,
-            commands::updater::check_app_update
+            commands::updater::get_current_app_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

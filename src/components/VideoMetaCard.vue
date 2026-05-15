@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { OutputNameTemplate, VideoMeta } from '../types'
 import { globalDragActive } from '../stores/dropStore'
+import AppSelect from './AppSelect.vue'
 
 const props = defineProps<{
   meta: VideoMeta | null
@@ -265,9 +266,23 @@ const hasVideoFields = computed(() => videoFields.value.length > 0)
 const hasAudioFields = computed(() => audioFields.value.length > 0)
 const templateOptions = computed(() => props.outputTemplates ?? [])
 
-function onTemplateChange(event: Event) {
-  emit('update:selectedOutputTemplateId', (event.target as HTMLSelectElement).value)
-}
+const templateSelectOptions = computed(() =>
+  templateOptions.value.map((tpl) => ({
+    value: tpl.id,
+    label: tpl.name,
+    title: tpl.pattern
+  }))
+)
+
+const selectedTemplateModel = computed({
+  get() {
+    return props.selectedOutputTemplateId ?? templateOptions.value[0]?.id ?? ''
+  },
+  set(value: string | number) {
+    emit('update:selectedOutputTemplateId', String(value))
+    emit('apply-output-template')
+  }
+})
 </script>
 
 <template>
@@ -361,21 +376,11 @@ function onTemplateChange(event: Event) {
         <div v-if="templateOptions.length">
           <dt>命名模板</dt>
           <dd class="path-row template-control">
-            <select
-              class="template-select"
-              :value="selectedOutputTemplateId"
-              @change="onTemplateChange"
-            >
-              <option v-for="tpl in templateOptions" :key="tpl.id" :value="tpl.id">
-                {{ tpl.name }}
-              </option>
-            </select>
-            <button
-              class="path-action template-apply"
-              data-tip="按当前模板生成输出路径"
-              @click="emit('apply-output-template')"
-              aria-label="套用命名模板"
-            >套用</button>
+            <AppSelect
+              v-model="selectedTemplateModel"
+              class="template-select-control"
+              :options="templateSelectOptions"
+            />
           </dd>
         </div>
       </dl>

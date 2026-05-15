@@ -2,10 +2,7 @@ use crate::services::{config_store, ffmpeg_locator, frame_extractor, video_meta}
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn inspect_video_meta(
-    app: AppHandle,
-    path: String,
-) -> Result<video_meta::VideoMeta, String> {
+pub fn inspect_video_meta(app: AppHandle, path: String) -> Result<video_meta::VideoMeta, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("Path is empty.".to_string());
@@ -36,7 +33,8 @@ pub fn extract_video_frame(
         .ffmpeg_path
         .ok_or_else(|| "ffmpeg 未配置".to_string())?;
     let cache_dir = frame_extractor::frame_cache_dir(&app)?;
-    let frame_path = frame_extractor::extract_frame(&ffmpeg_path, trimmed, time_seconds, &cache_dir)?;
+    let frame_path =
+        frame_extractor::extract_frame(&ffmpeg_path, trimmed, time_seconds, &cache_dir)?;
     Ok(frame_path.to_string_lossy().to_string())
 }
 

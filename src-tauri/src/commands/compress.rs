@@ -1,5 +1,8 @@
 use crate::models::compress_job::CompressJob;
-use crate::services::{avs_detector, avs_workspace, command_builder, config_store, encoder_detector, ffmpeg_locator, subtitle_analyzer};
+use crate::services::{
+    avs_detector, avs_workspace, command_builder, config_store, encoder_detector, ffmpeg_locator,
+    subtitle_analyzer,
+};
 use crate::{AppState, JobHandle};
 use serde::Serialize;
 use std::fs;
@@ -31,6 +34,9 @@ pub struct SubtitleAnalysisResult {
     pub detected_tags: Vec<String>,
     /// ASS [Script Info] 段的 YCbCr Matrix 原始值，前端用于与视频 color_space/color_range 比对
     pub ass_matrix: Option<String>,
+    pub missing_img_paths: Vec<subtitle_analyzer::SubtitleResourceIssue>,
+    pub missing_fonts: Vec<subtitle_analyzer::SubtitleFontIssue>,
+    pub missing_styles: Vec<subtitle_analyzer::SubtitleStyleIssue>,
 }
 
 #[tauri::command]
@@ -50,6 +56,9 @@ pub fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult,
         has_effects: analysis.has_effects,
         detected_tags: analysis.detected_tags,
         ass_matrix: analysis.ass_matrix,
+        missing_img_paths: analysis.missing_img_paths,
+        missing_fonts: analysis.missing_fonts,
+        missing_styles: analysis.missing_styles,
     })
 }
 
@@ -61,10 +70,7 @@ pub fn start_compress(
 ) -> Result<(), String> {
     // 验证编码器是否在当前平台支持
     if !encoder_detector::is_encoder_supported(&job.encoder) {
-        return Err(format!(
-            "编码器 {} 在当前平台不支持。",
-            job.encoder
-        ));
+        return Err(format!("编码器 {} 在当前平台不支持。", job.encoder));
     }
 
     let config = config_store::load(&app)?;
@@ -102,7 +108,10 @@ pub fn start_compress(
     let mut command_job = job.clone();
     let temp_dir = job_temp_dir(&app, &command_job.id)?;
     let subtitle_temp_path = if !command_job.subtitle_path.trim().is_empty() {
-        Some(stage_subtitle_to_ascii(&temp_dir, &command_job.subtitle_path)?)
+        Some(stage_subtitle_to_ascii(
+            &temp_dir,
+            &command_job.subtitle_path,
+        )?)
     } else {
         None
     };
@@ -348,7 +357,8 @@ fn kill_process_tree(pid: u32) -> Result<(), String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         // pid 已退出 / 不存在时 taskkill 返回非零；属于幂等行为，不视为错误
-        if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("不存在") {
+        if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("不存在")
+        {
             return Ok(());
         }
         return Err(format!("taskkill 失败: {stderr}"));
@@ -381,10 +391,7 @@ fn job_temp_dir(app: &AppHandle, job_id: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn stage_subtitle_to_ascii(
-    dir: &Path,
-    subtitle_path: &str,
-) -> Result<String, String> {
+fn stage_subtitle_to_ascii(dir: &Path, subtitle_path: &str) -> Result<String, String> {
     let src = Path::new(subtitle_path);
     let ext = src
         .extension()
@@ -449,12 +456,7 @@ fn read_lines_split<R: Read, F: FnMut(&str)>(mut reader: R, mut on_line: F) {
     }
 }
 
-fn emit_log_and_progress(
-    app: &AppHandle,
-    job_id: &str,
-    line: &str,
-    duration_seconds: Option<f64>,
-) {
+fn emit_log_and_progress(app: &AppHandle, job_id: &str, line: &str, duration_seconds: Option<f64>) {
     let trimmed = line.trim_end();
 
     // 1) ffmpeg 终端式进度行：用 \r 持续刷新的整行（含 time=… 与 frame=/size=）。
