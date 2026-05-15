@@ -171,6 +171,9 @@ const customVideoArgsTip = computed(() => {
   return common.join('\n')
 })
 
+// 压制预设提示：解释作用 + 引导用户去哪儿管理预设
+const presetTip = '一键应用一组编码器、质量值、最大码率组合。\n\n在左侧侧边栏「预设」页面新增、修改或删除预设。\n应用预设后，下方质量值/最大码率/编码器仍可手动微调，不会回写到预设本身。'
+
 // 已配置 LOGO 的摘要文案
 // 直接给百分比对用户不直观，改成「方位（九宫格） + 像素尺寸」
 const logoSummary = computed(() => {
@@ -292,7 +295,10 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
       <section v-if="encodePresetOptions.length" class="form-section preset-section">
         <div class="preset-row">
           <label>
-            <span>压制预设</span>
+            <span>
+              压制预设
+              <span class="hint tip-right" :data-tip="presetTip"></span>
+            </span>
             <AppSelect
               v-model="selectedEncodePresetModel"
               class="preset-select"
@@ -336,7 +342,6 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
       </section>
 
       <section class="form-section options-section">
-        <div class="section-heading">压制选项</div>
         <div class="switch-row-wrap">
           <label class="switch-row">
             <input v-model="job.needLogo" type="checkbox" />
@@ -426,6 +431,13 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
   margin-bottom: 0;
 }
 
+/* 「压制预设」与「质量值/编码器」是同一组字段，不再用 hairline 分隔 */
+.form-section.preset-section {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 14px;
+}
+
 .section-heading {
   color: #43515c;
   font-size: 12.5px;
@@ -456,16 +468,12 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
 .preset-row label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   flex: 1;
   min-width: 220px;
 }
 
-.preset-row label > span {
-  color: #43515c;
-  font-size: 12.5px;
-  font-weight: 600;
-}
+/* 字段标签字号继承默认，与 EncodeSettingsFields 中的「质量值/编码器」视觉一致 */
 
 .preset-actions {
   align-items: center;
