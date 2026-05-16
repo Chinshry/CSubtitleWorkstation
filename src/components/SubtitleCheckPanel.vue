@@ -8,9 +8,11 @@ type CheckItem = {
   level: CheckLevel
   label: string
   title: string
+  metaLayout?: 'default' | 'inline' | 'font-grid'
   detail?: string
   suggestion?: string
   meta?: Array<{ label: string; value: string }>
+  tagValues?: string[]
 }
 
 const props = defineProps<{
@@ -28,8 +30,9 @@ const items = computed<CheckItem[]>(() => {
     next.push({
       id: 'matrix',
       level: matrix.level,
-      label: matrix.level === 'error' ? '严重' : '建议',
+      label: levelLabel(matrix.level),
       title: matrix.title,
+      metaLayout: 'inline',
       detail: matrix.detail,
       suggestion: matrix.suggestion,
       meta: [
@@ -45,7 +48,7 @@ const items = computed<CheckItem[]>(() => {
     next.push({
       id: 'missing-img-paths',
       level: 'error',
-      label: '错误',
+      label: levelLabel('error'),
       title: '字幕引用的图片路径不存在',
       detail: 'ASS/SSA 中的 \\img / \\1img-\\4img 图片填充标签引用了本机不存在的文件，AVS/VSFilterMod 渲染时会缺图或失败。',
       suggestion: '请把图片文件放回原路径，或修改字幕中的 img 路径后重新检测。',
@@ -61,8 +64,9 @@ const items = computed<CheckItem[]>(() => {
     next.push({
       id: 'missing-fonts',
       level: 'warn',
-      label: '警告',
+      label: levelLabel('warn'),
       title: '字幕使用的字体未检测到安装',
+      metaLayout: 'font-grid',
       detail: '缺失字体会触发系统或渲染器字体替换，可能导致字形、字重、排版宽度和特效位置变化。',
       suggestion: '请安装字幕包附带字体，或把 ASS 样式 Fontname 改为本机已安装字体。',
       meta: missingFonts.slice(0, 12).map((item) => ({
@@ -77,7 +81,7 @@ const items = computed<CheckItem[]>(() => {
     next.push({
       id: 'missing-styles',
       level: 'error',
-      label: '错误',
+      label: levelLabel('error'),
       title: '字幕行引用了不存在的样式',
       detail: 'Events 段中的 Dialogue/Comment 行引用了 Styles 段未定义的样式名，渲染时会回退默认样式或出现异常效果。',
       suggestion: '请在 [V4+ Styles] 中补齐对应 Style，或把事件行的 Style 字段改为已有样式。',
@@ -91,16 +95,15 @@ const items = computed<CheckItem[]>(() => {
   const tags = props.analysis?.detectedTags ?? []
   if (tags.length > 0) {
     const hasImg = tags.some((tag) => /img/i.test(tag))
+    const hasModTag = tags.some((tag) => !/img/i.test(tag))
     next.push({
       id: 'effects',
-      level: hasImg ? 'warn' : 'info',
-      label: hasImg ? '建议' : '信息',
-      title: hasImg ? '检测到图片填充或 VSFilterMod 扩展标签' : '检测到 VSFilterMod 扩展标签',
-      detail: hasImg
-        ? '这类标签通常需要 AVS + VSFilterMod 渲染。非 AVS 的 ffmpeg/libass 路径可能无法正确还原效果。'
-        : '这些标签可能与 libass 表现不同；如果画面效果不对，建议切换 AVS 压制模式复核。',
+      level: 'info',
+      label: levelLabel('info'),
+      title: effectTitle(),
+      detail: effectDetail(hasImg, hasModTag),
       suggestion: hasImg ? '建议启用 AVS 压制模式，或确认非 AVS 输出是否符合预期。' : undefined,
-      meta: [{ label: '命中标签', value: tags.join('、') }],
+      tagValues: tags,
     })
   }
 
@@ -136,6 +139,27 @@ function levelRank(level: CheckLevel) {
   return 0
 }
 
+function levelLabel(level: CheckLevel) {
+  if (level === 'error') return '错误'
+  if (level === 'warn') return '警告'
+  if (level === 'info') return '信息'
+  return '正常'
+}
+
+function effectTitle() {
+  return '检测到 VSFilterMod 标签，建议启用 AVS 压制模式'
+}
+
+function effectDetail(hasImg: boolean, hasModTag: boolean) {
+  if (hasImg) {
+    return '这些标签通常依赖 AVS/VSFilterMod 渲染；请确认素材资源完整，并开启 AVS 压制以尽量还原字幕效果。'
+  }
+  if (hasModTag) {
+    return '这些标签通常依赖 AVS/VSFilterMod 渲染；建议开启 AVS 压制以尽量还原字幕效果。'
+  }
+  return '字幕中包含建议使用 AVS 压制的标签，请在压制前确认 AVS 模式已开启。'
+}
+
 function toggleItem(id: string) {
   openItems.value = {
     ...openItems.value,
@@ -162,7 +186,7 @@ function toggleItem(id: string) {
           <span class="check-level">{{ item.label }}</span>
           <strong>{{ item.title }}</strong>
           <button
-            v-if="item.detail || item.suggestion || item.meta?.length"
+            v-if="item.detail || item.suggestion || item.meta?.length || item.tagValues?.length"
             type="button"
             class="check-detail-toggle"
             @click="toggleItem(item.id)"
@@ -173,12 +197,15 @@ function toggleItem(id: string) {
         <div v-if="openItems[item.id]" class="check-detail">
           <p v-if="item.detail">{{ item.detail }}</p>
           <p v-if="item.suggestion" class="check-suggestion">{{ item.suggestion }}</p>
-          <dl v-if="item.meta?.length" class="check-meta">
+          <dl v-if="item.meta?.length" class="check-meta" :class="`layout-${item.metaLayout ?? 'default'}`">
             <div v-for="entry in item.meta" :key="entry.label">
               <dt>{{ entry.label }}</dt>
               <dd>{{ entry.value }}</dd>
             </div>
           </dl>
+          <div v-if="item.tagValues?.length" class="check-tag-list" aria-label="命中标签">
+            <span v-for="tag in item.tagValues" :key="tag" class="check-tag">{{ tag }}</span>
+          </div>
         </div>
       </article>
     </div>
@@ -317,5 +344,59 @@ function toggleItem(id: string) {
   color: #18202a;
   font-weight: 650;
   margin: 0;
+}
+.check-meta.layout-inline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.check-meta.layout-inline div {
+  align-items: center;
+  min-width: 0;
+}
+.check-meta.layout-inline dt,
+.check-meta.layout-inline dd {
+  min-width: 0;
+}
+.check-meta.layout-inline dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.check-meta.layout-font-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.check-meta.layout-font-grid div {
+  align-items: center;
+  min-width: 0;
+}
+.check-meta.layout-font-grid dd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.check-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.check-tag {
+  background: #edf6f9;
+  border: 1px solid #c6e0e8;
+  border-radius: 999px;
+  color: #0f5268;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  padding: 6px 9px;
+}
+@media (max-width: 1080px) {
+  .check-meta.layout-inline,
+  .check-meta.layout-font-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
