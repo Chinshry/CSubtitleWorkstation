@@ -29,8 +29,10 @@ jobs:
     name: Prepare release
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+      release_id: ${{ steps.draft.outputs.release_id }}
 
     steps:
       - name: Checkout
@@ -39,8 +41,8 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prepare version and tag
-        id: release
+      - name: Resolve version and update files
+        id: meta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_VERSION: ${{ inputs.version }}
@@ -51,14 +53,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          # push tag 触发：tag 已存在，沿用即可，不需改文件
           if [ "$EVENT_NAME" = "push" ]; then
             TAG="$REF_NAME"
             VERSION="${TAG#v}"
+            SHA="$(git rev-parse HEAD)"
             echo "tag=$TAG" >> "$GITHUB_OUTPUT"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # workflow_dispatch：校验版本号
           VERSION="$INPUT_VERSION"
           if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.-]+)?$'; then
             echo "Invalid version: $VERSION"
@@ -69,20 +75,33 @@ jobs:
           TAG="v$VERSION"
           OVERWRITE="${INPUT_OVERWRITE:-false}"
 
+          # 检查同名 tag / release 是否已存在
           RELEASE_EXISTS=false
           TAG_EXISTS=false
-
           if gh release view "$TAG" >/dev/null 2>&1; then
             RELEASE_EXISTS=true
           fi
-
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             TAG_EXISTS=true
           fi
 
-          if [ "$OVERWRITE" != "true" ] && { [ "$RELEASE_EXISTS" = "true" ] || [ "$TAG_EXISTS" = "true" ]; }; then
-            echo "$TAG already exists. Re-run with overwrite=true to rebuild this version."
-            exit 1
+          # 仅当 release 已正式发布时阻止重跑；draft 状态允许复用
+          RELEASE_IS_DRAFT=false
+          if [ "$RELEASE_EXISTS" = "true" ]; then
+            if gh release view "$TAG" --json isDraft --jq '.isDraft' | grep -qi true; then
+              RELEASE_IS_DRAFT=true
+            fi
+          fi
+
+          if [ "$OVERWRITE" != "true" ]; then
+            if [ "$TAG_EXISTS" = "true" ]; then
+              echo "Tag $TAG already exists. Re-run with overwrite=true to rebuild."
+              exit 1
+            fi
+            if [ "$RELEASE_EXISTS" = "true" ] && [ "$RELEASE_IS_DRAFT" != "true" ]; then
+              echo "Release $TAG is already published. Re-run with overwrite=true to rebuild."
+              exit 1
+            fi
           fi
 
           if [ "$OVERWRITE" = "true" ]; then
@@ -91,10 +110,10 @@ jobs:
             elif [ "$TAG_EXISTS" = "true" ]; then
               git push origin ":refs/tags/$TAG"
             fi
-
             git tag -d "$TAG" >/dev/null 2>&1 || true
           fi
 
+          # 更新版本文件
           node <<'NODESCRIPT'
           const fs = require('fs');
           const pkgPath = 'package.json';
@@ -125,6 +144,7 @@ jobs:
           fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
           NODESCRIPT
 
+          # 提交版本变更（注意：不在此推送 tag，tag 留到 publish 阶段）
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json src-tauri/Cargo.toml docs/updates/latest.json
@@ -136,11 +156,64 @@ jobs:
             git push origin HEAD:refs/heads/${{ github.ref_name }}
           fi
 
-          git tag "$TAG"
-          git push origin "$TAG"
-
+          SHA="$(git rev-parse HEAD)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Create or reuse draft release
+        id: draft
+        uses: actions/github-script@v7
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        with:
+          script: |
+            const tag = process.env.TAG;
+            const sha = process.env.SHA;
+            const defaultNotes = '请查看 GitHub Release 获取本次更新内容。';
+            const notes = process.env.INPUT_NOTES || defaultNotes;
+
+            // 复用已存在的 release（draft 或 published，由 prepare 步骤把关）
+            try {
+              const { data } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              core.setOutput('release_id', String(data.id));
+              core.info(`Reusing existing release id=${data.id} draft=${data.draft}`);
+              return;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+
+            const body = [
+              '## 安装',
+              '',
+              '- **Windows**：下载 `*-setup.exe` 安装包，双击运行。',
+              '- **macOS**：下载 `*_universal.dmg`，兼容 Apple Silicon 和 Intel Mac。',
+              '',
+              '> macOS 版本不支持 AVS 压制路线（仅 Windows）。',
+              '> macOS 首次打开如提示"无法验证开发者"，请右键应用 -> 打开。',
+              '',
+              '---',
+              notes,
+            ].join('\n');
+
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `CC 字幕压制工作站 ${tag}`,
+              target_commitish: sha,
+              body,
+              draft: true,
+              prerelease: false,
+            });
+            core.setOutput('release_id', String(data.id));
+            core.info(`Created draft release id=${data.id}`);
 
   build:
     name: Build (${{ matrix.label }})
@@ -162,7 +235,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -184,24 +257,45 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build & publish
+      - name: Build & upload to draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ needs.prepare.outputs.tag }}
-          releaseName: 'CC 字幕压制工作站 ${{ needs.prepare.outputs.tag }}'
-          releaseBody: |
-            ## 安装
-
-            - **Windows**：下载 `*-setup.exe` 安装包，双击运行。
-            - **macOS**：下载 `*_universal.dmg`，兼容 Apple Silicon 和 Intel Mac。
-
-            > macOS 版本不支持 AVS 压制路线（仅 Windows）。
-            > macOS 首次打开如提示“无法验证开发者”，请右键应用 -> 打开。
-
-            ---
-            完整变更见提交历史。
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           args: ${{ matrix.args }}
+
+  publish:
+    name: Publish release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on remote, skipping"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$SHA"
+            git push origin "$TAG"
+          fi
+
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --draft=false
