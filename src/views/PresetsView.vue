@@ -626,17 +626,23 @@ onBeforeUnmount(() => {
             />
           </label>
 
-          <div class="variable-row">
-            <button
-              v-for="item in TEMPLATE_VARIABLES"
-              :key="item.key"
-              type="button"
-              class="secondary variable-token"
-              :title="`${item.label}，示例：${item.sample}`"
-              @click="insertVariable(item.key)"
-            >
-              {{ item.key }}
-            </button>
+          <div class="variable-toolbar" aria-label="可插入的文件名变量">
+            <div class="variable-toolbar-title">
+              <span>插入变量</span>
+              <small>点击后插入到光标位置</small>
+            </div>
+            <div class="variable-row">
+              <button
+                v-for="item in TEMPLATE_VARIABLES"
+                :key="item.key"
+                type="button"
+                class="variable-token"
+                @click="insertVariable(item.key)"
+              >
+                <span class="variable-token-key">{{ item.key }}</span>
+                <span class="variable-token-meta">{{ item.label }} · {{ item.sample }}</span>
+              </button>
+            </div>
           </div>
 
           <label>
@@ -916,14 +922,86 @@ onBeforeUnmount(() => {
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.variable-row {
+.variable-toolbar {
+  background: #f8fafb;
+  border: 1px solid #dce6ec;
+  border-radius: 7px;
+  display: grid;
+  gap: 8px;
+  margin-top: -2px;
+  padding: 9px 10px 10px;
+}
+.variable-toolbar-title {
+  align-items: baseline;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+}
+.variable-toolbar-title span {
+  color: #31424e;
+  font-size: 12.5px;
+  font-weight: 750;
+}
+.variable-toolbar-title small {
+  color: #7a8894;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.variable-row {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 .variable-token {
-  min-height: 28px;
-  padding: 0 8px;
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #d6e0e6;
+  border-radius: 6px;
+  color: #1f2d37;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 48px;
+  padding: 7px 10px;
+  position: relative;
+  text-align: left;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+.variable-token::before {
+  content: '+';
+  color: #176b87;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1;
+  position: absolute;
+  transform: translate(-2px, 1px);
+}
+.variable-token-key {
+  color: #18202a;
+  font: 700 12.5px/1.25 "Cascadia Mono", Consolas, monospace;
+  padding-left: 14px;
+}
+.variable-token-meta {
+  color: #6a7884;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+  padding-left: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+.variable-token:hover,
+.variable-token:focus-visible {
+  background: #f2f8fa;
+  border-color: #8bb4c2;
+  box-shadow: 0 6px 14px rgba(23, 107, 135, 0.1);
+  outline: none;
+  transform: translateY(-1px);
+}
+.variable-token:active {
+  transform: translateY(0);
 }
 .template-preview {
   background: #f8fafb;

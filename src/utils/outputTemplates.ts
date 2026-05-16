@@ -9,8 +9,8 @@ export const DEFAULT_OUTPUT_TEMPLATE: OutputNameTemplate = {
 }
 
 export const TEMPLATE_VARIABLES = [
-  { key: '{date:YYYYMMDD}', label: '日期格式1', sample: '20260515' },
-  { key: '{date:YYMMDD}', label: '日期格式2', sample: '260515' },
+  { key: '{date:YYYYMMDD}', label: '日期格式1', sample: '20260101' },
+  { key: '{date:YYMMDD}', label: '日期格式2', sample: '260101' },
   { key: '{video_name}', label: '视频文件名', sample: 'input' },
   { key: '{resolution}', label: '分辨率', sample: '1080' },
   { key: '{encoder}', label: '编码器', sample: 'libx264' },

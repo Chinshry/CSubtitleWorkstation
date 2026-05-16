@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { CompressJob } from '../types'
 import type { EncoderOption } from '../composables/useEncoderOptions'
 import AppSelect from './AppSelect.vue'
+import InfoHint from './InfoHint.vue'
 
 type BitrateMode = 'none' | 'auto' | 'custom'
 
@@ -79,10 +80,13 @@ const customBitrate = computed<number | undefined>({
     <label class="crf-cell">
       <span>
         质量值
-        <span
-          class="hint tip-right"
-          :data-tip="`对应命令：x264/x265 使用 -crf ${settings.crf}，NVENC 使用 -cq ${settings.crf}，AMF 使用 -qp_i/-qp_p/-qp_b ${settings.crf}。\nVideoToolbox 不使用该质量值，建议通过最大码率控制。\n\n数值越小画质越好、文件越大。\nlibx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。\nNVENC / AMF 推荐 18-28：通常 19-23 比较均衡。`"
-        ></span>
+        <InfoHint
+          placement="right"
+          title="质量值"
+          :command="`x264/x265: -crf ${settings.crf}  |  NVENC: -cq ${settings.crf}`"
+          body="数值越小画质越好、文件越大；VideoToolbox 不使用该质量值，建议通过最大码率控制。"
+          :items="['libx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。', 'NVENC / AMF 推荐 18-28：通常 19-23 比较均衡。']"
+        />
       </span>
       <input v-model.number="qualityModel" type="number" min="0" max="51" />
     </label>
@@ -90,15 +94,13 @@ const customBitrate = computed<number | undefined>({
     <label class="bitrate-cell">
       <span>
         最大码率
-        <span
-          class="hint tip-right"
-          data-tip="对应命令：-maxrate {值}k -bufsize {值×2}k
-
-限制视频码率峰值，防止画面剧烈变化时码率失控。
-不限制：完全跟随质量值。
-自动：取原视频码率 + 1000 Kbps。
-自定义：按填写的 Kbps 直接生效。"
-        ></span>
+        <InfoHint
+          placement="right"
+          title="最大码率"
+          command="-maxrate {值}k -bufsize {值×2}k"
+          body="限制视频码率峰值，防止画面剧烈变化时码率失控。"
+          :items="['不限制：完全跟随质量值。', '自动：取原视频码率 + 1000 Kbps。', '自定义：按填写的 Kbps 直接生效。']"
+        />
       </span>
       <div class="bitrate-control">
         <AppSelect
@@ -126,10 +128,13 @@ const customBitrate = computed<number | undefined>({
     <label class="encoder-cell">
       <span>
         编码器
-        <span
-          class="hint tip-right"
-          :data-tip="`对应命令：-c:v ${settings.encoder}\n\nlibx264：H.264 CPU 软编，兼容性最好、画质稳定，支持 AVS。\nlibx265：H.265/HEVC CPU 软编，体积更小，速度较慢。\nh264_nvenc：NVIDIA 显卡硬编，速度快，不支持 AVS。\nh264_amf：AMD 显卡硬编，速度快，不支持 AVS。\nh264_videotoolbox：macOS 硬编，不支持 AVS。`"
-        ></span>
+        <InfoHint
+          placement="right"
+          title="编码器"
+          :command="`-c:v ${settings.encoder}`"
+          body="选择视频编码后端，会影响速度、体积、兼容性和 AVS 支持。"
+          :items="['libx264：H.264 CPU 软编，兼容性最好、画质稳定，支持 AVS。', 'libx265：H.265/HEVC CPU 软编，体积更小，速度较慢。', 'h264_nvenc / h264_amf：显卡硬编，速度快，不支持 AVS。', 'h264_videotoolbox：macOS 硬编，不支持 AVS。']"
+        />
       </span>
       <div class="encoder-control">
         <AppSelect

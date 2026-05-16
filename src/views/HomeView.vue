@@ -150,8 +150,27 @@ function applyOutputTemplate() {
   lastAutoOutput.value = job.value.outputPath
 }
 
-function applyEncodePreset() {
-  applyEncodePresetToJob(job.value, selectedEncodePreset.value)
+function applyConfigDefaults(config: AppConfig) {
+  job.value.crf = config.defaultCrf
+  job.value.needLogo = config.defaultNeedLogo
+  job.value.needYadif = config.defaultNeedYadif
+  if (isSupportedEncoder(config.defaultEncoder)) {
+    job.value.encoder = config.defaultEncoder
+  }
+}
+
+function isSupportedEncoder(value: string): value is CompressJob['encoder'] {
+  return ['libx264', 'libx265', 'h264_nvenc', 'h264_amf', 'h264_videotoolbox'].includes(value)
+}
+
+function applyEncodePreset(presetId?: string) {
+  const preset = presetId
+    ? encodePresets.value.find((item) => item.id === presetId) ?? selectedEncodePreset.value
+    : selectedEncodePreset.value
+  applyEncodePresetToJob(job.value, preset)
+  if (presetId) {
+    selectedEncodePresetId.value = presetId
+  }
   if (appConfig.value && selectedEncodePresetId.value) {
     const next = {
       ...appConfig.value,
@@ -505,7 +524,7 @@ onMounted(async () => {
     selectedEncodePresetId.value = appConfig.value?.defaultEncodePresetId
       || encodePresets.value[0]?.id
       || getDefaultEncodePreset(appConfig.value).id
-    applyEncodePreset()
+    applyConfigDefaults(appConfig.value)
   } catch (err) {
     pushDiag(`loadConfig failed: ${formatError(err)}`)
   }

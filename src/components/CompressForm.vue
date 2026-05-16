@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CompressJob, VideoEncodePreset } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus } from '../stores/avsStore'
@@ -8,6 +8,7 @@ import { useEncoderOptions } from '../composables/useEncoderOptions'
 import { useToast } from '../composables/useToast'
 import EncodeSettingsFields from './EncodeSettingsFields.vue'
 import AppSelect from './AppSelect.vue'
+import InfoHint from './InfoHint.vue'
 
 const job = defineModel<CompressJob>({ required: true })
 
@@ -23,7 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'open-logo-editor'): void
   (e: 'update:selected-encode-preset-id', value: string): void
-  (e: 'apply-encode-preset'): void
+  (e: 'apply-encode-preset', value?: string): void
   /** 字幕被分析后，把后端结果透传给上层（HomeView 用来做色彩矩阵匹配） */
   (e: 'subtitle-analyzed', result: SubtitleAnalysisResult | null): void
 }>()
@@ -32,6 +33,7 @@ const emit = defineEmits<{
 const { encoderOptions, loadEncoderOptions } = useEncoderOptions()
 const avsAutoEnabledReason = ref<string>('')
 const advancedOpen = ref(false)
+const presetMenuOpen = ref(false)
 const toast = useToast()
 
 const encodePresetOptions = computed(() => {
@@ -50,6 +52,10 @@ const selectedEncodePresetModel = computed({
   set(value: string | number) {
     emit('update:selected-encode-preset-id', String(value))
   }
+})
+
+const selectedEncodePresetName = computed(() => {
+  return encodePresetOptions.value.find((item) => item.value === selectedEncodePresetModel.value)?.label ?? ''
 })
 
 // 从 avsAutoEnabledReason 中提取检测到的标签
@@ -131,6 +137,8 @@ async function analyzeSubtitleForEffects() {
 watch(() => job.value.subtitlePath, analyzeSubtitleForEffects, { immediate: false })
 
 onMounted(async () => {
+  document.addEventListener('mousedown', closePresetMenuOnOutside)
+
   // 加载支持的编码器列表
   try {
     await loadEncoderOptions()
@@ -143,34 +151,10 @@ onMounted(async () => {
   }
   syncAvsAvailability()
 })
-const customVideoArgsTip = computed(() => {
-  const encoder = job.value.encoder
-  const common = [
-    '追加到视频编码参数之后、音频参数之前。',
-    '适合填写 preset/profile/pix_fmt/x264-params/x265-params 等视频编码选项。',
-    '',
-    '示例：',
-    '-preset slow -profile:v high -level 4.1 -pix_fmt yuv420p',
-  ]
-  if (encoder === 'libx264') {
-    common.push('-x264-params ref=8:bframes=10:aq-mode=3:aq-strength=0.7')
-  } else if (encoder === 'libx265') {
-    common.push('-x265-params aq-mode=1:psy-rd=2.0:vbv-maxrate=28000:vbv-bufsize=30000')
-  } else if (encoder === 'h264_nvenc') {
-    common.push('-spatial-aq 1 -temporal-aq 1')
-  } else if (encoder === 'h264_amf') {
-    common.push('-quality balanced -pix_fmt yuv420p')
-  } else if (encoder === 'h264_videotoolbox') {
-    common.push('-profile:v high -pix_fmt yuv420p')
-  }
-  common.push(
-    '',
-    '不允许填写：-i、-vf、-filter_complex、-c:v、-c:a、-map、-y、输出路径。',
-    '这些由本工具统一管理，避免命令结构被破坏。'
-  )
-  return common.join('\n')
-})
 
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', closePresetMenuOnOutside)
+})
 // 压制预设提示：解释作用 + 引导用户去哪儿管理预设
 const presetTip = '一键应用一组编码器、质量值、最大码率组合。\n\n在左侧侧边栏「预设」页面新增、修改或删除预设。\n应用预设后，下方质量值/最大码率/编码器仍可手动微调，不会回写到预设本身。'
 
@@ -239,10 +223,21 @@ function onOpenLogoEditor() {
   emit('open-logo-editor')
 }
 
-function applySelectedEncodePreset() {
-  emit('apply-encode-preset')
-  const presetName = encodePresetOptions.value.find((item) => item.value === selectedEncodePresetModel.value)?.label
-  toast.success(presetName ? `已应用：${presetName}` : '已应用预设', 2500)
+function togglePresetMenu() {
+  presetMenuOpen.value = !presetMenuOpen.value
+}
+
+function closePresetMenuOnOutside(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.preset-picker')) return
+  presetMenuOpen.value = false
+}
+
+function applyEncodePresetOption(presetId: string, presetName: string) {
+  emit('update:selected-encode-preset-id', presetId)
+  emit('apply-encode-preset', presetId)
+  presetMenuOpen.value = false
+  toast.success(presetName ? `已套用到当前参数：${presetName}` : '已套用预设', 2500)
 }
 
 function describeEncodePreset(preset: VideoEncodePreset): string {
@@ -285,34 +280,42 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
 
 <template>
   <section class="panel">
-    <div class="panel-heading">
+    <div class="panel-heading compress-heading">
       <div>
         <h2>压制参数</h2>
+      </div>
+      <div v-if="encodePresetOptions.length" class="preset-picker">
+        <button
+          type="button"
+          class="secondary preset-menu-trigger"
+          :title="selectedEncodePresetName ? `上次套用：${selectedEncodePresetName}` : '选择一个压制预设并套用到当前参数'"
+          @click="togglePresetMenu"
+        >
+          套用预设
+        </button>
+        <InfoHint
+          placement="left"
+          title="压制预设"
+          body="一键应用一组编码器、质量值、最大码率组合。应用后下方参数仍可手动微调，不会回写到预设本身。"
+          :items="['在左侧「预设」页面新增、修改或删除预设。', '适合把常用平台规格保存成固定方案。']"
+        />
+        <div v-if="presetMenuOpen" class="preset-menu">
+          <button
+            v-for="option in encodePresetOptions"
+            :key="option.value"
+            type="button"
+            class="preset-menu-option"
+            :title="option.title"
+            @click="applyEncodePresetOption(String(option.value), option.label)"
+          >
+            <span>{{ option.label }}</span>
+            <small>{{ option.description }}</small>
+          </button>
+        </div>
       </div>
     </div>
 
     <div class="compress-sections">
-      <section v-if="encodePresetOptions.length" class="form-section preset-section">
-        <div class="preset-row">
-          <label>
-            <span>
-              压制预设
-              <span class="hint tip-right" :data-tip="presetTip"></span>
-            </span>
-            <AppSelect
-              v-model="selectedEncodePresetModel"
-              class="preset-select"
-              :options="encodePresetOptions"
-            />
-          </label>
-          <div class="preset-actions">
-            <button type="button" class="secondary preset-apply" @click="applySelectedEncodePreset">
-              应用预设
-            </button>
-          </div>
-        </div>
-      </section>
-
       <section class="form-section settings-section">
         <EncodeSettingsFields v-model="job" :encoder-options="encoderOptions">
           <template #encoder-trailing>
@@ -326,13 +329,11 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
           <label class="custom-args-field">
             <span>
               附加 ffmpeg 视频参数
-              <span class="hint tip-right" :data-tip="customVideoArgsTip"></span>
             </span>
             <textarea
               v-model="job.customVideoArgs"
               rows="3"
               spellcheck="false"
-              placeholder="-preset slow -profile:v high -level 4.1 -pix_fmt yuv420p"
             ></textarea>
           </label>
           <p class="advanced-note">
@@ -347,19 +348,23 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
             <input v-model="job.needLogo" type="checkbox" />
             <span class="switch"></span>
             <span>压制 LOGO</span>
-            <span class="hint tip-right" data-tip="在视频画面上叠加一张 LOGO 图片。
-点击「配置 LOGO」按钮可视化设置图片、位置与大小。
-开关关闭时即使已配置布局也不会叠加。"></span>
+            <InfoHint
+              placement="right"
+              title="压制 LOGO"
+              body="在视频画面上叠加一张 LOGO 图片，可视化设置图片、位置与大小。"
+              :items="['点击「配置 LOGO」进入编辑器。', '关闭开关时，已保存的 LOGO 布局会保留，但不会参与压制。']"
+            />
           </label>
           <label class="switch-row">
             <input v-model="job.needYadif" type="checkbox" />
             <span class="switch"></span>
             <span>使用反交错压制</span>
-            <span class="hint" data-tip="对应命令：-vf yadif
-
-把交错信号合成连续画面，消除横向锯齿/梳状伪影。
-TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开启。
-网络发布的视频通常已经是逐行扫描，不需要开启。"></span>
+            <InfoHint
+              title="反交错压制"
+              command="-vf yadif"
+              body="把交错信号合成连续画面，消除横向锯齿或梳状伪影。"
+              :items="['TV 录制、转录、DV、磁带数字化素材常见隔行，建议开启。', '网络发布视频通常已经是逐行扫描，一般不需要开启。']"
+            />
           </label>
           <label class="switch-row" :class="{ 'switch-row-disabled': avsToggleDisabled }">
             <input
@@ -370,7 +375,13 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
             <span class="switch"></span>
             <span>AVS 压制模式</span>
             <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
-            <span class="hint tip-left" :data-tip="avsToggleTip"></span>
+            <InfoHint
+              placement="left"
+              title="AVS 压制模式"
+              command="AviSynth+ + VSFilterMod TextSubMod"
+              body="启用 AviSynth+ 脚本作为 ffmpeg 输入，字幕由 VSFilterMod 渲染；LOGO overlay 与 yadif 仍然有效。"
+              :items="['仅 Windows 支持，需要本机安装 AviSynth+，且 ffmpeg 启用 --enable-avisynth。', '适合复杂 ASS 特效字幕；不勾选则走 ffmpeg filter 模式。']"
+            />
           </label>
         </div>
 
@@ -431,13 +442,6 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
   margin-bottom: 0;
 }
 
-/* 「压制预设」与「质量值/编码器」是同一组字段，不再用 hairline 分隔 */
-.form-section.preset-section {
-  border-bottom: none;
-  padding-bottom: 0;
-  margin-bottom: 14px;
-}
-
 .section-heading {
   color: #43515c;
   font-size: 12.5px;
@@ -448,8 +452,8 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
 }
 .advanced-toggle {
   align-self: center;
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 38px;
+  padding: 0 14px;
   white-space: nowrap;
 }
 .advanced-panel {
@@ -459,30 +463,73 @@ TV 录制、转录、DV、磁带数字化等素材容易出现隔行，需要开
   padding: 12px;
   margin-top: 12px;
 }
-.preset-row {
-  align-items: flex-end;
-  display: flex;
-  gap: 10px;
+.compress-heading {
+  align-items: center;
 }
 
-.preset-row label {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  flex: 1;
-  min-width: 220px;
-}
-
-/* 字段标签字号继承默认，与 EncodeSettingsFields 中的「质量值/编码器」视觉一致 */
-
-.preset-actions {
+.preset-picker {
   align-items: center;
   display: flex;
-  gap: 10px;
+  flex: 0 0 auto;
+  gap: 8px;
+  position: relative;
 }
-.preset-apply {
+
+.preset-menu-trigger {
   min-height: 34px;
-  padding: 0 12px;
+  padding: 0 14px;
+}
+
+.preset-menu {
+  background: #fff;
+  border: 1px solid #e3e9ed;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  min-width: 280px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.preset-menu-option {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #18202a;
+  cursor: pointer;
+  display: block;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.preset-menu-option:hover,
+.preset-menu-option:focus-visible {
+  background: #f2f7f9;
+  outline: none;
+}
+
+.preset-menu-option span,
+.preset-menu-option small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-menu-option span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.preset-menu-option small {
+  color: #7a8894;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 3px;
 }
 .custom-args-field {
   display: flex;

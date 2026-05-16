@@ -94,12 +94,6 @@ pub fn build_with_options(
 
     args.extend(["-c:v".to_string(), job.encoder.clone()]);
 
-    if supports_x264_style_preset(&job.encoder)
-        && !has_custom_video_option(&custom_video_args, "-preset")
-    {
-        args.extend(["-preset".to_string(), "veryfast".to_string()]);
-    }
-
     args.extend(build_quality_args(
         &job.encoder,
         job.crf,
@@ -277,10 +271,6 @@ fn has_custom_video_option(tokens: &[String], option: &str) -> bool {
             .unwrap_or(token)
             .eq_ignore_ascii_case(option)
     })
-}
-
-fn supports_x264_style_preset(encoder: &str) -> bool {
-    matches!(encoder, "libx264" | "libx265")
 }
 
 /// 把 LogoLayout 百分比换算为像素并构造 `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段。

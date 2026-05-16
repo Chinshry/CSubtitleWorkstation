@@ -80,6 +80,6 @@ jobs:
             ---
             完整变更见提交历史。
           # 草稿模式：流水线只填充 assets，正式发布由你在 GitHub 页面点 Publish
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

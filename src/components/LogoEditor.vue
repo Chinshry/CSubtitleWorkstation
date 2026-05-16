@@ -709,7 +709,7 @@ onBeforeUnmount(() => {
                   aria-label="重命名"
                   @click="startRename(item, $event)"
                 >
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M12 20h9" />
                     <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
                   </svg>
@@ -722,7 +722,7 @@ onBeforeUnmount(() => {
                   aria-label="移除"
                   @click="removeRecent(item.path, $event)"
                 >
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M18 6 6 18M6 6l12 12" />
                   </svg>
                 </button>
@@ -870,7 +870,7 @@ export default { name: 'LogoEditor' }
 .le-body {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 260px 1fr;
   min-height: 0;
 }
 
@@ -1011,9 +1011,9 @@ export default { name: 'LogoEditor' }
   cursor: pointer;
   display: flex;
   gap: 8px;
-  /* 锁定行高度：缩略图 28px + 上下 padding 6×2 = 40px。
-     避免 editing 切换时 input 比文本高，导致整行跳动。 */
-  min-height: 40px;
+  height: 44px;
+  min-height: 44px;
+  overflow: hidden;
   padding: 6px;
   transition: background 0.12s ease;
 }
@@ -1043,7 +1043,7 @@ export default { name: 'LogoEditor' }
 }
 .le-recent-list li:hover .le-recent-name,
 .le-recent-list li:focus-within .le-recent-name {
-  padding-right: 42px;
+  padding-right: 52px;
 }
 
 /* dropzone：替代裸 button，作为选择/拖拽双入口 */
@@ -1105,14 +1105,15 @@ export default { name: 'LogoEditor' }
 }
 .le-recent-act {
   align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d8e2e8;
+  border-radius: 3px;
   color: inherit;
   cursor: pointer;
   display: flex;
-  height: 18px;
+  height: 22px;
   justify-content: center;
+  min-height: 22px;
   opacity: 0;
   padding: 0;
   pointer-events: none;
@@ -1120,18 +1121,17 @@ export default { name: 'LogoEditor' }
   top: 50%;
   transform: translateY(-50%);
   transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
-  width: 18px;
+  width: 22px;
 }
 /* 删除按钮贴最右，重命名按钮紧挨左边 */
 .le-recent-act.le-recent-rename {
-  right: 26px;
+  right: 32px;
 }
 .le-recent-act.le-recent-del {
-  right: 6px;
+  right: 7px;
 }
 .le-recent-list li:hover .le-recent-act,
 .le-recent-list li:focus-within .le-recent-act {
-  background: rgba(23, 107, 135, 0.08);
   opacity: 0.85;
   pointer-events: auto;
 }
@@ -1140,21 +1140,30 @@ export default { name: 'LogoEditor' }
   background: rgba(255, 255, 255, 0.18);
 }
 .le-recent-act:hover {
-  background: rgba(23, 107, 135, 0.16);
+  background: #f4f8fa;
+  border-color: #176b87;
   color: #176b87;
   opacity: 1 !important;
 }
 .le-recent-list li.active .le-recent-act:hover {
   background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.6);
   color: #fff;
+}
+.le-recent-list li.active .le-recent-rename:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #176b87;
 }
 .le-recent-del:hover {
   background: rgba(220, 38, 38, 0.14) !important;
+  border-color: #dc2626 !important;
   color: #dc2626 !important;
 }
 .le-recent-list li.active .le-recent-del:hover {
-  background: rgba(255, 255, 255, 0.22) !important;
-  color: #fff !important;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #dc2626 !important;
 }
 
 /* inline 重命名 input：占据原文件名位置，避免列表项高度跳动。
@@ -1166,8 +1175,9 @@ input.le-recent-input {
   color: #18202a;
   flex: 1;
   font-size: 12px;
-  height: 22px;
-  min-height: 22px;
+  height: 26px;
+  line-height: 24px;
+  min-height: 26px;
   min-width: 0;
   outline: none;
   padding: 0 6px;

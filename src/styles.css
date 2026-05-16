@@ -777,6 +777,116 @@ select option {
   visibility: visible;
 }
 
+.hint.rich-hint::after {
+  content: none;
+  display: none;
+}
+
+.rich-hint-card {
+  background: #1e293b;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.38);
+  color: #dbeafe;
+  display: grid;
+  gap: 7px;
+  left: 50%;
+  max-width: min(380px, calc(100vw - 40px));
+  min-width: 260px;
+  opacity: 0;
+  padding: 12px 14px;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
+  visibility: hidden;
+  width: max-content;
+  z-index: 210;
+}
+
+.rich-hint:hover .rich-hint-card,
+.rich-hint:focus .rich-hint-card,
+.rich-hint:focus-within .rich-hint-card {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  visibility: visible;
+}
+
+.rich-hint-card strong {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.rich-hint-card code {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 5px;
+  color: #bae6fd;
+  display: block;
+  font: 600 12px/1.45 "Cascadia Mono", Consolas, monospace;
+  padding: 5px 7px;
+  white-space: normal;
+}
+
+.rich-hint-body {
+  color: #cbd5e1;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.rich-hint-list {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  display: grid;
+  gap: 5px;
+  padding-top: 7px;
+}
+
+.rich-hint-list span {
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.45;
+  padding-left: 12px;
+  position: relative;
+}
+
+.rich-hint-list span::before {
+  background: #38bdf8;
+  border-radius: 50%;
+  content: '';
+  height: 4px;
+  left: 1px;
+  position: absolute;
+  top: 7px;
+  width: 4px;
+}
+
+.hint.rich-hint.tip-right .rich-hint-card {
+  left: -6px;
+  transform: translateY(-4px);
+}
+
+.hint.rich-hint.tip-right:hover .rich-hint-card,
+.hint.rich-hint.tip-right:focus .rich-hint-card,
+.hint.rich-hint.tip-right:focus-within .rich-hint-card {
+  transform: translateY(0);
+}
+
+.hint.rich-hint.tip-left .rich-hint-card {
+  left: auto;
+  right: -6px;
+  transform: translateY(-4px);
+}
+
+.hint.rich-hint.tip-left:hover .rich-hint-card,
+.hint.rich-hint.tip-left:focus .rich-hint-card,
+.hint.rich-hint.tip-left:focus-within .rich-hint-card {
+  transform: translateY(0);
+}
+
 /* tip-right 修饰：tooltip 锚点改为 hint 左缘，整体向右展开。
    用在靠 .workspace 左边界的 hint 上，避免居中展开越过容器被 overflow-x:hidden 裁剪、
    视觉上"被 sidebar 覆盖"。 */

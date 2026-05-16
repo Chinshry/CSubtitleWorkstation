@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { isWindows } from '../stores/platformStore'
 import AppSelect from './AppSelect.vue'
 
@@ -10,15 +10,33 @@ const props = defineProps<{
 
 const copyHint = ref('')
 
-type Quoting = 'auto' | 'posix' | 'windows' | 'raw'
+type Quoting = 'posix' | 'windows' | 'raw'
 
-// 默认按当前平台选 shell 方言；用户可手动切到另一种或"原始"
-const quoting = ref<Quoting>('auto')
+const nativeQuoting = computed<'posix' | 'windows'>(() => isWindows.value ? 'windows' : 'posix')
+const nativePlatformText = computed(() => isWindows.value ? '本机 Windows' : '本机 POSIX')
 
-const effectiveQuoting = computed<'posix' | 'windows' | 'raw'>(() => {
-  if (quoting.value === 'auto') return isWindows.value ? 'windows' : 'posix'
-  return quoting.value
+// 默认直接选中当前平台的真实格式；平台提示用旁边的状态 chip 表达，避免在菜单里塞一个冗余的“自动”选项。
+const quoteTouched = ref(false)
+const quoting = ref<Quoting>(nativeQuoting.value)
+
+const quoteModel = computed<Quoting>({
+  get() {
+    return quoting.value
+  },
+  set(value) {
+    quoteTouched.value = true
+    quoting.value = value
+  }
 })
+
+watch(nativeQuoting, (next) => {
+  if (!quoteTouched.value) quoting.value = next
+})
+
+function restoreNativeQuoting() {
+  quoteTouched.value = false
+  quoting.value = nativeQuoting.value
+}
 
 // POSIX (bash/zsh)：用单引号包裹，内部 ' → '\''
 function quotePosix(arg: string): string {
@@ -140,7 +158,7 @@ function quoteWindows(arg: string): string {
 const commandText = computed(() => {
   const args = props.command
   if (!args.length) return ''
-  switch (effectiveQuoting.value) {
+  switch (quoting.value) {
     case 'raw':
       return args.join(' ')
     case 'windows':
@@ -152,7 +170,7 @@ const commandText = computed(() => {
 })
 
 const viewHintText = computed(() => {
-  switch (effectiveQuoting.value) {
+  switch (quoting.value) {
     case 'raw':
       return '原始数组拼接（含空格/特殊字符路径不能直接粘到终端）'
     case 'windows':
@@ -187,17 +205,27 @@ async function copyCommand() {
         <p>{{ viewHintText }}</p>
       </div>
       <div class="command-tools">
+        <span class="quote-platform-chip" :title="`默认使用${nativePlatformText}对应的命令格式`">
+          {{ nativePlatformText }}
+        </span>
         <AppSelect
-          v-model="quoting"
+          v-model="quoteModel"
           class="quote-select"
           title="选择终端方言"
           :options="[
-            { value: 'auto', label: '自动（按本机平台）' },
             { value: 'windows', label: 'Windows · cmd/PowerShell' },
             { value: 'posix', label: 'POSIX · bash/zsh' },
             { value: 'raw', label: '原始（数组拼接，不转义）' }
           ]"
         />
+        <button
+          v-if="quoting !== nativeQuoting"
+          type="button"
+          class="quote-restore"
+          @click="restoreNativeQuoting"
+        >
+          恢复本机
+        </button>
         <button
           class="copy-btn"
           :class="{ active: copyHint }"
@@ -221,8 +249,35 @@ async function copyCommand() {
   align-items: center;
   gap: 8px;
 }
+.quote-platform-chip {
+  background: #e8f4f8;
+  border: 1px solid #c4dce5;
+  border-radius: 999px;
+  color: #176b87;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  padding: 7px 9px;
+}
 .quote-select {
   width: auto;
-  min-width: 200px;
+  min-width: 220px;
+}
+.quote-restore {
+  background: transparent;
+  border: 0;
+  color: #176b87;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 6px 2px;
+}
+.quote-restore:hover,
+.quote-restore:focus-visible {
+  color: #0f5268;
+  text-decoration: underline;
+  outline: none;
 }
 </style>
