@@ -739,13 +739,13 @@ onBeforeUnmount(() => {
   color: #176b87;
   cursor: pointer;
   display: flex;
-  gap: 5px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 800;
   justify-content: center;
   line-height: 1.25;
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 42px;
+  padding: 0 14px;
   text-align: center;
 }
 .template-list-create:hover {
@@ -761,9 +761,9 @@ onBeforeUnmount(() => {
 }
 .button-icon {
   flex: 0 0 auto;
-  height: 14px;
+  height: 16px;
   stroke-width: 2.4;
-  width: 14px;
+  width: 16px;
 }
 .template-list-row.active .template-list-item {
   background: #e8f4f8;

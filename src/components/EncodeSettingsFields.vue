@@ -118,7 +118,7 @@ const customBitrate = computed<number | undefined>({
             type="number"
             min="1"
             class="bitrate-input"
-            placeholder="例如 3000"
+            placeholder="如3000"
           />
           <span>Kbps</span>
         </span>
@@ -153,6 +153,8 @@ const customBitrate = computed<number | undefined>({
   align-items: center;
   display: flex;
   gap: 10px;
+  min-width: 0;
+  width: 100%;
 }
 .encoder-select {
   flex: 1;

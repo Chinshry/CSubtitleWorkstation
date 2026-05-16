@@ -15,7 +15,7 @@
         "title": "CC字幕压制工作站",
         "width": 1180,
         "height": 760,
-        "minWidth": 980,
+        "minWidth": 1160,
         "minHeight": 640,
         "dragDropEnabled": true,
         "decorations": false,

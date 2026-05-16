@@ -209,6 +209,7 @@ watch(
 /* 用 :where 把根选择器优先级降到 0，外层 .quote-select / .bitrate-select 等可轻松覆盖 width */
 :where(.app-select) {
   display: block;
+  min-width: 0;
   position: relative;
   width: 100%;
 }
@@ -226,6 +227,7 @@ watch(
   gap: 8px;
   justify-content: space-between;
   min-height: 38px;
+  min-width: 0;
   padding: 0 12px;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
   width: 100%;
@@ -252,6 +254,7 @@ watch(
 
 .app-select-value {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-align: left;
   text-overflow: ellipsis;
