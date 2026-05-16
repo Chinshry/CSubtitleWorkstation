@@ -211,13 +211,19 @@ ffmpeg version 7.1.1 ...
 ffmpeg 更新：检测用户本机 ffmpeg 版本并提示升级。
 ```
 
-第一版应用更新能力：
+第一版应用更新能力（✅ 已实现）：
 
-- 启动时可静默检查更新。
-- 设置页提供“检查更新”按钮。
+- 启动时可静默检查更新（用户可在设置页关闭）。
+- 设置页提供"检查更新"按钮。
 - 检测到新版本后显示版本号、更新说明。
-- 引导用户前往 GitHub Releases 下载新版安装包。
+- 引导用户前往 GitHub Releases 下载新版安装包，不在应用内自动下载/安装。
 - 更新失败时给出明确错误信息。
+
+实现要点：
+
+- 后端 `commands/updater.rs::get_current_app_version` 提供当前版本号；前端 `stores/updateStore.ts` 负责拉取 manifest、比较版本、广播 Toast 通知。
+- 全局 `components/AppToast.vue` 渲染右上角 Toast；`composables/useToast.ts` 暴露 `success/info/error` 调用入口。
+- 启动检查的开关写入 `AppConfig.checkUpdateOnStartup`，由 `App.vue` 启动时按开关条件触发。
 
 第一版使用静态 JSON：
 
@@ -228,10 +234,8 @@ latest.json
         ↓
 前端更新检测
         ↓
-提示用户前往 GitHub Releases 下载
+Toast 通知 + 前往 GitHub Releases 下载
 ```
-
-当前第一版只做版本检测，不在应用内自动下载和安装。
 
 静态更新 JSON 需要包含：
 
@@ -240,6 +244,89 @@ latest.json
 - `pub_date`
 - `platforms`
 - 各平台安装包 URL
+
+固定 manifest 地址：
+
+```text
+https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json
+```
+
+### 3.7 编码预设需求（✅ 已实现）
+
+为了让"快速切换不同硬件/质量场景的编码方案"成本可控，将单一的 `defaultEncoder + defaultCrf` 升级为预设集合：
+
+- 内置 5 套预设：`x264 平衡` / `x265 体积优先` / `NVENC 快速` / `AMF 快速` / `Apple 快速`。
+- 每套预设包含：`encoder` / `crf` / `maxBitrate?` / `customVideoArgs?`，其中 `customVideoArgs` 允许写入额外 ffmpeg 视频参数（如 `-preset slow`、`-profile:v high` 等）。
+- 支持新增/编辑/删除/复制自定义预设；内置预设允许覆盖参数但不允许删除。
+- 支持整体导入/导出 JSON 文件，方便跨机器同步。
+- 主页编辑区通过下拉框直接切换当前任务使用的预设；切换即时反映到命令预览。
+
+涉及模块：
+
+- `src/utils/encodePresets.ts`：内置预设清单、`normalizeEncodePresets` 兼容旧版配置迁移、`applyEncodePresetToJob` 把预设套到 `CompressJob`。
+- `src/components/EncodeSettingsFields.vue`：编码器/CRF/最大码率的可复用编辑控件，被压制表单和预设页同时使用。
+- `src/composables/useEncoderOptions.ts`：从后端 `get_supported_encoders` 拉取本机可用编码器列表，缺失时回退到全量列表。
+- 后端：`models/app_config.rs` 新增 `encodePresets` / `defaultEncodePresetId` 字段；`services/encoder_detector.rs` 负责编码器探测。
+
+### 3.8 输出文件名模板需求（✅ 已实现）
+
+把"输出文件名"从单一字符串升级为多模板：
+
+- 单模板内可插入变量：`{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` / `{date:YYMMDD}`。
+- 输出目录策略：`sameAsVideo`（与视频同目录） / `fixed`（固定目录） / `manual`（每次手动选择）。
+- 支持保存多套模板，可设默认。
+- 预设页提供变量按钮直接插入到模式串光标位置，附带实时预览。
+- 与旧版字段 `outputNameTemplate` 完全向后兼容：未配置 `outputTemplates` 时按旧字段生成单一默认模板。
+
+涉及模块：
+
+- `src/utils/outputTemplates.ts`：默认模板、变量定义、`normalizeOutputTemplates`、`renderOutputName`。
+- 后端：`models/app_config.rs` 新增 `outputTemplates` / `defaultOutputTemplateId` 字段。
+
+### 3.9 字幕检查面板需求（✅ 已实现）
+
+把字幕选定后所有的"风险类提示"统一收纳到一个面板里，避免散落在表单各处：
+
+1. **VSFilterMod 特效标签检测**：命中即提示具体匹配到的标签，给出"启用 AVS"建议（详见 3.2）。
+2. **ASS 色彩矩阵不匹配警告**：从 ASS Script Info 解析 `YCbCr Matrix`，与视频元数据中的色彩矩阵比较，不一致时高亮提示，并给出"在播放器/压制时显式指定色彩空间"的建议。
+3. **基础统计**：行数、ASS/SRT 类型识别等。
+
+涉及模块：
+
+- `src/components/SubtitleCheckPanel.vue`：统一渲染所有警告项与可执行操作。
+- `src/components/VideoMetaCard.vue`：视频侧透出 `colorMatrix` 字段供前端对比。
+- 老的独立组件 `ColorMatrixWarningBanner.vue` 已移除，原职责合并进 `SubtitleCheckPanel`。
+
+### 3.10 窗口状态记忆需求（✅ 已实现）
+
+引入 `tauri-plugin-window-state`：
+
+- 自动持久化窗口位置、宽高、最大化状态、是否全屏等。
+- 关闭重开时恢复到上次的样子。
+- 用户无需任何配置，开箱可用。
+
+实现要点：
+
+- `src-tauri/Cargo.toml` 增加 `tauri-plugin-window-state = "2"` 依赖。
+- `src-tauri/src/lib.rs` 在 Tauri Builder 上注册 `tauri_plugin_window_state::Builder::default().build()`。
+
+### 3.11 macOS subtitles/ass filter 自检（✅ 已实现）
+
+macOS 上的精简版 ffmpeg（如 `brew install ffmpeg` 默认包）可能未启用 `--enable-libass`，导致字幕渲染失败。为避免压到一半才失败，应用启动时多做一步自检：
+
+- 启动后解析 `ffmpeg -filters` 输出，识别其中是否含 `subtitles` / `ass` 这两个 filter。
+- 结果写入 `FfmpegStatus.subtitleFilterAvailable` / `assFilterAvailable`，前端在设置页与压制表单显式呈现状态。
+- 在 macOS 上 `ffmpeg_locator` 优先匹配 Homebrew 路径下的 `ffmpeg-full`（`/opt/homebrew/bin/ffmpeg-full` / `/usr/local/bin/ffmpeg-full`），避免命中精简版 `ffmpeg`。
+- 缺失 filter 时压制前会直接拒绝执行，并提示用户改装 `ffmpeg-full`。
+
+此外，macOS 上构建 `-vf` 参数时改用显式 `filename=<path>` 形式：
+
+```text
+movie=filename=<path>:f=image2,scale=W:H[wm]
+subtitles=filename=<sub-path>:original_size=WxH
+```
+
+并对路径中的空格 / `:` / `,` / `;` 做转义，避免与 ffmpeg filter 解析冲突；Windows 沿用原先的单引号 + 反斜杠双倍方案。
 
 ## 4. 页面设计
 
@@ -301,15 +388,21 @@ AVS 模式显示规则：
 - 输出文件路径。
 - 错误详情。
 
-### 4.4 后续可扩展页面
+### 4.4 预设管理页面（✅ 已实现）
+
+`PresetsView.vue` 集中管理两类资源：
+
+- **编码预设**：列表 + 编辑器双栏布局，左侧展示所有预设、支持拖拽排序与设为默认；右侧通过 `EncodeSettingsFields` 组件编辑当前选中预设的 `encoder` / `crf` / `maxBitrate` / `customVideoArgs`；底部按钮提供导入、导出、新增、删除、复制等操作。
+- **输出文件名模板**：列表 + 编辑器双栏布局，编辑区提供变量按钮（点击在模式串光标位置插入对应变量），下方实时渲染预览；可选三种输出目录策略。
+
+所有改动通过 `saveConfig` 写回 `AppConfig`，主页编辑区下拉框立即可见。
+
+### 4.5 后续可扩展页面
 
 第一版之后可扩展：
 
 - 批量任务队列。
-- 预设管理。
 - 历史记录。
-- 压制结果对比。
-- 自动清理临时文件。
 
 ## 5. 系统架构设计
 
@@ -348,6 +441,7 @@ CSubtitleWorkstation/
     views/
       HomeView.vue
       SettingsView.vue
+      PresetsView.vue          # 编码预设 + 输出文件名模板管理
     components/
       VideoMetaCard.vue        # 视频信息卡
       FfmpegStatus.vue
@@ -355,22 +449,36 @@ CSubtitleWorkstation/
       CommandPreviewCard.vue
       JobLogPanel.vue
       LogoEditor.vue           # 可视化 LOGO 摆放编辑器
+      SubtitleCheckPanel.vue   # 字幕检查面板（特效标签 / 色彩矩阵警告）
+      EncodeSettingsFields.vue # 编码器/CRF/码率/自定义参数 可复用编辑控件
+      AppToast.vue             # 全局 Toast 通知
+      InfoHint.vue             # 表单旁的小提示气泡
+      TitleBar.vue             # 自定义沉浸式标题栏
+      AppSelect.vue            # 通用下拉选择
     stores/
       ffmpegStore.ts
       avsStore.ts
       dropStore.ts
       platformStore.ts
+      updateStore.ts           # 应用更新检测状态 + Toast 广播
+    composables/
+      useEncoderOptions.ts     # 拉取本机支持的编码器列表
+      useToast.ts              # 注入式 Toast 调用入口
+    utils/
+      encodePresets.ts         # 内置预设 / normalize / 套用到 CompressJob
+      outputTemplates.ts       # 默认模板 / 变量定义 / renderOutputName
     api/
       ffmpeg.ts
       compress.ts
       video.ts
       config.ts
+      encoder.ts               # get_supported_encoders 调用
     types.ts
 
   src-tauri/
     tauri.conf.json
-    Cargo.toml
-    resources/avs/           # 内置 AVS 插件 DLL
+    Cargo.toml                 # 含 tauri-plugin-window-state 用于窗口状态记忆
+    resources/avs/             # 内置 AVS 插件 DLL
       VSFilterMod.dll
       LSMASHSource.dll
     src/
@@ -378,24 +486,26 @@ CSubtitleWorkstation/
       commands/
         ffmpeg.rs
         compress.rs
-        config.rs
-        updater.rs
-        avs.rs               # AVS 检测命令
-        video.rs             # inspect_video_meta / extract_video_frame / clear_frame_cache
+        config.rs              # 含 export_encode_presets / import_encode_presets
+        updater.rs             # get_current_app_version
+        avs.rs                 # AVS 检测命令
+        video.rs               # inspect_video_meta / extract_video_frame / clear_frame_cache
       services/
-        ffmpeg_locator.rs
-        command_builder.rs
-        avs_detector.rs      # AviSynth+ 与 demuxer 检测
-        avs_workspace.rs     # AVS 工作目录与脚本生成
-        video_meta.rs        # ffprobe / ffmpeg -i 解析视频元数据 + rotation 修正
-        frame_extractor.rs   # LOGO 编辑器抽帧缓存
-        config_store.rs      # 本地 JSON 配置读写
-        ass_logo.rs          # 旧 ASS LOGO 行解析（dead_code，保留作未来导入入口）
+        ffmpeg_locator.rs      # 含 subtitles/ass filter 自检；macOS 优先 ffmpeg-full
+        command_builder.rs     # 平台分流构建 -vf；自定义视频参数注入
+        avs_detector.rs        # AviSynth+ 与 demuxer 检测
+        avs_workspace.rs       # AVS 工作目录与脚本生成
+        video_meta.rs          # ffprobe / ffmpeg -i 解析元数据 + rotation 修正 + colorMatrix
+        frame_extractor.rs     # LOGO 编辑器抽帧缓存
+        config_store.rs        # 本地 JSON 配置读写
+        encoder_detector.rs    # 本机支持的编码器探测
+        ass_logo.rs            # 旧 ASS LOGO 行解析（dead_code，保留作未来导入入口）
       models/
-        app_config.rs        # AppConfig / LogoLayout / LogoLayoutEntry / RecentLogo
-        compress_job.rs
-        ffmpeg_status.rs
-        avs_status.rs        # AVS 检测结果
+        app_config.rs          # AppConfig / LogoLayout / LogoLayoutEntry / RecentLogo
+                               # / VideoEncodePreset / OutputNameTemplate
+        compress_job.rs        # 含 customVideoArgs
+        ffmpeg_status.rs       # 含 subtitle_filter_available / ass_filter_available
+        avs_status.rs          # AVS 检测结果
 ```
 
 ## 7. 核心数据结构
@@ -412,7 +522,8 @@ type CompressJob = {
   maxBitrate?: number              # undefined=不限制 / 0=自动(原码率+1000) / >0=自定义
   needLogo: boolean
   needYadif: boolean
-  encoder: 'libx264' | 'h264_nvenc' | 'h264_amf' | 'h264_videotoolbox'
+  encoder: 'libx264' | 'libx265' | 'h264_nvenc' | 'h264_amf' | 'h264_videotoolbox'
+  customVideoArgs?: string         # 来自当前编码预设的额外视频参数（如 -preset slow -profile:v high）
   logoDir?: string
   useAvs?: boolean                 # AVS 兼容模式开关（仅 Windows）
   logoLayout?: LogoLayout | null   # 可视化编辑器输出的 LOGO 布局（百分比）
@@ -439,6 +550,8 @@ type FfmpegStatus = {
   ffmpegVersion?: string
   ffprobePath?: string
   ffprobeVersion?: string
+  subtitleFilterAvailable: boolean   # ffmpeg -filters 是否含 subtitles
+  assFilterAvailable: boolean        # ffmpeg -filters 是否含 ass
   message?: string
 }
 ```
@@ -468,28 +581,61 @@ type AppConfig = {
   defaultNeedLogo: boolean
   defaultNeedYadif: boolean
   defaultEncoder: string
-  outputNameTemplate: string
+  outputNameTemplate: string                   # 旧字段，向后兼容（无 outputTemplates 时使用）
+  outputTemplates?: OutputNameTemplate[]       # 多模板列表
+  defaultOutputTemplateId?: string             # 默认模板 id
+  encodePresets?: VideoEncodePreset[]          # 多编码预设列表
+  defaultEncodePresetId?: string               # 默认编码预设 id
   checkUpdateOnStartup: boolean
   defaultLogoDir?: string
-  defaultUseAvs?: boolean              # AVS 模式默认开关
-  recentLogos?: RecentLogo[]           # LOGO 编辑器侧栏「最近使用」列表（最多 10 项）
-  lastLogoLayout?: LogoLayout | null   # 未命中分辨率桶时的全局 fallback
-  logoLayouts?: LogoLayoutEntry[]      # 按 (分辨率桶, LOGO 路径) 区分的布局记忆
+  defaultUseAvs?: boolean                      # AVS 模式默认开关
+  recentLogos?: RecentLogo[]                   # LOGO 编辑器侧栏「最近使用」列表（最多 10 项）
+  lastLogoLayout?: LogoLayout | null           # 未命中分辨率桶时的全局 fallback
+  logoLayouts?: LogoLayoutEntry[]              # 按 (分辨率桶, LOGO 路径) 区分的布局记忆
+}
+
+type VideoEncodePreset = {
+  id: string
+  name: string
+  encoder: CompressJob['encoder']
+  crf: number
+  maxBitrate?: number
+  customVideoArgs?: string                     # 写入 ffmpeg 视频侧的额外参数
+  isDefault?: boolean
+}
+
+type OutputNameTemplate = {
+  id: string
+  name: string
+  pattern: string                              # 支持 {video_name} {resolution} {encoder} {crf} {date:YYYYMMDD} 等
+  outputDirMode: 'sameAsVideo' | 'fixed' | 'manual'
+  fixedOutputDir?: string                      # outputDirMode=fixed 时使用
+  isDefault?: boolean
 }
 
 type RecentLogo = {
   path: string
-  lastUsedAt: number                   # Unix 毫秒
+  lastUsedAt: number                           # Unix 毫秒
+  displayName?: string                         # 用户自定义昵称，缺省回退到文件名
 }
 
 type LogoLayoutEntry = {
-  bucket: string                       # 720p-landscape / 720p-portrait / 1080p-landscape / 1080p-portrait / 4k-landscape / 4k-portrait
+  bucket: string                               # 720p-landscape / 720p-portrait / 1080p-landscape / 1080p-portrait / 4k-landscape / 4k-portrait
   path: string
   xPct: number
   yPct: number
   wPct: number
   hPct: number
   lastUsedAt: number
+}
+
+type AppUpdateInfo = {
+  available: boolean
+  currentVersion: string
+  latestVersion?: string
+  notes?: string
+  pubDate?: string
+  downloadUrl?: string
 }
 ```
 
@@ -500,9 +646,10 @@ type LogoLayoutEntry = {
 ```text
 detect_ffmpeg()
 select_ffmpeg_path(path)
-get_ffmpeg_status()
+get_ffmpeg_status()                  # 含 subtitleFilterAvailable / assFilterAvailable
 check_ffmpeg_version()
 reset_ffmpeg_to_system_path()
+get_supported_encoders()             # 本机可用编码器探测，供前端预设页与下拉列表使用
 ```
 
 ### 8.2 AVS 相关命令
@@ -517,7 +664,7 @@ detect_avs()                 # 检测 AviSynth+ 与 ffmpeg avisynth demuxer
 start_compress(job)
 cancel_compress(job_id)
 preview_ffmpeg_command(job)
-inspect_video_meta(path)           # ffprobe 优先 / ffmpeg -i 回退；返回的 width/height 已应用 rotation
+inspect_video_meta(path)           # ffprobe 优先 / ffmpeg -i 回退；返回的 width/height 已应用 rotation；含 colorMatrix
 extract_video_frame(path, time)    # LOGO 编辑器抽帧；返回应用临时目录中 PNG 路径
 clear_frame_cache()                # 编辑器关闭时清理抽帧缓存
 ```
@@ -528,6 +675,8 @@ clear_frame_cache()                # 编辑器关闭时清理抽帧缓存
 load_config()
 save_config(config)
 reset_config()
+export_encode_presets(path)        # 把当前 encodePresets 导出为 JSON
+import_encode_presets(path)        # 从 JSON 合并 encodePresets，按 id 去重
 ```
 
 ### 8.5 应用更新相关命令
@@ -535,6 +684,12 @@ reset_config()
 ```text
 get_current_app_version()
 ```
+
+前端职责（在 `stores/updateStore.ts` 中实现）：
+
+- 拉取固定 manifest 地址 `https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json`
+- 与 `get_current_app_version()` 返回的版本号比较，决定 `available` 状态
+- 通过 `AppToast` 推送提示，并保存 `AppUpdateInfo` 给设置页展示
 
 ## 9. ffmpeg 执行策略
 
@@ -576,38 +731,35 @@ Command::new(ffmpeg_path)
 ```text
 /opt/homebrew/bin/ffmpeg
 /usr/local/bin/ffmpeg
+/opt/homebrew/bin/ffmpeg-full        # 优先匹配（含 libass）
+/usr/local/bin/ffmpeg-full
 ```
 
 - 硬件编码可考虑 `h264_videotoolbox`。
 - 不支持 AviSynth 工作流，统一走 ffmpeg filter 模式（libass 字幕渲染）。
 - AVS 开关在 macOS 上自动禁用，CompressForm 与 SettingsView 均有明确提示。
+- 启动会自动检测 `subtitles` / `ass` filter 是否可用；精简版 ffmpeg 缺失 libass 时，前端会提示用户改装 `brew install ffmpeg-full`，并在压制前直接拒绝执行避免中途失败。
+- `-vf` 参数构建采用 `movie=filename=<path>` / `subtitles=filename=<path>` 显式形式，对路径中的空格 / `:` / `,` / `;` 做转义；Windows 仍保留单引号 + 反斜杠双倍方案。
 
 ## 11. 第一版 MVP 范围
 
-第一版必须完成：
 
-- Tauri + Vue + TypeScript 项目。
-- 主页面文件拖拽。
-- `ffmpeg` 自动检测。
-- 手动选择 `ffmpeg` 路径。
-- `ffmpeg` 版本检测。
-- 基础压制参数。
-- ASS / SRT 字幕压制。
+
+- Tauri + Vue + TypeScript 项目（✅ 已完成）。
+- 主页面文件拖拽（✅ 已完成）。
+- `ffmpeg` 自动检测 + 版本检测 + 手动路径选择 + 系统路径回退（✅ 已完成）。
+- macOS 上 `subtitles` / `ass` filter 自检 + `ffmpeg-full` 优先匹配（✅ 已完成）。
+- 基础压制参数 + ASS / SRT 字幕压制（✅ 已完成）。
 - **可视化 LOGO 叠加**（✅ 已完成）：在视频抽帧上拖放 / 四角缩放摆放 LOGO，按百分比存储；布局按 (LOGO, 分辨率桶) 维度独立记忆；旋转视频自动修正显示尺寸。
 - **AVS 兼容模式**（✅ 已完成）：Windows 上检测 AviSynth+ 与 ffmpeg avisynth demuxer，启用时通过内置 DLL 驱动的脚本渲染字幕。
-- 实时日志。
-- 取消任务。
-- 本地配置保存。
-- 应用本体检查更新。
-
-第一版暂不做：
-
-- 内置 `ffmpeg`。
-- 自动下载并安装 `ffmpeg`。
-- 复杂批量队列。
-- 云端账号。
-- 插件系统。
-- 完整 ASS 语法解析器。
+- **编码预设管理**（✅ 已完成）：内置 5 套预设，支持自定义/导入导出；通过 `customVideoArgs` 自由扩展 ffmpeg 视频侧参数。
+- **输出文件名模板**（✅ 已完成）：多模板 + 变量占位符 + 三种输出目录策略。
+- **字幕检查面板**（✅ 已完成）：整合 VSFilterMod 特效标签提示与 ASS 色彩矩阵不匹配警告。
+- **窗口状态记忆**（✅ 已完成）：tauri-plugin-window-state。
+- 实时日志（✅ 已完成）。
+- 取消任务（✅ 已完成）。
+- 本地配置保存（✅ 已完成）。
+- 应用本体检查更新 + Toast 通知（✅ 已完成）。
 
 ## 12. 开发阶段计划
 

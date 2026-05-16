@@ -51,15 +51,20 @@
 
 - 🎬 **拖拽导入** — 把视频和字幕直接拖到窗口，自动按扩展名分发
 - 📊 **视频信息卡** — 自动调用 ffprobe 解析分辨率、帧率、编码器、时长等，支持 CFR/VFR 识别
-- 🎨 **可视化参数** — CRF、码率、编码器（x264/NVENC/AMF/VideoToolbox）一目了然
+- 🎨 **可视化参数** — CRF、码率、编码器（x264/x265/NVENC/AMF/VideoToolbox）一目了然
+- 🧰 **编码预设管理** — 内置 `x264 平衡` / `x265 体积优先` / `NVENC 快速` / `AMF 快速` / `Apple 快速` 等多套预设，可在「预设」页新增/编辑/导入导出，主页直接切换
+- 📝 **输出文件名模板** — 支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` 等变量，按模板生成输出名；可保存多套模板并设为默认
 - 🖼️ **LOGO 可视化编辑 + 布局保存** — 在视频抽帧上拖放 LOGO，支持四角缩放，为不同分辨率（720p/1080p/4K）和屏幕方向（横/竖屏）各自保存一套 LOGO 位置，下次打开自动恢复
 - 🎞️ **反交错处理** — yadif 可选开关，处理交错素材
 - 🔤 **特效字幕压制**（仅 Windows）— 使用 AviSynth+ 脚本引擎处理复杂特效字幕（如矢量绘制、img 标签等），相比 ffmpeg libass 支持更完善
 - 🧠 **特效标签自动识别**（仅 Windows）— 选定字幕后自动扫描 VSFilterMod 扩展标签（`\fsc` / `\xblur` / `\jitter` / `\distort` / `\img` 等），命中即自动勾选「AVS 压制」并在界面提示具体匹配到的标签，省去人工判断特效字幕的步骤
-- 👁️ **命令预览** — 开始压制前预览完整 ffmpeg 参数
+- 🔍 **字幕检查面板** — 集中展示字幕风险：VSFilterMod 特效标签、ASS 色彩矩阵（YCbCr Matrix）与视频不匹配警告等，命中即给出建议处理方式
+- 👁️ **命令预览** — 开始压制前预览完整 ffmpeg 参数，支持折叠/复制
 - 📈 **实时进度** — 进度条、当前时间/总时长、输出大小、速度、fps、码率、原始 status 行
 - 📝 **完整日志** — ffmpeg stdout/stderr 全程透出，按 `\r` 与 `\n` 两种分隔符切行
 - ⏹️ **取消任务** — 压制过程中随时取消，进程优雅退出，已编码片段保留可播放
+- 🔔 **应用更新检查** — 启动时静默检查（可关闭）或在设置页手动触发，发现新版通过 Toast 通知并引导前往 GitHub Releases 下载
+- 🍎 **macOS 兼容自检** — 启动检测 ffmpeg 是否包含 `subtitles` / `ass` filter，缺失时直接提示安装 `ffmpeg-full`（Homebrew），避免压到一半才失败
 
 ---
 
@@ -82,11 +87,13 @@
 | **LOGO 叠加** | ✅ 可选层级（字幕上/下） | ✅ 仅字幕在上 LOGO 在下 |
 | **反交错** | ✅ | ✅ |
 | **特效字幕压制** | ✅ | ❌ |
+| **subtitles/ass filter 自检** | ✅ | ✅（缺失会提示装 `ffmpeg-full`） |
 | **硬件加速** | NVIDIA NVENC、AMD AMF | Apple VideoToolbox |
 | **安装包格式** | NSIS 安装程序 | Universal DMG（Intel + Apple Silicon） |
 
 > macOS 版本不支持特效字幕压制（AviSynth+ 仅 Windows），统一使用 ffmpeg libass 字幕渲染。
 > macOS 版本 LOGO 层级固定为"字幕在上 LOGO 在下"，不支持切换到"LOGO 在上 字幕在下"。
+> macOS 上的精简版 ffmpeg（如 `brew install ffmpeg`）可能未启用 `--enable-libass`，本应用启动会自动检测；如缺失 `subtitles` / `ass` filter，请改装 `brew install ffmpeg-full`。
 
 ---
 
@@ -173,6 +180,19 @@
 可以。点击「取消」按钮，ffmpeg 进程会收到 SIGINT 信号优雅退出（相当于 Ctrl+C），已编码的部分会被正确写入文件尾，保证输出仍然可播放。
 
 </details>
+
+<details>
+<summary><strong>编码预设和输出文件名模板在哪里管理？</strong></summary>
+
+侧边栏「预设」页面集中管理两类资源：
+
+- **编码预设**：内置 `x264 平衡` / `x265 体积优先` / `NVENC 快速` / `AMF 快速` / `Apple 快速` 五套；可新增/编辑/删除自定义预设，支持 `customVideoArgs` 自由扩展 ffmpeg 参数；可导入/导出 JSON 在多机之间同步。
+- **输出文件名模板**：支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` / `{date:YYMMDD}` 等变量，可选「与视频同目录」/「固定目录」/「每次手动选择」三种输出目录策略，可保存多套并设为默认。
+
+主页编辑区直接通过下拉框切换当前任务使用的预设和模板。
+
+</details>
+
 
 ---
 
