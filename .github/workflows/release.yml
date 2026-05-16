@@ -1,33 +1,157 @@
 name: Release
 
-# 触发条件：
-#   1. 推送 v* 形如 v0.1.0 的 tag
-#   2. 仓库 Actions 页面手动 dispatch（用于在不发版的情况下试跑流水线）
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example 0.1.1'
+        required: true
+        type: string
+      overwrite:
+        description: 'Delete the existing GitHub Release/tag and rebuild this version'
+        required: false
+        default: false
+        type: boolean
+      notes:
+        description: 'Update notes shown by the in-app update checker'
+        required: false
+        default: '请查看 GitHub Release 获取本次更新内容。'
+        type: string
 
-# tauri-action 需要 contents:write 才能创建 Release 与上传 assets
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare version and tag
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_OVERWRITE: ${{ inputs.overwrite }}
+          INPUT_NOTES: ${{ inputs.notes }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            TAG="$REF_NAME"
+            VERSION="${TAG#v}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION="$INPUT_VERSION"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+            echo "Invalid version: $VERSION"
+            echo "Use a version like 0.1.1"
+            exit 1
+          fi
+
+          TAG="v$VERSION"
+          OVERWRITE="${INPUT_OVERWRITE:-false}"
+
+          RELEASE_EXISTS=false
+          TAG_EXISTS=false
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            RELEASE_EXISTS=true
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+          fi
+
+          if [ "$OVERWRITE" != "true" ] && { [ "$RELEASE_EXISTS" = "true" ] || [ "$TAG_EXISTS" = "true" ]; }; then
+            echo "$TAG already exists. Re-run with overwrite=true to rebuild this version."
+            exit 1
+          fi
+
+          if [ "$OVERWRITE" = "true" ]; then
+            if [ "$RELEASE_EXISTS" = "true" ]; then
+              gh release delete "$TAG" --yes --cleanup-tag
+            elif [ "$TAG_EXISTS" = "true" ]; then
+              git push origin ":refs/tags/$TAG"
+            fi
+
+            git tag -d "$TAG" >/dev/null 2>&1 || true
+          fi
+
+          node -e "
+            const fs = require('fs');
+            const pkgPath = 'package.json';
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            pkg.version = process.env.INPUT_VERSION;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+
+            const cargoPath = 'src-tauri/Cargo.toml';
+            let cargo = fs.readFileSync(cargoPath, 'utf8');
+            cargo = cargo.replace(/^version = \".*\"$/m, 'version = \"' + process.env.INPUT_VERSION + '\"');
+            fs.writeFileSync(cargoPath, cargo);
+
+            const version = process.env.INPUT_VERSION;
+            const tag = 'v' + version;
+            const manifestPath = 'docs/updates/latest.json';
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            manifest.version = version;
+            manifest.notes = process.env.INPUT_NOTES || '请查看 GitHub Release 获取本次更新内容。';
+            manifest.pub_date = new Date().toISOString();
+            manifest.platforms = {
+              'windows-x86_64': {
+                url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_x64-setup.exe`
+              },
+              'darwin-universal': {
+                url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_universal.dmg`
+              }
+            };
+            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+          "
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/Cargo.toml docs/updates/latest.json
+
+          if git diff --cached --quiet; then
+            echo "Version files already contain $VERSION"
+          else
+            git commit -m "chore: release $TAG"
+            git push origin HEAD:refs/heads/${{ github.ref_name }}
+          fi
+
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build (${{ matrix.label }})
+    needs: prepare
     strategy:
-      # 单平台失败不打断其他平台
       fail-fast: false
       matrix:
         include:
-          # Windows: 仅出 NSIS 安装包，配合 tauri.windows.conf.json
           - label: 'windows-x64'
             platform: 'windows-latest'
             args: ''
-          # macOS Universal: 一个 .dmg 同时兼容 Apple Silicon 与 Intel Mac。
-          # 在 macos-latest (arm64) runner 上交叉编译 x86_64 部分，避免依赖
-          # 资源紧张的 macos-13 (Intel) runner，且用户无需在 Intel/ARM 间选择。
           - label: 'macos-universal'
             platform: 'macos-latest'
             args: '--target universal-apple-darwin'
@@ -37,6 +161,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -47,39 +173,35 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          # macOS universal 需要两个 darwin triple；Windows 用 host 默认即可
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          # 不同矩阵的 target 不一样，缓存按 label 分桶避免互相污染
           key: ${{ matrix.label }}
 
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build & publish (tauri-action)
+      - name: Build & publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # 推 tag 触发时用 tag 名；手动 dispatch 时 ref_name 是分支名（不会建 release，仅试构建产物）
-          tagName: ${{ github.event_name == 'push' && github.ref_name || '' }}
-          releaseName: 'CC 字幕压制工作站 ${{ github.ref_name }}'
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: 'CC 字幕压制工作站 ${{ needs.prepare.outputs.tag }}'
           releaseBody: |
             ## 安装
 
             - **Windows**：下载 `*-setup.exe` 安装包，双击运行。
-            - **macOS**：下载 `*_universal.dmg`，同时兼容 Apple Silicon (M 系列) 与 Intel Mac。
+            - **macOS**：下载 `*_universal.dmg`，兼容 Apple Silicon 和 Intel Mac。
 
             > macOS 版本不支持 AVS 压制路线（仅 Windows）。
-            > macOS 首次打开如提示「无法验证开发者」，请右键应用 → 选「打开」，详见 README。
+            > macOS 首次打开如提示“无法验证开发者”，请右键应用 -> 打开。
 
             ---
             完整变更见提交历史。
-          # 草稿模式：流水线只填充 assets，正式发布由你在 GitHub 页面点 Publish
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
