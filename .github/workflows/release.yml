@@ -95,35 +95,35 @@ jobs:
             git tag -d "$TAG" >/dev/null 2>&1 || true
           fi
 
-          node -e "
-            const fs = require('fs');
-            const pkgPath = 'package.json';
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-            pkg.version = process.env.INPUT_VERSION;
-            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+          node <<'NODESCRIPT'
+          const fs = require('fs');
+          const pkgPath = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          pkg.version = process.env.INPUT_VERSION;
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
-            const cargoPath = 'src-tauri/Cargo.toml';
-            let cargo = fs.readFileSync(cargoPath, 'utf8');
-            cargo = cargo.replace(/^version = \".*\"$/m, 'version = \"' + process.env.INPUT_VERSION + '\"');
-            fs.writeFileSync(cargoPath, cargo);
+          const cargoPath = 'src-tauri/Cargo.toml';
+          let cargo = fs.readFileSync(cargoPath, 'utf8');
+          cargo = cargo.replace(/^version = ".*"$/m, 'version = "' + process.env.INPUT_VERSION + '"');
+          fs.writeFileSync(cargoPath, cargo);
 
-            const version = process.env.INPUT_VERSION;
-            const tag = 'v' + version;
-            const manifestPath = 'docs/updates/latest.json';
-            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-            manifest.version = version;
-            manifest.notes = process.env.INPUT_NOTES || '请查看 GitHub Release 获取本次更新内容。';
-            manifest.pub_date = new Date().toISOString();
-            manifest.platforms = {
-              'windows-x86_64': {
-                url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_x64-setup.exe`
-              },
-              'darwin-universal': {
-                url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_universal.dmg`
-              }
-            };
-            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-          "
+          const version = process.env.INPUT_VERSION;
+          const tag = 'v' + version;
+          const manifestPath = 'docs/updates/latest.json';
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          manifest.version = version;
+          manifest.notes = process.env.INPUT_NOTES || '请查看 GitHub Release 获取本次更新内容。';
+          manifest.pub_date = new Date().toISOString();
+          manifest.platforms = {
+            'windows-x86_64': {
+              url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_x64-setup.exe`
+            },
+            'darwin-universal': {
+              url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_universal.dmg`
+            }
+          };
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+          NODESCRIPT
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
