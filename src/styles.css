@@ -13,7 +13,6 @@
 
 body {
   margin: 0;
-  min-width: 1140px;
   height: 100vh;
   overflow: hidden;
 }
@@ -705,12 +704,6 @@ select option {
   flex: 1;
   min-width: 0;
   width: 100% !important;
-}
-
-@media (max-width: 720px) {
-  .param-row {
-    grid-template-columns: 1fr;
-  }
 }
 
 .form-hint {
@@ -1732,4 +1725,99 @@ select option {
 .log-lines p {
   margin: 0;
   white-space: pre-wrap;
+}
+
+/* ============================================================
+   响应式断点：避免窗口变窄时内容被 .app-shell 的 overflow:hidden 裁掉
+   ------------------------------------------------------------
+   断点设计（从宽到窄）：
+   - ≤ 1080px：压制参数三列 → 单列；编码器/码率控件中的次要元素允许换行
+   - ≤  960px：表单双列 → 单列；视频信息双列 → 单列；路径行内容紧凑化
+   - ≤  820px：侧边栏 padding/字号收紧；workspace 边距压缩
+   ============================================================ */
+
+/* —— 中等窄屏：压制参数三列网格塌缩为单列 —— */
+@media (max-width: 1080px) {
+  .param-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .param-row label {
+    min-width: 0;
+  }
+  .bitrate-input-wrap {
+    flex: 1 1 140px;
+  }
+  .workspace {
+    padding: 0 18px 18px;
+  }
+}
+
+/* —— 较窄屏：双列网格全部塌缩 + 关键操作栏允许换行 —— */
+@media (max-width: 960px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .video-meta-card .meta-grid {
+    grid-template-columns: 1fr;
+    column-gap: 0;
+  }
+  /* 视频信息 KV 行（大小/时长/容器等）的标签列由 64px 收窄，让数值不被挤断 */
+  .video-meta-card .meta-grid > div {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+  /* 路径行（视频/字幕/输出）标签列由 56px 略收窄 */
+  .path-grid > div {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .panel-heading {
+    flex-wrap: wrap;
+  }
+  .compress-heading {
+    flex-wrap: wrap;
+  }
+  .actions {
+    flex-wrap: wrap;
+  }
+  .actions.left {
+    gap: 8px;
+  }
+  /* 压制参数标题区 + 套用预设按钮在窄屏不挤在同一行 */
+  .preset-picker {
+    flex-wrap: wrap;
+  }
+  /* LOGO 配置行：层级选择放回左对齐，避免 margin-left: auto 把它推出可视区 */
+  .logo-config-row .logo-layer-control {
+    margin-left: 0;
+  }
+  /* 命令预览头部允许 copy 按钮换行 */
+  .command-preview .command-head {
+    flex-wrap: wrap;
+  }
+  /* 更新结果卡片允许下载链接换行 */
+  .update-result .update-download-link {
+    margin-left: 0;
+  }
+}
+
+/* —— 极窄屏：侧边栏更紧凑 + workspace padding 再收 —— */
+@media (max-width: 820px) {
+  .workspace {
+    padding: 0 14px 14px;
+    margin-top: 36px;
+  }
+  .sidebar {
+    padding: 36px 12px 12px;
+  }
+  /* 设置/调试横幅在极窄屏允许内部换行 */
+  .debug-banner {
+    flex-wrap: wrap;
+  }
+}
+
+/* —— 安全兜底：任何容器都不应突破其父级宽度 —— */
+.workspace > * {
+  max-width: 100%;
+  min-width: 0;
 }

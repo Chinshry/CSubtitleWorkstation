@@ -1020,10 +1020,13 @@ onBeforeUnmount(() => {
 .danger-lite {
   color: #b91c1c;
 }
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .template-manager,
   .preset-fields {
     grid-template-columns: 1fr;
+  }
+  .panel-heading-actions {
+    justify-content: flex-start;
   }
 }
 </style>

@@ -585,6 +585,8 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   display: flex;
   gap: 8px;
   margin-left: auto;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 .logo-layer-label {
   color: #4a5560;
@@ -592,7 +594,9 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   white-space: nowrap;
 }
 .logo-layer-select {
-  min-width: 200px;
+  min-width: 0;
+  flex: 1 1 180px;
+  max-width: 240px;
 }
 .logo-layer-disabled .logo-layer-label {
   color: #9aa7b1;
