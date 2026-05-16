@@ -1,10 +1,13 @@
 {
-  "version": "0.1.0",
-  "notes": "Initial updater manifest placeholder. Replace this file after publishing a signed release.",
-  "pub_date": "2026-05-15T00:00:00Z",
+  "version": "0.1.2",
+  "notes": "请查看 GitHub Release 获取本次更新内容。",
+  "pub_date": "2026-05-16T17:58:07.167Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.0/CSubtitleWorkstation_0.1.0_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.2/CSubtitleWorkstation_0.1.2_x64-setup.exe"
+    },
+    "darwin-universal": {
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.2/CSubtitleWorkstation_0.1.2_universal.dmg"
     }
   }
 }
