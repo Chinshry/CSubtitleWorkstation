@@ -9,6 +9,8 @@ pub struct FfmpegStatus {
     pub ffmpeg_version: Option<String>,
     pub ffprobe_path: Option<String>,
     pub ffprobe_version: Option<String>,
+    pub subtitle_filter_available: bool,
+    pub ass_filter_available: bool,
     pub message: Option<String>,
 }
 

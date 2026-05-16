@@ -592,8 +592,8 @@ onUnmounted(() => {
 <template>
   <main class="workspace">
     <div v-if="!loading && ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
-      <strong>未检测到 ffmpeg</strong>
-      <span>请前往左侧「设置」面板配置 ffmpeg 路径，或安装后将其加入系统 PATH。</span>
+      <strong>{{ ffmpegStatus.ffmpegPath ? 'ffmpeg 功能不完整' : '未检测到 ffmpeg' }}</strong>
+      <span>{{ ffmpegStatus.message ?? '请前往左侧「设置」面板配置 ffmpeg 路径，或安装后将其加入系统 PATH。' }}</span>
       <button class="secondary" @click="refreshFfmpeg">重新检测</button>
     </div>
 

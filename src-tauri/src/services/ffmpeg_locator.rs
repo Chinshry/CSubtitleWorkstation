@@ -53,9 +53,11 @@ fn well_known_ffmpeg_paths() -> &'static [&'static str] {
     #[cfg(target_os = "macos")]
     {
         &[
-            "/opt/homebrew/bin/ffmpeg", // Apple Silicon (M 系列) Homebrew 默认前缀
-            "/usr/local/bin/ffmpeg",    // Intel Mac Homebrew 默认前缀
-            "/opt/local/bin/ffmpeg",    // MacPorts 默认前缀
+            "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg", // Apple Silicon Homebrew full 版，包含 libass/subtitles
+            "/usr/local/opt/ffmpeg-full/bin/ffmpeg",    // Intel Mac Homebrew full 版
+            "/opt/homebrew/bin/ffmpeg",                 // Apple Silicon (M 系列) Homebrew 默认前缀
+            "/usr/local/bin/ffmpeg",                    // Intel Mac Homebrew 默认前缀
+            "/opt/local/bin/ffmpeg",                    // MacPorts 默认前缀
         ]
     }
     #[cfg(target_os = "linux")]
@@ -84,15 +86,24 @@ pub fn inspect_path(path: &Path, source: FfmpegSource) -> FfmpegStatus {
 
             // 同目录或 PATH 中探测 ffprobe
             let (ffprobe_path, ffprobe_version) = detect_ffprobe(path);
+            let (subtitle_filter_available, ass_filter_available) = detect_subtitle_filters(path);
+            let available = cfg!(target_os = "windows") || subtitle_filter_available;
+            let message = if available {
+                None
+            } else {
+                Some(subtitle_filter_missing_message())
+            };
 
             FfmpegStatus {
-                available: true,
+                available,
                 source,
                 ffmpeg_path: Some(path_to_string(path)),
                 ffmpeg_version: version,
                 ffprobe_path,
                 ffprobe_version,
-                message: None,
+                subtitle_filter_available,
+                ass_filter_available,
+                message,
             }
         }
         Ok(output) => FfmpegStatus {
@@ -102,6 +113,8 @@ pub fn inspect_path(path: &Path, source: FfmpegSource) -> FfmpegStatus {
             ffmpeg_version: None,
             ffprobe_path: None,
             ffprobe_version: None,
+            subtitle_filter_available: false,
+            ass_filter_available: false,
             message: Some(format!("ffmpeg 返回非零状态: {}", output.status)),
         },
         Err(err) => FfmpegStatus {
@@ -111,8 +124,45 @@ pub fn inspect_path(path: &Path, source: FfmpegSource) -> FfmpegStatus {
             ffmpeg_version: None,
             ffprobe_path: None,
             ffprobe_version: None,
+            subtitle_filter_available: false,
+            ass_filter_available: false,
             message: Some(format!("未找到可用 ffmpeg: {err}")),
         },
+    }
+}
+
+fn detect_subtitle_filters(ffmpeg_path: &Path) -> (bool, bool) {
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.args(["-hide_banner", "-filters"]);
+    no_window(&mut cmd);
+    let Ok(output) = cmd.output() else {
+        return (false, false);
+    };
+    if !output.status.success() {
+        return (false, false);
+    }
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_subtitle_filters(&text)
+}
+
+fn parse_subtitle_filters(text: &str) -> (bool, bool) {
+    let has_filter = |name: &str| {
+        text.lines()
+            .filter_map(|line| line.split_whitespace().nth(1))
+            .any(|filter| filter == name)
+    };
+    (has_filter("subtitles"), has_filter("ass"))
+}
+
+fn subtitle_filter_missing_message() -> String {
+    if cfg!(target_os = "macos") {
+        "当前 ffmpeg 缺少 subtitles/libass filter，macOS 请安装 ffmpeg-full，并在本工具中选择 /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg。".to_string()
+    } else {
+        "当前 ffmpeg 缺少 subtitles/libass filter，无法压制 ASS 字幕。请安装包含 libass/subtitles filter 的 ffmpeg full 构建。".to_string()
     }
 }
 

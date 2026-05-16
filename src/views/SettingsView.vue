@@ -10,10 +10,12 @@ import {
   isFfmpegMissingMocked,
   isFfmpegMocked,
   isFfprobeMissingMocked,
+  isSubtitleFilterMissingMocked,
   clearAllFfmpegMocks,
   refreshFfmpegStatus,
   setFfmpegMissingMock,
   setFfprobeMissingMock,
+  setSubtitleFilterMissingMock,
   setFfmpegStatus
 } from '../stores/ffmpegStore'
 import {
@@ -84,10 +86,16 @@ const ffprobeMissingModel = computed<boolean>({
   set: (value) => setFfprobeMissingMock(value)
 })
 
+const subtitleFilterMissingModel = computed<boolean>({
+  get: () => isSubtitleFilterMissingMocked.value,
+  set: (value) => setSubtitleFilterMissingMock(value)
+})
+
 const mockSummary = computed(() => {
   const parts: string[] = []
   if (isFfmpegMissingMocked.value) parts.push('ffmpeg 缺失')
   if (isFfprobeMissingMocked.value) parts.push('ffprobe 缺失')
+  if (isSubtitleFilterMissingMocked.value) parts.push('subtitles/libass 缺失')
   return parts.join(' + ')
 })
 
@@ -222,6 +230,10 @@ onMounted(async () => {
               <span class="status-icon">{{ status?.ffprobePath ? '✓' : '✕' }}</span>
               <span>ffprobe</span>
             </span>
+            <span class="status-pill" :class="status?.subtitleFilterAvailable ? 'ok' : 'bad'" style="margin-left:8px;" :title="status?.subtitleFilterAvailable ? '可压制 ASS 字幕' : '缺少 subtitles/libass filter，无法压制 ASS 字幕'">
+              <span class="status-icon">{{ status?.subtitleFilterAvailable ? '✓' : '✕' }}</span>
+              <span>subtitles/libass</span>
+            </span>
           </dd>
         </div>
         <div><dt>来源</dt><dd>{{ sourceText }}</dd></div>
@@ -229,6 +241,9 @@ onMounted(async () => {
         <div><dt>ffprobe</dt><dd>{{ status?.ffprobePath ?? '— 未找到（应与 ffmpeg 同目录）' }}</dd></div>
         <div><dt>版本</dt><dd>{{ status?.ffmpegVersion ?? '—' }}</dd></div>
       </dl>
+      <p v-if="status?.message" class="notice" style="color:#a35000;">
+        ⚠ {{ status.message }}
+      </p>
       <div class="actions left">
         <button
           :class="{ 'is-busy': isBusy('chooseFfmpeg') }"
@@ -293,12 +308,17 @@ onMounted(async () => {
       <!-- macOS 安装指南 -->
       <div v-if="guideOpen && isMacOS" class="install-guide">
         <h3>macOS 安装 ffmpeg</h3>
-        <p class="muted" style="margin-top:0;"><em>AVS 仅 Windows 支持，macOS 自动走 ffmpeg filter 模式。</em></p>
+        <p class="muted" style="margin-top:0;"><em>AVS 仅 Windows 支持，macOS 必须使用带 subtitles/libass filter 的 ffmpeg-full。</em></p>
         <ul>
           <li>
-            <strong>方法一（推荐）</strong> · 用 Homebrew：
+            <strong>方法一（必需）</strong> · 用 Homebrew 安装 ffmpeg-full：
             <ol style="margin:6px 0 0; padding-left:20px;">
-              <li>终端执行 <code>brew install ffmpeg</code></li>
+              <li>终端执行 <code>brew install ffmpeg-full</code></li>
+              <li>
+                <code>ffmpeg-full</code> 是 keg-only，不会自动覆盖普通 <code>ffmpeg</code>。安装后在本工具点「选择 ffmpeg」，选择：
+                <div class="cmd-block">/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg</div>
+                <div class="muted" style="margin-top:6px;">Intel Mac 通常是 <code>/usr/local/opt/ffmpeg-full/bin/ffmpeg</code>。</div>
+              </li>
               <li>
                 配置环境变量到 <code>~/.zprofile</code>（本工具读取此文件获取 PATH，写到 <code>~/.zshrc</code> 不生效）。根据 Mac 芯片选一条执行：
                 <div class="muted" style="margin-top:6px;">Apple Silicon（M 系列芯片）：</div>
@@ -310,14 +330,25 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
                 <div class="muted" style="margin-top:6px;">不确定芯片？终端执行 <code>uname -m</code>：<code>arm64</code> 是 Apple Silicon，<code>x86_64</code> 是 Intel。</div>
                 <div class="muted" style="margin-top:6px;">Homebrew 安装时若已自动写入 <code>~/.zprofile</code>，此步可跳过。</div>
               </li>
-              <li>装好后本工具点「使用系统 PATH」+「重新检测」</li>
+              <li>
+                自检命令：
+                <div class="cmd-block">/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg -hide_banner -filters | grep ' subtitles '</div>
+                <div class="muted" style="margin-top:6px;">能看到 <code>subtitles V-&gt;V</code> 才能压制 ASS 字幕。不要用 <code>grep -E 'subtitles|ass'</code>，它会误匹配 allpass/bass/highpass。</div>
+              </li>
             </ol>
           </li>
           <li>
             <strong>方法二</strong> · 不想装 Homebrew，从
             <a href="https://evermeet.cx/ffmpeg/" target="_blank" rel="noopener">evermeet.cx/ffmpeg</a>
-            下 universal binary（含 Intel + Apple Silicon），是个独立的 <code>ffmpeg</code> 文件；放到任意目录后在本工具点「选择 ffmpeg」指向它。
+            下载静态构建。请按页面说明选择与你 Mac 架构匹配的版本，下载后在本工具点「选择 ffmpeg」指向它。选完必须确认 <strong>subtitles/libass</strong> 状态为 ✓。
           </li>
+        </ul>
+        <h4>常见排障</h4>
+        <ul>
+          <li><code>No such filter: subtitles</code>：当前 ffmpeg 缺少 libass/subtitles，安装并选择 <code>ffmpeg-full</code>。</li>
+          <li><code>Unable to open .../subtitle.ass</code>：任务临时字幕文件已清理，回到应用重新开始压制。</li>
+          <li><code>No option name near ... Application Support</code>：旧版本路径空格转义问题，更新后重新生成命令。</li>
+          <li><code>Missing key frame...</code>：源 MP4 的 edit list 警告，通常不是失败原因。</li>
         </ul>
       </div>
 
@@ -463,13 +494,6 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           :class="{ 'is-busy': isBusy('checkUpdate') }"
           @click="withBusy('checkUpdate', checkUpdate)"
         >检查应用更新</button>
-        <a
-          v-if="availableUpdateVersion"
-          class="button-link"
-          :href="updateReleaseUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >前往 GitHub 下载 v{{ availableUpdateVersion }}</a>
         <label v-if="appConfig" class="switch-row update-startup-toggle">
           <input
             type="checkbox"
@@ -492,6 +516,12 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           <p v-if="updateInfo?.notes" class="update-notes">{{ updateInfo.notes }}</p>
           <p v-if="updateState === 'success' && updateInfo?.available" class="update-notes">
             请在 GitHub Releases 下载新版安装包，关闭当前应用后安装。
+            <a
+              class="button-link update-download-link"
+              :href="updateReleaseUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >前往 GitHub 下载 v{{ availableUpdateVersion }}</a>
           </p>
         </div>
       </div>
@@ -527,8 +557,8 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           </div>
         </div>
         <div class="debug-group">
-          <h4>ffmpeg / ffprobe 缺失模拟</h4>
-          <p class="muted">不会影响后端真实状态，仅用于演练 UI 反应。两个独立勾选，可叠加。</p>
+          <h4>ffmpeg / ffprobe / 滤镜缺失模拟</h4>
+          <p class="muted">不会影响后端真实状态，仅用于演练 UI 反应。三个独立勾选，可叠加。</p>
           <div class="debug-options">
             <label class="debug-check">
               <input type="checkbox" v-model="ffmpegMissingModel" />
@@ -542,6 +572,13 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
               <span>
                 模拟 ffprobe 缺失
                 <em class="muted">— 设置页 ffprobe ✕；视频信息卡隐藏「帧模式」「总帧数」（仅 ffprobe 才能精准给出）</em>
+              </span>
+            </label>
+            <label class="debug-check">
+              <input type="checkbox" v-model="subtitleFilterMissingModel" />
+              <span>
+                模拟 subtitles/libass 缺失
+                <em class="muted">— 设置页 subtitles/libass ✕；首页提示 ffmpeg 功能不完整，开始压制按钮变灰</em>
               </span>
             </label>
           </div>

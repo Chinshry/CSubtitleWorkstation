@@ -5,6 +5,8 @@ export type FfmpegStatus = {
   ffmpegVersion?: string
   ffprobePath?: string
   ffprobeVersion?: string
+  subtitleFilterAvailable: boolean
+  assFilterAvailable: boolean
   message?: string
 }
 

@@ -85,6 +85,13 @@ pub fn start_compress(
         .ffmpeg_path
         .ok_or_else(|| "ffmpeg is not configured.".to_string())?;
 
+    if !job.use_avs && !job.subtitle_path.trim().is_empty() && !status.subtitle_filter_available {
+        return Err(
+            "当前 ffmpeg 缺少 subtitles/libass filter，无法使用 ffmpeg filter 模式压制 ASS 字幕。Windows 可改用 AVS 兼容模式，或选择包含 libass/subtitles filter 的 ffmpeg full 构建。"
+                .to_string(),
+        );
+    }
+
     // inspect_video 失败不再静默——把错误透出到日志，便于排查
     let video_info = match command_builder::inspect_video(&ffmpeg_path, &job.video_path) {
         Ok(info) => info,

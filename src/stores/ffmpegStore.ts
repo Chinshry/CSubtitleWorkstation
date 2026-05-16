@@ -10,6 +10,7 @@ const realStatus = ref<FfmpegStatus | null>(null)
 // ffmpeg 缺失语义上隐含 ffprobe 也缺失，UI 上由 shouldHideFfprobeOnlyFields 兜底处理。
 const MOCK_FFMPEG_KEY = 'csubtitle-workstation:debug-mock-no-ffmpeg'
 const MOCK_FFPROBE_KEY = 'csubtitle-workstation:debug-mock-no-ffprobe'
+const MOCK_SUBTITLE_FILTER_KEY = 'csubtitle-workstation:debug-mock-no-subtitle-filter'
 
 function readBoolStorage(key: string): boolean {
   if (typeof localStorage === 'undefined') return false
@@ -18,11 +19,13 @@ function readBoolStorage(key: string): boolean {
 
 const ffmpegMissingMock = ref(readBoolStorage(MOCK_FFMPEG_KEY))
 const ffprobeMissingMock = ref(readBoolStorage(MOCK_FFPROBE_KEY))
+const subtitleFilterMissingMock = ref(readBoolStorage(MOCK_SUBTITLE_FILTER_KEY))
 
 export const isFfmpegMissingMocked = computed(() => ffmpegMissingMock.value)
 export const isFfprobeMissingMocked = computed(() => ffprobeMissingMock.value)
+export const isSubtitleFilterMissingMocked = computed(() => subtitleFilterMissingMock.value)
 export const isFfmpegMocked = computed(
-  () => ffmpegMissingMock.value || ffprobeMissingMock.value
+  () => ffmpegMissingMock.value || ffprobeMissingMock.value || subtitleFilterMissingMock.value
 )
 
 // ffmpeg 缺失会自动让 ffprobe 也按缺失处理
@@ -46,9 +49,15 @@ export function setFfprobeMissingMock(value: boolean) {
   persistBool(MOCK_FFPROBE_KEY, value)
 }
 
+export function setSubtitleFilterMissingMock(value: boolean) {
+  subtitleFilterMissingMock.value = value
+  persistBool(MOCK_SUBTITLE_FILTER_KEY, value)
+}
+
 export function clearAllFfmpegMocks() {
   setFfmpegMissingMock(false)
   setFfprobeMissingMock(false)
+  setSubtitleFilterMissingMock(false)
 }
 
 // 暴露给 UI 的最终状态：mock 优先于真实
@@ -60,27 +69,49 @@ export const ffmpegStatus = computed<FfmpegStatus | null>(() => {
     return {
       available: false,
       source: 'not_found',
+      subtitleFilterAvailable: false,
+      assFilterAvailable: false,
       message: '[调试] 模拟 ffmpeg 未找到'
     }
   }
 
-  // 仅 ffprobe 缺失：在真实状态基础上抹掉 ffprobe 字段
+  if (!ffprobeMissingMock.value && !subtitleFilterMissingMock.value) {
+    return real
+  }
+
+  const base: FfmpegStatus = real ?? {
+    available: true,
+    source: 'system_path',
+    ffmpegPath: '/usr/local/bin/ffmpeg',
+    ffmpegVersion: 'ffmpeg version (debug mock)',
+    ffprobePath: '/usr/local/bin/ffprobe',
+    ffprobeVersion: 'ffprobe version (debug mock)',
+    subtitleFilterAvailable: true,
+    assFilterAvailable: true
+  }
+
+  let mocked: FfmpegStatus = base
+
   if (ffprobeMissingMock.value) {
-    const base: FfmpegStatus = real ?? {
-      available: true,
-      source: 'system_path',
-      ffmpegPath: '/usr/local/bin/ffmpeg',
-      ffmpegVersion: 'ffmpeg version (debug mock)'
-    }
-    return {
-      ...base,
+    mocked = {
+      ...mocked,
       ffprobePath: undefined,
       ffprobeVersion: undefined,
       message: '[调试] 模拟 ffprobe 缺失（仅影响视频信息精度）'
     }
   }
 
-  return real
+  if (subtitleFilterMissingMock.value) {
+    mocked = {
+      ...mocked,
+      available: false,
+      subtitleFilterAvailable: false,
+      assFilterAvailable: false,
+      message: '[调试] 模拟 subtitles/libass filter 缺失'
+    }
+  }
+
+  return mocked
 })
 
 let initPromise: Promise<void> | null = null

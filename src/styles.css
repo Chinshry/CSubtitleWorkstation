@@ -1346,6 +1346,11 @@ select option {
   white-space: pre-wrap;
 }
 
+.update-result .update-download-link {
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
 .update-result-idle,
 .update-result-progress {
   background: #f5f8fa;

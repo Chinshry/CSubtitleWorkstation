@@ -9,6 +9,7 @@ fn no_window(builder: &mut Command) {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     builder.creation_flags(CREATE_NO_WINDOW);
 }
+
 #[cfg(not(windows))]
 fn no_window(_: &mut Command) {}
 
@@ -57,19 +58,19 @@ pub fn build_with_options(
         (Some(overlay), true) => {
             // LOGO 与字幕同时存在：按 logo_on_top 决定叠加顺序。
             // - 在下（默认）：overlay 在前，字幕在 chain 末端，字幕覆盖 LOGO
-            //   `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y,subtitles='...'`
+            //   `movie=...,scale=W:H[wm];[in][wm]overlay=X:Y,subtitles=...`
             // - 在上：先把字幕渲染到命名链 [sub]，再以 [sub] 为底叠加 LOGO
-            //   `[in]subtitles='...'[sub];movie='...',scale=W:H[wm];[sub][wm]overlay=X:Y`
+            //   `[in]subtitles=...[sub];movie=...,scale=W:H[wm];[sub][wm]overlay=X:Y`
             //   build_logo_overlay 默认输出含 `[in]` 作为底图标签，这里替换为 `[sub]`
             //   即可串联到字幕输出之后。
-            let escaped_sub = escape_filter_path(subtitle_path);
+            let subtitle_arg = subtitle_filter_arg_for_platform(subtitle_path, cfg!(windows));
             if job.logo_on_top {
                 let overlay_on_sub = overlay.replace("[in]", "[sub]");
                 filters.push(format!(
-                    "[in]subtitles='{escaped_sub}'[sub];{overlay_on_sub}",
+                    "[in]subtitles={subtitle_arg}[sub];{overlay_on_sub}",
                 ));
             } else {
-                filters.push(format!("{overlay},subtitles='{escaped_sub}'"));
+                filters.push(format!("{overlay},subtitles={subtitle_arg}"));
             }
         }
         (Some(overlay), false) => {
@@ -273,12 +274,21 @@ fn has_custom_video_option(tokens: &[String], option: &str) -> bool {
     })
 }
 
-/// 把 LogoLayout 百分比换算为像素并构造 `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段。
+/// 把 LogoLayout 百分比换算为像素并构造 `movie=...,scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段。
 /// 当 need_logo=false、未保存布局、或视频分辨率未知时返回 None。
 fn build_logo_overlay(
     job: &CompressJob,
     video_width: Option<i32>,
     video_height: Option<i32>,
+) -> Option<String> {
+    build_logo_overlay_for_platform(job, video_width, video_height, cfg!(windows))
+}
+
+fn build_logo_overlay_for_platform(
+    job: &CompressJob,
+    video_width: Option<i32>,
+    video_height: Option<i32>,
+    windows: bool,
 ) -> Option<String> {
     if !job.need_logo {
         return None;
@@ -299,8 +309,8 @@ fn build_logo_overlay(
     let x = (layout.x_pct * vw).round() as i32;
     let y = (layout.y_pct * vh).round() as i32;
     Some(format!(
-        "movie='{}',scale={}:{}[wm];[in][wm]overlay={}:{}",
-        escape_filter_path(trimmed_path),
+        "movie={},scale={}:{}[wm];[in][wm]overlay={}:{}",
+        movie_filter_arg_for_platform(trimmed_path, windows),
         w,
         h,
         x,
@@ -493,7 +503,36 @@ fn parse_video_size(text: &str) -> Option<(i32, i32)> {
 }
 
 fn subtitle_filter(path: &str) -> String {
-    format!("subtitles='{}'", escape_filter_path(path))
+    subtitle_filter_for_platform(path, cfg!(windows))
+}
+
+fn subtitle_filter_for_platform(path: &str, windows: bool) -> String {
+    format!(
+        "subtitles={}",
+        subtitle_filter_arg_for_platform(path, windows)
+    )
+}
+
+fn subtitle_filter_arg_for_platform(path: &str, windows: bool) -> String {
+    if windows {
+        format!("'{}'", escape_filter_path_for_platform(path, windows))
+    } else {
+        format!(
+            "filename={}",
+            escape_filter_path_for_platform(path, windows)
+        )
+    }
+}
+
+fn movie_filter_arg_for_platform(path: &str, windows: bool) -> String {
+    if windows {
+        format!("'{}'", escape_filter_path_for_platform(path, windows))
+    } else {
+        format!(
+            "filename={}",
+            escape_filter_path_for_platform(path, windows)
+        )
+    }
 }
 
 pub fn normalize_output_path(video_path: &str, output_path: &str) -> String {
@@ -529,12 +568,177 @@ pub fn normalize_output_path(video_path: &str, output_path: &str) -> String {
     trimmed.to_string()
 }
 
-fn escape_filter_path(path: &str) -> String {
-    path.replace('\\', "\\\\")
+fn escape_filter_path_for_platform(path: &str, windows: bool) -> String {
+    let escaped = if windows {
+        path.replace('\\', "\\\\")
+    } else {
+        path.replace('\\', "/").replace(' ', "\\ ")
+    };
+    escaped
         .replace(':', "\\:")
         .replace('[', "\\[")
         .replace(']', "\\]")
+        .replace(',', "\\,")
+        .replace(';', "\\;")
         // ffmpeg filter 单引号字符串中不能用 \' 表示单引号；必须闭合后写 \' 再重新打开。
         // 例：'a'\''b' => a'b
         .replace('\'', "'\\''")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_filter_paths_with_macos_spaces() {
+        assert_eq!(
+            subtitle_filter_for_platform(
+                "/Users/tester/Library/Application Support/app/filter-temp/subtitle.ass",
+                false,
+            ),
+            "subtitles=filename=/Users/tester/Library/Application\\ Support/app/filter-temp/subtitle.ass"
+        );
+
+        assert_eq!(
+            escape_filter_path_for_platform(
+                "/Users/tester/Pictures/Sample Folder.bundle/logo.jpeg",
+                false,
+            ),
+            "/Users/tester/Pictures/Sample\\ Folder.bundle/logo.jpeg"
+        );
+    }
+
+    #[test]
+    fn escapes_filter_paths_with_windows_drive_letters() {
+        assert_eq!(
+            subtitle_filter_for_platform(
+                r"C:\Users\tester\AppData\Local\app\filter-temp\job\subtitle.ass",
+                true,
+            ),
+            "subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'"
+        );
+
+        assert_eq!(
+            escape_filter_path_for_platform(
+                r"E:\sample\project\res\logo\logo.png",
+                true,
+            ),
+            "E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png"
+        );
+    }
+
+    #[test]
+    fn escapes_commas_and_semicolons_in_filter_paths() {
+        // 路径含 , 和 ; 时应被转义为 \, 和 \;，避免破坏 filter 链结构
+        assert_eq!(
+            escape_filter_path_for_platform(
+                "/Users/tester/Movies/show,part;1/clip.mp4",
+                false,
+            ),
+            "/Users/tester/Movies/show\\,part\\;1/clip.mp4"
+        );
+    }
+
+    #[test]
+    fn logo_overlay_uses_windows_legacy_quoted_movie_path() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mp4".to_string(),
+            subtitle_path: String::new(),
+            output_path: String::new(),
+            crf: 18,
+            max_bitrate: None,
+            need_logo: true,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: false,
+            logo_layout: Some(LogoLayout {
+                path: r"E:\sample\project\res\logo\logo.png".to_string(),
+                x_pct: 0.02,
+                y_pct: 0.02,
+                w_pct: 0.2,
+                h_pct: 0.1,
+            }),
+            logo_on_top: false,
+            video_width: None,
+            video_height: None,
+        };
+
+        assert_eq!(
+            build_logo_overlay_for_platform(&job, Some(1920), Some(1080), true).as_deref(),
+            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',scale=384:108[wm];[in][wm]overlay=38:22")
+        );
+    }
+
+    #[test]
+    fn logo_overlay_uses_macos_explicit_movie_filename_option() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: "/tmp/video.mp4".to_string(),
+            subtitle_path: String::new(),
+            output_path: String::new(),
+            crf: 18,
+            max_bitrate: None,
+            need_logo: true,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: false,
+            logo_layout: Some(LogoLayout {
+                path: "/Users/tester/Pictures/Sample Folder.bundle/logo.jpeg".to_string(),
+                x_pct: 0.02,
+                y_pct: 0.02,
+                w_pct: 0.2,
+                h_pct: 0.1,
+            }),
+            logo_on_top: false,
+            video_width: None,
+            video_height: None,
+        };
+
+        assert_eq!(
+            build_logo_overlay_for_platform(&job, Some(1920), Some(1080), false).as_deref(),
+            Some("movie=filename=/Users/tester/Pictures/Sample\\ Folder.bundle/logo.jpeg,scale=384:108[wm];[in][wm]overlay=38:22")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_logo_and_subtitle_filter_uses_legacy_quoted_paths() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mp4".to_string(),
+            subtitle_path: r"C:\Users\tester\AppData\Local\app\filter-temp\job\subtitle.ass"
+                .to_string(),
+            output_path: r"E:\out.mp4".to_string(),
+            crf: 18,
+            max_bitrate: None,
+            need_logo: true,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: false,
+            logo_layout: Some(LogoLayout {
+                path: r"E:\sample\project\res\logo\logo.png".to_string(),
+                x_pct: 0.02,
+                y_pct: 0.02,
+                w_pct: 0.2,
+                h_pct: 0.1,
+            }),
+            logo_on_top: false,
+            video_width: Some(1920),
+            video_height: Some(1080),
+        };
+        let command = build_with_options("definitely-missing-ffmpeg.exe", &job, None).unwrap();
+        let vf_index = command.iter().position(|arg| arg == "-vf").unwrap();
+
+        assert_eq!(
+            command.get(vf_index + 1).map(String::as_str),
+            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',scale=384:108[wm];[in][wm]overlay=38:22,subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'")
+        );
+    }
 }
