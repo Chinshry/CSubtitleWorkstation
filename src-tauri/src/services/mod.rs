@@ -1,4 +1,3 @@
-pub mod ass_logo;
 pub mod avs_detector;
 pub mod avs_workspace;
 pub mod command_builder;
@@ -7,4 +6,5 @@ pub mod encoder_detector;
 pub mod ffmpeg_locator;
 pub mod frame_extractor;
 pub mod subtitle_analyzer;
+pub mod temp_cleanup;
 pub mod video_meta;

@@ -347,7 +347,6 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
         <ul>
           <li><code>No such filter: subtitles</code>：当前 ffmpeg 缺少 libass/subtitles，安装并选择 <code>ffmpeg-full</code>。</li>
           <li><code>Unable to open .../subtitle.ass</code>：任务临时字幕文件已清理，回到应用重新开始压制。</li>
-          <li><code>No option name near ... Application Support</code>：旧版本路径空格转义问题，更新后重新生成命令。</li>
           <li><code>Missing key frame...</code>：源 MP4 的 edit list 警告，通常不是失败原因。</li>
         </ul>
       </div>

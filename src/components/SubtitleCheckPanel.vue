@@ -63,8 +63,8 @@ const items = computed<CheckItem[]>(() => {
   if (missingFonts.length > 0) {
     next.push({
       id: 'missing-fonts',
-      level: 'warn',
-      label: levelLabel('warn'),
+      level: 'error',
+      label: levelLabel('error'),
       title: '字幕使用的字体未检测到安装',
       metaLayout: 'font-grid',
       detail: '缺失字体会触发系统或渲染器字体替换，可能导致字形、字重、排版宽度和特效位置变化。',
@@ -142,7 +142,7 @@ function levelRank(level: CheckLevel) {
 function levelLabel(level: CheckLevel) {
   if (level === 'error') return '错误'
   if (level === 'warn') return '警告'
-  if (level === 'info') return '信息'
+  if (level === 'info') return '建议'
   return '正常'
 }
 

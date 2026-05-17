@@ -28,19 +28,15 @@ export type AppConfig = {
   defaultNeedLogo: boolean
   defaultNeedYadif: boolean
   defaultEncoder: string
-  outputNameTemplate: string
-  outputTemplates?: OutputNameTemplate[]
-  defaultOutputTemplateId?: string
-  encodePresets?: VideoEncodePreset[]
-  defaultEncodePresetId?: string
+  outputTemplates: OutputNameTemplate[]
+  defaultOutputTemplateId: string
+  encodePresets: VideoEncodePreset[]
+  defaultEncodePresetId: string
   checkUpdateOnStartup: boolean
-  defaultLogoDir?: string
-  defaultUseAvs?: boolean
-  recentLogos?: RecentLogo[]
-  /** 未命中分辨率桶时的全局 fallback 布局；保留作向后兼容 */
-  lastLogoLayout?: LogoLayout | null
+  defaultUseAvs: boolean
+  recentLogos: RecentLogo[]
   /** 按 (分辨率桶, LOGO 路径) 区分的布局记忆 */
-  logoLayouts?: LogoLayoutEntry[]
+  logoLayouts: LogoLayoutEntry[]
 }
 
 export type AppUpdateInfo = {
@@ -66,7 +62,7 @@ export type OutputNameTemplate = {
   id: string
   name: string
   pattern: string
-  outputDirMode: 'sameAsVideo' | 'fixed' | 'manual'
+  outputDirMode: 'sameAsVideo' | 'fixed'
   fixedOutputDir?: string
   isDefault?: boolean
 }

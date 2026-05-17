@@ -113,13 +113,11 @@ macOS：h264_videotoolbox
 4k-landscape / 4k-portrait
 ```
 
-长边 / 短边 ±8 像素容差，兼容 `1920×1088` 这类 mod16 对齐尺寸；切换 LOGO 或视频时优先按 `(currentBucket, path)` 命中记忆并自动应用。
+长边 / 短边 ±8 像素容差，覆盖 `1920×1088` 这类 mod16 对齐尺寸；切换 LOGO 或视频时优先按 `(currentBucket, path)` 命中记忆并自动应用。
 
 **旋转视频修正**：手机录制的视频常存为 `1920×1080 + rotation=90`，ffmpeg 解码后画面是 `1080×1920`。`services/video_meta.rs` 同时解析 ffprobe 的 `tags.rotate` / `side_data_list[].rotation` 与 ffmpeg `-i` 文本中的 `displaymatrix: rotation of ...`，±90/±270 时交换 `width`/`height`，返回"显示尺寸"；`CompressJob` 携带 `videoWidth/videoHeight`，让命令构造端直接用显示尺寸算 LOGO 像素，避免压出来的 LOGO 错位或放大。
 
 **压制命令对接**：`services/command_builder.rs::build_logo_overlay` 把百分比换算回像素后，构造 `movie='...',scale=W:H[wm];[in][wm]overlay=X:Y` 滤镜片段；AVS 模式下字幕由 TextSubMod 渲染，但 LOGO overlay 与 yadif 滤镜仍然有效。
-
-**旧 ASS Logo 行解析**：`services/ass_logo.rs` 保留为 `#[allow(dead_code)]`，作为未来"从 ASS 导入 LOGO 行作为初始布局"一类辅助入口的预留点；主流程不再依赖它。
 
 ### 3.4 ffmpeg 检测与配置需求
 
@@ -263,7 +261,7 @@ https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json
 
 涉及模块：
 
-- `src/utils/encodePresets.ts`：内置预设清单、`normalizeEncodePresets` 兼容旧版配置迁移、`applyEncodePresetToJob` 把预设套到 `CompressJob`。
+- `src/utils/encodePresets.ts`：内置预设清单、`normalizeEncodePresets`、`applyEncodePresetToJob` 把预设套到 `CompressJob`。
 - `src/components/EncodeSettingsFields.vue`：编码器/CRF/最大码率的可复用编辑控件，被压制表单和预设页同时使用。
 - `src/composables/useEncoderOptions.ts`：从后端 `get_supported_encoders` 拉取本机可用编码器列表，缺失时回退到全量列表。
 - 后端：`models/app_config.rs` 新增 `encodePresets` / `defaultEncodePresetId` 字段；`services/encoder_detector.rs` 负责编码器探测。
@@ -273,10 +271,11 @@ https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json
 把"输出文件名"从单一字符串升级为多模板：
 
 - 单模板内可插入变量：`{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` / `{date:YYMMDD}`。
-- 输出目录策略：`sameAsVideo`（与视频同目录） / `fixed`（固定目录） / `manual`（每次手动选择）。
+- 内置默认模板为 `{video_name} 中字.mp4`。
+- 输出目录策略：`sameAsVideo`（与视频同目录） / `fixed`（固定目录）。
 - 支持保存多套模板，可设默认。
 - 预设页提供变量按钮直接插入到模式串光标位置，附带实时预览。
-- 与旧版字段 `outputNameTemplate` 完全向后兼容：未配置 `outputTemplates` 时按旧字段生成单一默认模板。
+- 未配置 `outputTemplates` 时使用内置默认模板。
 
 涉及模块：
 
@@ -287,13 +286,14 @@ https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json
 
 把字幕选定后所有的"风险类提示"统一收纳到一个面板里，避免散落在表单各处：
 
-1. **VSFilterMod 特效标签检测**：命中即提示具体匹配到的标签，给出"启用 AVS"建议（详见 3.2）。
-2. **ASS 色彩矩阵不匹配警告**：从 ASS Script Info 解析 `YCbCr Matrix`，与视频元数据中的色彩矩阵比较，不一致时高亮提示，并给出"在播放器/压制时显式指定色彩空间"的建议。
-3. **基础统计**：行数、ASS/SRT 类型识别等。
+1. **错误级别**：字幕引用图片路径不存在、字幕字体未检测到安装、字幕行引用未定义样式。
+2. **警告级别**：ASS Script Info 中的 `YCbCr Matrix` 缺失、无法识别，或与视频元数据中的色彩矩阵 / 量化范围不匹配，并给出建议修改值。
+3. **建议级别**：VSFilterMod 特效标签检测，命中即提示具体匹配到的标签，并给出"启用 AVS"建议（详见 3.2）。
+4. **基础统计**：行数、ASS/SRT 类型识别等。
 
 涉及模块：
 
-- `src/components/SubtitleCheckPanel.vue`：统一渲染所有警告项与可执行操作。
+- `src/components/SubtitleCheckPanel.vue`：统一渲染错误、警告、建议项与可执行操作。
 - `src/components/VideoMetaCard.vue`：视频侧透出 `colorMatrix` 字段供前端对比。
 - 老的独立组件 `ColorMatrixWarningBanner.vue` 已移除，原职责合并进 `SubtitleCheckPanel`。
 
@@ -393,7 +393,7 @@ AVS 模式显示规则：
 `PresetsView.vue` 集中管理两类资源：
 
 - **编码预设**：列表 + 编辑器双栏布局，左侧展示所有预设、支持拖拽排序与设为默认；右侧通过 `EncodeSettingsFields` 组件编辑当前选中预设的 `encoder` / `crf` / `maxBitrate` / `customVideoArgs`；底部按钮提供导入、导出、新增、删除、复制等操作。
-- **输出文件名模板**：列表 + 编辑器双栏布局，编辑区提供变量按钮（点击在模式串光标位置插入对应变量），下方实时渲染预览；可选三种输出目录策略。
+- **输出文件名模板**：列表 + 编辑器双栏布局，编辑区提供变量按钮（点击在模式串光标位置插入对应变量），下方实时渲染预览；可选「与视频同目录」和「固定目录」两种输出目录策略。
 
 所有改动通过 `saveConfig` 写回 `AppConfig`，主页编辑区下拉框立即可见。
 
@@ -499,7 +499,6 @@ CSubtitleWorkstation/
         frame_extractor.rs     # LOGO 编辑器抽帧缓存
         config_store.rs        # 本地 JSON 配置读写
         encoder_detector.rs    # 本机支持的编码器探测
-        ass_logo.rs            # 旧 ASS LOGO 行解析（dead_code，保留作未来导入入口）
       models/
         app_config.rs          # AppConfig / LogoLayout / LogoLayoutEntry / RecentLogo
                                # / VideoEncodePreset / OutputNameTemplate
@@ -581,17 +580,14 @@ type AppConfig = {
   defaultNeedLogo: boolean
   defaultNeedYadif: boolean
   defaultEncoder: string
-  outputNameTemplate: string                   # 旧字段，向后兼容（无 outputTemplates 时使用）
-  outputTemplates?: OutputNameTemplate[]       # 多模板列表
-  defaultOutputTemplateId?: string             # 默认模板 id
-  encodePresets?: VideoEncodePreset[]          # 多编码预设列表
-  defaultEncodePresetId?: string               # 默认编码预设 id
+  outputTemplates: OutputNameTemplate[]        # 多模板列表
+  defaultOutputTemplateId: string              # 默认模板 id
+  encodePresets: VideoEncodePreset[]           # 多编码预设列表
+  defaultEncodePresetId: string                # 默认编码预设 id
   checkUpdateOnStartup: boolean
-  defaultLogoDir?: string
-  defaultUseAvs?: boolean                      # AVS 模式默认开关
-  recentLogos?: RecentLogo[]                   # LOGO 编辑器侧栏「最近使用」列表（最多 10 项）
-  lastLogoLayout?: LogoLayout | null           # 未命中分辨率桶时的全局 fallback
-  logoLayouts?: LogoLayoutEntry[]              # 按 (分辨率桶, LOGO 路径) 区分的布局记忆
+  defaultUseAvs: boolean                       # AVS 模式默认开关
+  recentLogos: RecentLogo[]                    # LOGO 编辑器侧栏「最近使用」列表（最多 10 项）
+  logoLayouts: LogoLayoutEntry[]               # 按 (分辨率桶, LOGO 路径) 区分的布局记忆
 }
 
 type VideoEncodePreset = {
@@ -608,7 +604,7 @@ type OutputNameTemplate = {
   id: string
   name: string
   pattern: string                              # 支持 {video_name} {resolution} {encoder} {crf} {date:YYYYMMDD} 等
-  outputDirMode: 'sameAsVideo' | 'fixed' | 'manual'
+  outputDirMode: 'sameAsVideo' | 'fixed'
   fixedOutputDir?: string                      # outputDirMode=fixed 时使用
   isDefault?: boolean
 }
@@ -638,6 +634,8 @@ type AppUpdateInfo = {
   downloadUrl?: string
 }
 ```
+
+配置 JSON 使用严格字段校验；旧版已移除的 `outputNameTemplate` / `defaultLogoDir` / `lastLogoLayout` 等字段不再参与迁移。遇到旧配置加载失败时，删除用户配置目录中的 `config.json` 可恢复默认配置。
 
 ## 8. Rust 后端命令设计
 
@@ -753,8 +751,8 @@ Command::new(ffmpeg_path)
 - **可视化 LOGO 叠加**（✅ 已完成）：在视频抽帧上拖放 / 四角缩放摆放 LOGO，按百分比存储；布局按 (LOGO, 分辨率桶) 维度独立记忆；旋转视频自动修正显示尺寸。
 - **AVS 兼容模式**（✅ 已完成）：Windows 上检测 AviSynth+ 与 ffmpeg avisynth demuxer，启用时通过内置 DLL 驱动的脚本渲染字幕。
 - **编码预设管理**（✅ 已完成）：内置 5 套预设，支持自定义/导入导出；通过 `customVideoArgs` 自由扩展 ffmpeg 视频侧参数。
-- **输出文件名模板**（✅ 已完成）：多模板 + 变量占位符 + 三种输出目录策略。
-- **字幕检查面板**（✅ 已完成）：整合 VSFilterMod 特效标签提示与 ASS 色彩矩阵不匹配警告。
+- **输出文件名模板**（✅ 已完成）：多模板 + 变量占位符 + 两种输出目录策略。
+- **字幕检查面板**（✅ 已完成）：整合图片路径、字体、样式、VSFilterMod 特效标签与 ASS 色彩矩阵检查，并按错误 / 警告 / 建议分级展示。
 - **窗口状态记忆**（✅ 已完成）：tauri-plugin-window-state。
 - 实时日志（✅ 已完成）。
 - 取消任务（✅ 已完成）。
@@ -774,7 +772,6 @@ Command::new(ffmpeg_path)
 ### 阶段二：迁移脚本逻辑
 
 - 迁移配置项。
-- 迁移 ASS logo 解析。
 - 迁移 yadif、CRF、码率逻辑。
 - 生成跨平台 `ffmpeg` 命令。
 

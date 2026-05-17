@@ -26,7 +26,7 @@ pub fn build_with_options(
 ) -> Result<Vec<String>, String> {
     let video_info = inspect_video(ffmpeg_path, &job.video_path).unwrap_or_default();
     // LOGO overlay 像素换算优先使用前端传入的"显示尺寸"（inspect_video_meta 已应用 rotation）。
-    // 旧路径的 ffmpeg -i 文本解析拿到的是 codec 帧尺寸，旋转视频会算错，故仅作 fallback。
+    // ffmpeg -i 文本解析拿到的是 codec 帧尺寸，旋转视频会算错，仅作为元数据缺失时的兜底。
     let display_width = job.video_width.or(video_info.width);
     let display_height = job.video_height.or(video_info.height);
 
@@ -104,7 +104,7 @@ pub fn build_with_options(
     if let Some(max_bitrate) = job.max_bitrate {
         // 语义：留空(None) = 不限制；0 = 视频码率 + 1000；其他正数 = 直接使用该值（Kbps）
         let resolved: Option<i32> = match max_bitrate {
-            v if v < 0 => None, // 兼容旧值：负数视为不限制
+            v if v < 0 => return Err("最大码率不能为负数".to_string()),
             0 => video_info.bitrate_kbps.map(|kb| kb + 1000),
             v => Some(v),
         };
@@ -477,7 +477,7 @@ fn parse_size_to_kb(v: &str) -> Option<u64> {
         // 没单位，按字节解释
         return trimmed.parse::<u64>().ok().map(|b| b / 1024);
     };
-    // 兼容小数：1.5MiB → 1.5 * 1024 ≈ 1536KB
+    // ffmpeg 可能输出小数单位：1.5MiB → 1.5 * 1024 ≈ 1536KB
     if let Ok(n) = num_str.trim().parse::<f64>() {
         return Some((n * mul_kb as f64).round() as u64);
     }
@@ -542,7 +542,7 @@ pub fn normalize_output_path(video_path: &str, output_path: &str) -> String {
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or("output");
-    let filename = format!("{stem} output.mp4");
+    let filename = format!("{stem} 中字.mp4");
 
     if trimmed.is_empty() {
         return video
@@ -619,10 +619,7 @@ mod tests {
         );
 
         assert_eq!(
-            escape_filter_path_for_platform(
-                r"E:\sample\project\res\logo\logo.png",
-                true,
-            ),
+            escape_filter_path_for_platform(r"E:\sample\project\res\logo\logo.png", true,),
             "E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png"
         );
     }
@@ -631,16 +628,13 @@ mod tests {
     fn escapes_commas_and_semicolons_in_filter_paths() {
         // 路径含 , 和 ; 时应被转义为 \, 和 \;，避免破坏 filter 链结构
         assert_eq!(
-            escape_filter_path_for_platform(
-                "/Users/tester/Movies/show,part;1/clip.mp4",
-                false,
-            ),
+            escape_filter_path_for_platform("/Users/tester/Movies/show,part;1/clip.mp4", false,),
             "/Users/tester/Movies/show\\,part\\;1/clip.mp4"
         );
     }
 
     #[test]
-    fn logo_overlay_uses_windows_legacy_quoted_movie_path() {
+    fn logo_overlay_uses_windows_quoted_movie_path() {
         let job = CompressJob {
             id: "test".to_string(),
             video_path: r"E:\video.mp4".to_string(),
@@ -707,7 +701,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn windows_logo_and_subtitle_filter_uses_legacy_quoted_paths() {
+    fn windows_logo_and_subtitle_filter_uses_quoted_paths() {
         let job = CompressJob {
             id: "test".to_string(),
             video_path: r"E:\video.mp4".to_string(),

@@ -1,7 +1,7 @@
 use crate::models::compress_job::CompressJob;
 use crate::services::{
     avs_detector, avs_workspace, command_builder, config_store, encoder_detector, ffmpeg_locator,
-    subtitle_analyzer,
+    subtitle_analyzer, temp_cleanup,
 };
 use crate::{AppState, JobHandle};
 use serde::Serialize;
@@ -388,12 +388,7 @@ fn kill_process_tree(pid: u32) -> Result<(), String> {
 }
 
 fn job_temp_dir(app: &AppHandle, job_id: &str) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|err| format!("获取 app_local_data_dir 失败: {err}"))?
-        .join("filter-temp")
-        .join(sanitize_job_id(job_id));
+    let dir = temp_cleanup::filter_temp_dir(app)?.join(sanitize_job_id(job_id));
     fs::create_dir_all(&dir).map_err(|err| format!("创建任务临时目录失败: {err}"))?;
     Ok(dir)
 }

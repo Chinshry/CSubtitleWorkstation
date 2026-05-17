@@ -1,7 +1,5 @@
 import type { AppConfig, CompressJob, VideoEncodePreset } from '../types'
 
-const LEGACY_NVENC_ARGS = '-rc vbr -cq 19 -b:v 0 -spatial-aq 1 -temporal-aq 1'
-
 export const DEFAULT_ENCODE_PRESETS: VideoEncodePreset[] = [
   {
     id: 'balanced-x264',
@@ -42,12 +40,7 @@ export const DEFAULT_ENCODE_PRESETS: VideoEncodePreset[] = [
 ]
 
 export function normalizeEncodePresets(config?: AppConfig | null): VideoEncodePreset[] {
-  const saved = Array.isArray(config?.encodePresets) ? config.encodePresets : []
-  const savedById = new Map(saved.map((item) => [item.id, item]))
-  const raw = [
-    ...DEFAULT_ENCODE_PRESETS.map((preset) => migrateBuiltInPreset(savedById.get(preset.id), preset)),
-    ...saved.filter((preset) => !DEFAULT_ENCODE_PRESETS.some((item) => item.id === preset.id)),
-  ]
+  const raw = config?.encodePresets?.length ? config.encodePresets : DEFAULT_ENCODE_PRESETS
   const seen = new Set<string>()
   const presets = raw
     .filter((item): item is VideoEncodePreset => !!item?.id && !!item?.name)
@@ -88,18 +81,4 @@ function normalizeBitrate(value: number | undefined): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
   if (value < 0) return undefined
   return Math.round(value)
-}
-
-function migrateBuiltInPreset(
-  saved: VideoEncodePreset | undefined,
-  fallback: VideoEncodePreset,
-): VideoEncodePreset {
-  if (!saved) return fallback
-  if (saved.id === 'fast-nvenc' && saved.customVideoArgs === LEGACY_NVENC_ARGS) {
-    return {
-      ...saved,
-      customVideoArgs: fallback.customVideoArgs,
-    }
-  }
-  return saved
 }

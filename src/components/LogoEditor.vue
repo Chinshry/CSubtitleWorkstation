@@ -148,7 +148,7 @@ const currentDisplayName = computed(() => {
 
 // === 初始化 ===
 // 优先按 (currentBucket, candidate.path) 命中 logoLayouts entry；
-// 找不到再回退到 initialLayout（全局 lastLogoLayout）或最近列表第一项。
+// 找不到再使用当前任务传入的 initialLayout 或最近列表第一项。
 function applyInitialLayout() {
   const bucket = currentBucket.value
   const init = props.initialLayout
@@ -160,7 +160,7 @@ function applyInitialLayout() {
       applyEntry(hit)
       return
     }
-    // 没命中桶 → 退回 initialLayout（旧 lastLogoLayout）
+    // 没命中桶 → 使用当前任务传入的 initialLayout。
     // 注意：init 的 hPct 是按旧视频宽高比算的，跨桶套用会拉伸 LOGO（例如横屏 1080 → 竖屏 720）。
     // 临时填入，等 aspect 加载完后按当前视频宽高比反算正确的 hPct。
     logoPath.value = init.path

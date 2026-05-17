@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::process::ChildStdin;
 use std::sync::Mutex;
+use tauri::Manager;
 
 /// 运行中的压制任务句柄。
 /// - `pid`：ffmpeg 进程 id，用于兜底强制终止。
@@ -30,11 +31,24 @@ pub fn run() {
     load_shell_env();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .setup(|app| {
+            if let Err(err) = services::temp_cleanup::cleanup_transient_dirs(app.handle()) {
+                eprintln!("Failed to cleanup transient cache dirs on startup: {err}");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::config::load_config,
             commands::config::save_config,

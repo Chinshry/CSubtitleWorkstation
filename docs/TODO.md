@@ -18,12 +18,12 @@
 - [x] 支持新增/编辑/删除自定义预设，`customVideoArgs` 自由扩展 ffmpeg 参数。
 - [x] 编码预设导入导出 JSON。
 - [x] 多套输出文件名模板 + `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` 变量。
-- [x] 三种输出目录策略：与视频同目录 / 固定目录 / 每次手动选择。
+- [x] 两种输出目录策略：与视频同目录 / 固定目录。
 - [ ] 输出模板支持导入导出 JSON（目前仅编码预设支持）。
 
 ## 字幕检查
 
-- [x] `SubtitleCheckPanel` 集中展示风险：VSFilterMod 特效标签 + ASS 色彩矩阵不匹配警告。
+- [x] `SubtitleCheckPanel` 集中展示风险：图片路径 / 字体 / 样式错误，ASS 色彩矩阵警告，VSFilterMod 特效标签建议。
 - [x] 移除独立的 `ColorMatrixWarningBanner`，整合到 `SubtitleCheckPanel`。
 
 ## 跨平台

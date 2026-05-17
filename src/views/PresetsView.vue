@@ -6,6 +6,8 @@ import type { AppConfig, OutputNameTemplate, VideoEncodePreset } from '../types'
 import { DEFAULT_ENCODE_PRESETS, normalizeEncodePresets } from '../utils/encodePresets'
 import { useEncoderOptions } from '../composables/useEncoderOptions'
 import { useToast } from '../composables/useToast'
+import { currentVideoPath } from '../stores/currentJobStore'
+import AppSelect from '../components/AppSelect.vue'
 import EncodeSettingsFields, { type EncodeSettingsModel } from '../components/EncodeSettingsFields.vue'
 import {
   DEFAULT_OUTPUT_TEMPLATE,
@@ -27,6 +29,19 @@ const patternInputRef = ref<HTMLInputElement | null>(null)
 const patternCursor = ref<number | null>(null)
 const { encoderOptions, loadEncoderOptions } = useEncoderOptions()
 const toast = useToast()
+
+const outputDirModeOptions = [
+  {
+    value: 'sameAsVideo',
+    label: '跟随视频目录',
+    description: '输出到源视频所在文件夹',
+  },
+  {
+    value: 'fixed',
+    label: '固定目录',
+    description: '始终输出到你选择的文件夹',
+  },
+]
 
 const selectedTemplate = computed(() => {
   return outputTemplates.value.find((item) => item.id === selectedTemplateId.value) ?? outputTemplates.value[0]
@@ -53,12 +68,22 @@ const selectedEncodeSettings = computed<EncodeSettingsModel>({
   },
 })
 
+const selectedOutputDirMode = computed({
+  get() {
+    const mode = selectedTemplate.value?.outputDirMode
+    return mode === 'fixed' ? 'fixed' : 'sameAsVideo'
+  },
+  set(value: string | number) {
+    setOutputDirMode(String(value))
+  },
+})
+
 const templatePreview = computed(() => {
   const tpl = selectedTemplate.value
   if (!tpl) return ''
   return renderOutputName(tpl.pattern, {
     id: 'preview',
-    videoPath: 'E:\\Videos\\250313 MCD CHACHACHA ZB1 CUT 1080P.mp4',
+    videoPath: currentVideoPath.value || 'E:\\Videos\\预览测试.mp4',
     subtitlePath: '',
     outputPath: '',
     crf: 18,
@@ -88,8 +113,6 @@ async function persistOutputTemplates(message = '命名模板已保存') {
     ...appConfig.value,
     outputTemplates: outputTemplates.value,
     defaultOutputTemplateId: defaultId,
-    outputNameTemplate: outputTemplates.value.find((item) => item.id === defaultId)?.pattern
-      ?? DEFAULT_OUTPUT_TEMPLATE.pattern,
   }
   await saveConfig(next)
   appConfig.value = next
@@ -168,9 +191,23 @@ function insertVariable(key: string) {
 }
 
 function setOutputDirMode(value: string) {
-  if (value === 'sameAsVideo' || value === 'fixed' || value === 'manual') {
+  if (value === 'sameAsVideo' || value === 'fixed') {
     updateSelectedTemplate({ outputDirMode: value })
   }
+}
+
+async function chooseFixedOutputDir() {
+  const selected = await open({
+    title: '选择固定输出目录',
+    directory: true,
+    multiple: false,
+  })
+  const path = Array.isArray(selected) ? selected[0] : selected
+  if (typeof path !== 'string' || !path) return
+  updateSelectedTemplate({
+    outputDirMode: 'fixed',
+    fixedOutputDir: path,
+  })
 }
 
 function rememberPatternCursor(event: Event) {
@@ -572,8 +609,9 @@ onBeforeUnmount(() => {
               class="template-list-item"
               @click="selectedTemplateId = tpl.id"
             >
-              <strong>{{ tpl.name }}</strong>
-              <small>{{ tpl.isDefault ? '默认模板' : tpl.pattern }}</small>
+              <strong class="output-template-title">
+                <span>{{ tpl.name }}</span>
+              </strong>
             </button>
             <div class="template-list-actions">
               <button
@@ -647,23 +685,29 @@ onBeforeUnmount(() => {
 
           <label>
             <span>输出目录</span>
-            <select
-              :value="selectedTemplate.outputDirMode"
-              @change="setOutputDirMode(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="sameAsVideo">跟随视频目录</option>
-              <option value="manual">沿用当前输出框目录</option>
-              <option value="fixed">固定目录</option>
-            </select>
+            <AppSelect
+              v-model="selectedOutputDirMode"
+              class="output-dir-select"
+              :options="outputDirModeOptions"
+            />
           </label>
 
           <label v-if="selectedTemplate.outputDirMode === 'fixed'">
             <span>固定目录</span>
-            <input
-              :value="selectedTemplate.fixedOutputDir ?? ''"
-              placeholder="E:\Output"
-              @input="updateSelectedTemplate({ fixedOutputDir: ($event.target as HTMLInputElement).value })"
-            />
+            <div class="fixed-dir-row">
+              <input
+                :value="selectedTemplate.fixedOutputDir ?? ''"
+                placeholder="E:\Output"
+                @input="updateSelectedTemplate({ fixedOutputDir: ($event.target as HTMLInputElement).value })"
+              />
+              <button
+                type="button"
+                class="secondary fixed-dir-pick"
+                @click="chooseFixedOutputDir"
+              >
+                选择目录
+              </button>
+            </div>
           </label>
 
           <div class="template-preview">
@@ -787,6 +831,17 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.output-template-title {
+  align-items: center;
+  display: flex !important;
+  gap: 7px;
+  min-width: 0;
+}
+.output-template-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .template-list-item small {
   background: #eef3f6;
   border-radius: 999px;
@@ -902,7 +957,6 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .template-editor input,
-.template-editor select,
 .template-editor textarea {
   background: #fff;
   border: 1px solid #d6e0e6;
@@ -916,6 +970,16 @@ onBeforeUnmount(() => {
   font: 12.5px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   min-height: 76px;
   resize: vertical;
+}
+.fixed-dir-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.fixed-dir-pick {
+  min-height: 34px;
+  padding: 0 14px;
+  white-space: nowrap;
 }
 .preset-fields {
   display: grid;
@@ -1022,7 +1086,8 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 960px) {
   .template-manager,
-  .preset-fields {
+  .preset-fields,
+  .fixed-dir-row {
     grid-template-columns: 1fr;
   }
   .panel-heading-actions {

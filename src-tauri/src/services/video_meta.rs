@@ -69,7 +69,7 @@ pub fn inspect(
         }
     }
 
-    // 回退：ffmpeg -i 文本解析（旧实现，精度较差）
+    // ffprobe 不可用时使用 ffmpeg -i 文本解析，精度较差。
     inspect_with_ffmpeg(ffmpeg_path, video_path, &mut meta)?;
     Ok(meta)
 }
@@ -278,7 +278,7 @@ fn parse_rational(s: &str) -> Option<f64> {
 }
 
 /// ffprobe JSON stream 中的 rotation 信息可能位于：
-/// - tags.rotate（旧版 mov 容器）："90" / "180" / "270"
+/// - tags.rotate（部分 mov 容器）："90" / "180" / "270"
 /// - side_data_list[].rotation（新版 ffprobe，displaymatrix）：数值，例如 -90
 /// 任一通道命中 ±90 / ±270 都视为需要交换宽高。
 fn is_rotated_90(s: &Value) -> bool {

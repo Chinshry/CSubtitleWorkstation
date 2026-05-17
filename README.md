@@ -53,12 +53,12 @@
 - 📊 **视频信息卡** — 自动调用 ffprobe 解析分辨率、帧率、编码器、时长等，支持 CFR/VFR 识别
 - 🎨 **可视化参数** — CRF、码率、编码器（x264/x265/NVENC/AMF/VideoToolbox）一目了然
 - 🧰 **编码预设管理** — 内置 `x264 平衡` / `x265 体积优先` / `NVENC 快速` / `AMF 快速` / `Apple 快速` 等多套预设，可在「预设」页新增/编辑/导入导出，主页直接切换
-- 📝 **输出文件名模板** — 支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` 等变量，按模板生成输出名；可保存多套模板并设为默认
+- 📝 **输出文件名模板** — 支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` 等变量，默认生成 `{video_name} 中字.mp4`；可保存多套模板并设为默认
 - 🖼️ **LOGO 可视化编辑 + 布局保存** — 在视频抽帧上拖放 LOGO，支持四角缩放，为不同分辨率（720p/1080p/4K）和屏幕方向（横/竖屏）各自保存一套 LOGO 位置，下次打开自动恢复
 - 🎞️ **反交错处理** — yadif 可选开关，处理交错素材
 - 🔤 **特效字幕压制**（仅 Windows）— 使用 AviSynth+ 脚本引擎处理复杂特效字幕（如矢量绘制、img 标签等），相比 ffmpeg libass 支持更完善
 - 🧠 **特效标签自动识别**（仅 Windows）— 选定字幕后自动扫描 VSFilterMod 扩展标签（`\fsc` / `\xblur` / `\jitter` / `\distort` / `\img` 等），命中即自动勾选「AVS 压制」并在界面提示具体匹配到的标签，省去人工判断特效字幕的步骤
-- 🔍 **字幕检查面板** — 集中展示字幕风险：VSFilterMod 特效标签、ASS 色彩矩阵（YCbCr Matrix）与视频不匹配警告等，命中即给出建议处理方式
+- 🔍 **字幕检查面板** — 集中展示字幕风险：图片路径缺失 / 字体未安装 / 样式缺失作为错误，ASS 色彩矩阵（YCbCr Matrix）问题作为警告，VSFilterMod 特效标签作为建议，并给出处理方式
 - 👁️ **命令预览** — 开始压制前预览完整 ffmpeg 参数，支持折叠/复制
 - 📈 **实时进度** — 进度条、当前时间/总时长、输出大小、速度、fps、码率、原始 status 行
 - 📝 **完整日志** — ffmpeg stdout/stderr 全程透出，按 `\r` 与 `\n` 两种分隔符切行
@@ -175,6 +175,13 @@
 </details>
 
 <details>
+<summary><strong>应用会在本地保存哪些配置和缓存？</strong></summary>
+
+应用会在系统用户目录下保存配置、窗口状态、WebView 缓存、压制临时字幕、LOGO 预览帧和 AVS 临时脚本。完整路径和清理建议见 [用户数据与缓存](docs/CACHE_AND_DATA.md)。
+
+</details>
+
+<details>
 <summary><strong>压制过程中能取消吗？</strong></summary>
 
 可以。点击「取消」按钮，ffmpeg 进程会收到 SIGINT 信号优雅退出（相当于 Ctrl+C），已编码的部分会被正确写入文件尾，保证输出仍然可播放。
@@ -187,7 +194,7 @@
 侧边栏「预设」页面集中管理两类资源：
 
 - **编码预设**：内置 `x264 平衡` / `x265 体积优先` / `NVENC 快速` / `AMF 快速` / `Apple 快速` 五套；可新增/编辑/删除自定义预设，支持 `customVideoArgs` 自由扩展 ffmpeg 参数；可导入/导出 JSON 在多机之间同步。
-- **输出文件名模板**：支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` / `{date:YYMMDD}` 等变量，可选「与视频同目录」/「固定目录」/「每次手动选择」三种输出目录策略，可保存多套并设为默认。
+- **输出文件名模板**：支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` / `{date:YYMMDD}` 等变量，可选「与视频同目录」/「固定目录」两种输出目录策略，可保存多套并设为默认。
 
 主页编辑区直接通过下拉框切换当前任务使用的预设和模板。
 

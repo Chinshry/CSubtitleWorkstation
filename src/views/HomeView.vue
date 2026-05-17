@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
+import { onActivated, onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { cancelCompress, previewFfmpegCommand, startCompress } from '../api/compress'
 import { loadConfig, saveConfig } from '../api/config'
 import { inspectVideoMeta, clearFrameCache } from '../api/video'
 import { pendingDrop, pushDiag } from '../stores/dropStore'
+import { currentVideoPath } from '../stores/currentJobStore'
 import { ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
 import type {
   AppConfig,
@@ -47,8 +48,6 @@ const fps = ref(0)
 const bitrateKbps = ref(0)
 const unlisteners: UnlistenFn[] = []
 const lastAutoOutput = ref('')
-// 记录上一次的 videoPath，用于在视频变化时根据用户对 outputPath 的修改推断"后缀模板"
-const prevVideoPath = ref('')
 const appConfig = ref<AppConfig | null>(null)
 const selectedOutputTemplateId = ref('default')
 const selectedEncodePresetId = ref('balanced-x264')
@@ -58,6 +57,7 @@ const recentLogos = ref<RecentLogo[]>([])
 // 按 (分辨率桶, LOGO 路径) 维度独立记忆的布局列表
 const logoLayouts = ref<LogoLayoutEntry[]>([])
 let logoConfigSaveTimer: ReturnType<typeof setTimeout> | null = null
+let homeReady = false
 
 // 壁钟耗时 / 平滑速度 / ETA
 const startedAt = ref<number | null>(null)
@@ -114,6 +114,14 @@ const displayVideoMeta = computed<VideoMeta | null>(() => {
 
 const job = ref<CompressJob>(createJob())
 
+watch(
+  () => job.value.videoPath,
+  (path) => {
+    currentVideoPath.value = path ?? ''
+  },
+  { immediate: true }
+)
+
 // 字幕分析结果（来自 CompressForm 的 emit，避免重复调用后端 analyze_subtitle）
 const subtitleAnalysis = ref<SubtitleAnalysisResult | null>(null)
 const outputTemplates = computed(() => normalizeOutputTemplates(appConfig.value))
@@ -150,6 +158,12 @@ function applyOutputTemplate() {
   lastAutoOutput.value = job.value.outputPath
 }
 
+function applyOutputTemplateIfAuto() {
+  if (!job.value.videoPath) return
+  if (job.value.outputPath && job.value.outputPath !== lastAutoOutput.value) return
+  applyOutputTemplate()
+}
+
 function applyConfigDefaults(config: AppConfig) {
   job.value.crf = config.defaultCrf
   job.value.needLogo = config.defaultNeedLogo
@@ -178,6 +192,24 @@ function applyEncodePreset(presetId?: string) {
     }
     appConfig.value = next
     void saveConfig(next)
+  }
+}
+
+function selectAvailableTemplate(config: AppConfig) {
+  const templates = normalizeOutputTemplates(config)
+  if (templates.some((item) => item.id === selectedOutputTemplateId.value)) return
+  selectedOutputTemplateId.value = config.defaultOutputTemplateId
+    || getDefaultOutputTemplate(config).id
+}
+
+async function refreshHomeConfig() {
+  try {
+    const next = await loadConfig()
+    appConfig.value = next
+    selectAvailableTemplate(next)
+    applyOutputTemplateIfAuto()
+  } catch (err) {
+    pushDiag(`refresh config failed: ${formatError(err)}`)
   }
 }
 
@@ -220,13 +252,6 @@ function formatError(error: unknown): string {
   }
 }
 
-function buildDefaultOutput(videoPath: string): string {
-  if (!videoPath) return ''
-  const parts = splitVideoPath(videoPath)
-  if (!parts) return ''
-  return joinOutput(parts.dir, parts.sep, `${parts.stem} output`, '.mp4')
-}
-
 function splitVideoPath(p: string): { dir: string; sep: string; stem: string; ext: string } | null {
   if (!p) return null
   const sep = p.includes('\\') ? '\\' : '/'
@@ -242,21 +267,6 @@ function splitVideoPath(p: string): { dir: string; sep: string; stem: string; ex
 function joinOutput(dir: string, sep: string, stem: string, ext: string): string {
   const file = `${stem}${ext}`
   return dir ? `${dir}${sep}${file}` : file
-}
-
-// 用上次的视频 stem 解析当前 outputPath，拆出"用户后缀 + 扩展名"模板。
-// 例：上次 video stem="a", outputPath="D:\v\a 中字.mp4" → 模板 { suffix: " 中字", ext: ".mp4" }
-// 如果 outputPath 不以"上次 stem"开头（用户完全自定义命名），返回 null 表示不再联动。
-function extractTemplate(
-  outputPath: string,
-  prevVideoPath: string
-): { suffix: string; ext: string } | null {
-  const prevParts = splitVideoPath(prevVideoPath)
-  const outParts = splitVideoPath(outputPath)
-  if (!prevParts || !outParts) return null
-  if (!outParts.stem.startsWith(prevParts.stem)) return null
-  const suffix = outParts.stem.slice(prevParts.stem.length)
-  return { suffix, ext: outParts.ext || '.mp4' }
 }
 
 async function refreshFfmpeg() {
@@ -367,31 +377,19 @@ watch(
         job.value.outputPath = ''
       }
       lastAutoOutput.value = ''
-      prevVideoPath.value = ''
       return
     }
 
-    // 1) 没填过输出路径或仍是上次自动生成的值 → 直接用默认后缀 "output"
+    // 没填过输出路径或仍是上次自动生成的值，才按当前模板重新生成。
+    // 用户手动改过输出路径后，切换视频不再从旧路径推断后缀。
     if (!job.value.outputPath || job.value.outputPath === lastAutoOutput.value) {
       const tpl = selectedOutputTemplate.value
-      const templated = buildOutputPath(tpl, job.value, videoMeta.value)
-      const next = templated || joinOutput(newParts.dir, newParts.sep, `${newParts.stem} output`, '.mp4')
+      const next = buildOutputPath(tpl, job.value, videoMeta.value)
+        || joinOutput(newParts.dir, newParts.sep, `${newParts.stem} 中字`, '.mp4')
       job.value.outputPath = next
       lastAutoOutput.value = next
-      prevVideoPath.value = newVal
       return
     }
-
-    // 2) 用户改过 outputPath：尝试从"上次视频 stem + 当前 outputPath"提取后缀模板，
-    //    套用到新视频的 dir + stem 上，让自定义后缀（如 "中字"）跟随新视频生效。
-    const tpl = extractTemplate(job.value.outputPath, prevVideoPath.value)
-    if (tpl) {
-      const next = joinOutput(newParts.dir, newParts.sep, `${newParts.stem}${tpl.suffix}`, tpl.ext)
-      job.value.outputPath = next
-      lastAutoOutput.value = next
-    }
-    // 3) 完全自定义命名（outputPath 与上次 stem 无关）：不动，尊重用户意图
-    prevVideoPath.value = newVal
   }
 )
 
@@ -446,7 +444,7 @@ watch(
   { immediate: true }
 )
 
-// logoLayout 改动 → debounce 同步到 AppConfig.lastLogoLayout / logoLayouts / recentLogos
+// logoLayout 改动 → debounce 同步到 AppConfig.logoLayouts / recentLogos
 watch(
   () => job.value.logoLayout,
   (newVal) => {
@@ -455,7 +453,6 @@ watch(
     logoConfigSaveTimer = setTimeout(async () => {
       const cfg: AppConfig = {
         ...(appConfig.value as AppConfig),
-        lastLogoLayout: newVal ?? null,
         recentLogos: recentLogos.value,
         logoLayouts: logoLayouts.value
       }
@@ -506,22 +503,12 @@ onMounted(async () => {
   // 先取配置，把默认 LOGO 布局/最近列表填入状态
   try {
     appConfig.value = await loadConfig()
-    if (appConfig.value?.lastLogoLayout) {
-      job.value.logoLayout = appConfig.value.lastLogoLayout
-      pushDiag(`已载入上次 LOGO 布局：${appConfig.value.lastLogoLayout.path}`)
-    }
-    if (Array.isArray(appConfig.value?.recentLogos)) {
-      recentLogos.value = appConfig.value.recentLogos
-    }
-    if (Array.isArray(appConfig.value?.logoLayouts)) {
-      logoLayouts.value = appConfig.value.logoLayouts
-    }
-    if (typeof appConfig.value?.defaultUseAvs === 'boolean') {
-      job.value.useAvs = appConfig.value.defaultUseAvs
-    }
-    selectedOutputTemplateId.value = appConfig.value?.defaultOutputTemplateId
+    recentLogos.value = appConfig.value.recentLogos
+    logoLayouts.value = appConfig.value.logoLayouts
+    job.value.useAvs = appConfig.value.defaultUseAvs
+    selectedOutputTemplateId.value = appConfig.value.defaultOutputTemplateId
       || getDefaultOutputTemplate(appConfig.value).id
-    selectedEncodePresetId.value = appConfig.value?.defaultEncodePresetId
+    selectedEncodePresetId.value = appConfig.value.defaultEncodePresetId
       || encodePresets.value[0]?.id
       || getDefaultEncodePreset(appConfig.value).id
     applyConfigDefaults(appConfig.value)
@@ -581,6 +568,12 @@ onMounted(async () => {
     if (drop.videoPath) job.value.videoPath = drop.videoPath
     if (drop.subtitlePath) job.value.subtitlePath = drop.subtitlePath
   }
+  homeReady = true
+})
+
+onActivated(() => {
+  if (!homeReady) return
+  void refreshHomeConfig()
 })
 
 onUnmounted(() => {

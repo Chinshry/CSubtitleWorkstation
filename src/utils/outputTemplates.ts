@@ -3,7 +3,7 @@ import type { AppConfig, CompressJob, OutputNameTemplate, VideoMeta } from '../t
 export const DEFAULT_OUTPUT_TEMPLATE: OutputNameTemplate = {
   id: 'default',
   name: '默认',
-  pattern: '{video_name} output.mp4',
+  pattern: '{video_name} 中字.mp4',
   outputDirMode: 'sameAsVideo',
   isDefault: true,
 }
@@ -18,22 +18,16 @@ export const TEMPLATE_VARIABLES = [
 ]
 
 export function normalizeOutputTemplates(config: AppConfig | null): OutputNameTemplate[] {
-  const templates = Array.isArray(config?.outputTemplates) ? config!.outputTemplates : []
+  const templates = config?.outputTemplates ?? []
   const normalized = templates.length
     ? templates
-    : [{
-        ...DEFAULT_OUTPUT_TEMPLATE,
-        pattern: config?.outputNameTemplate || DEFAULT_OUTPUT_TEMPLATE.pattern,
-      }]
-  if (!normalized.some((item) => item.id === 'default')) {
-    normalized.unshift(DEFAULT_OUTPUT_TEMPLATE)
-  }
+    : [{ ...DEFAULT_OUTPUT_TEMPLATE }]
   return normalized.map((item, index) => ({
     ...item,
     name: item.name || `模板 ${index + 1}`,
     pattern: item.pattern || DEFAULT_OUTPUT_TEMPLATE.pattern,
-    outputDirMode: item.outputDirMode || 'sameAsVideo',
-    isDefault: item.isDefault || item.id === (config?.defaultOutputTemplateId ?? 'default'),
+    outputDirMode: item.outputDirMode === 'fixed' ? 'fixed' : 'sameAsVideo',
+    isDefault: item.isDefault || item.id === (config?.defaultOutputTemplateId ?? DEFAULT_OUTPUT_TEMPLATE.id),
   }))
 }
 
@@ -79,9 +73,6 @@ export function buildOutputPath(
   let dir = video.dir
   if (template.outputDirMode === 'fixed' && template.fixedOutputDir) {
     dir = template.fixedOutputDir
-  } else if (template.outputDirMode === 'manual') {
-    const current = splitPath(job.outputPath)
-    dir = current.dir || video.dir
   }
   return dir ? `${dir}${video.sep}${file}` : file
 }

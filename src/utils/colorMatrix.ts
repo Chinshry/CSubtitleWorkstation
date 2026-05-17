@@ -234,7 +234,7 @@ export function checkColorMatrix(
     const suggested = suggestAssMatrix(videoStandard, videoRangeKind === 'unknown' ? assRangeKind : videoRangeKind)
     return {
       ...base,
-      level: 'error',
+      level: 'warn',
       shouldWarn: true,
       assRange,
       assStandard,
