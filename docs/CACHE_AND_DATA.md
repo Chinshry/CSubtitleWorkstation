@@ -1,6 +1,6 @@
 # 用户数据与缓存
 
-本文整理 CC 字幕压制工作站在用户使用过程中会写入的本地数据、缓存和临时文件。路径中的应用目录由 Tauri 根据应用标识 `com.cbash.csubtitleworkstation` 生成。
+本文整理 CC 字幕压制工作站在用户使用过程中会写入的本地数据、缓存和临时文件。路径中的应用目录由 Tauri 根据应用标识 `com.chinshry.csubtitleworkstation` 生成。
 
 应用使用单实例运行。重复打开应用时不会启动第二个进程，而是唤起已有窗口；因此异常残留的运行期临时缓存会在下一次真正启动应用时统一清理。
 
@@ -11,7 +11,7 @@
 目录：
 
 ```text
-C:\Users\<用户名>\AppData\Roaming\com.cbash.csubtitleworkstation\
+C:\Users\<用户名>\AppData\Roaming\com.chinshry.csubtitleworkstation\
 ```
 
 常见文件：
@@ -29,7 +29,7 @@ C:\Users\<用户名>\AppData\Roaming\com.cbash.csubtitleworkstation\
 目录：
 
 ```text
-C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\EBWebView\
+C:\Users\<用户名>\AppData\Local\com.chinshry.csubtitleworkstation\EBWebView\
 ```
 
 内容：
@@ -48,7 +48,7 @@ C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\EBWebView\
 目录：
 
 ```text
-C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\filter-temp\
+C:\Users\<用户名>\AppData\Local\com.chinshry.csubtitleworkstation\filter-temp\
 ```
 
 用途：
@@ -67,7 +67,7 @@ C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\filter-temp\
 目录：
 
 ```text
-C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\logo-editor-frames\
+C:\Users\<用户名>\AppData\Local\com.chinshry.csubtitleworkstation\logo-editor-frames\
 ```
 
 用途：
@@ -85,7 +85,7 @@ C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\logo-editor-fr
 目录：
 
 ```text
-C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\avs-temp\
+C:\Users\<用户名>\AppData\Local\com.chinshry.csubtitleworkstation\avs-temp\
 ```
 
 用途：
@@ -103,9 +103,9 @@ C:\Users\<用户名>\AppData\Local\com.cbash.csubtitleworkstation\avs-temp\
 Tauri 会把同类数据放到 macOS 的用户 Library 目录下。常见位置如下：
 
 ```text
-~/Library/Application Support/com.cbash.csubtitleworkstation/
-~/Library/Caches/com.cbash.csubtitleworkstation/
-~/Library/WebKit/com.cbash.csubtitleworkstation/
+~/Library/Application Support/com.chinshry.csubtitleworkstation/
+~/Library/Caches/com.chinshry.csubtitleworkstation/
+~/Library/WebKit/com.chinshry.csubtitleworkstation/
 ```
 
 实际目录会随 Tauri/WebView 运行时略有差异。含义与 Windows 对应：
