@@ -31,6 +31,10 @@ export function analyzeSubtitle(subtitlePath: string) {
   return invoke<SubtitleAnalysisResult>('analyze_subtitle', { subtitlePath })
 }
 
+export function validateOutputParentDir(outputPath: string) {
+  return invoke<void>('validate_output_parent_dir', { outputPath })
+}
+
 export function startCompress(job: CompressJob) {
   return invoke<void>('start_compress', { job })
 }

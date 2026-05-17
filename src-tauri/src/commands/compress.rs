@@ -63,6 +63,32 @@ pub fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult,
 }
 
 #[tauri::command]
+pub fn validate_output_parent_dir(output_path: String) -> Result<(), String> {
+    let trimmed = output_path.trim();
+    if trimmed.is_empty() {
+        return Err("输出路径不能为空".to_string());
+    }
+
+    let output = Path::new(trimmed);
+    let parent = if trimmed.ends_with('\\') || trimmed.ends_with('/') || output.extension().is_none()
+    {
+        output
+    } else {
+        output
+            .parent()
+            .ok_or_else(|| "无法识别输出目录".to_string())?
+    };
+
+    if !parent.exists() {
+        return Err(format!("输出目录不存在: {}", parent.display()));
+    }
+    if !parent.is_dir() {
+        return Err(format!("输出目录不是文件夹: {}", parent.display()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn start_compress(
     app: AppHandle,
     state: State<AppState>,
@@ -161,6 +187,7 @@ pub fn start_compress(
     if command.len() < 2 {
         return Err("Generated ffmpeg command is incomplete.".to_string());
     }
+    ensure_output_parent_dir(&command)?;
 
     // 安全 spawn：
     // - stdin 用 piped，cancel_compress 通过写 b"q\n" 让 ffmpeg 优雅退出（写文件尾，部分输出可播放）。
@@ -391,6 +418,24 @@ fn job_temp_dir(app: &AppHandle, job_id: &str) -> Result<PathBuf, String> {
     let dir = temp_cleanup::filter_temp_dir(app)?.join(sanitize_job_id(job_id));
     fs::create_dir_all(&dir).map_err(|err| format!("创建任务临时目录失败: {err}"))?;
     Ok(dir)
+}
+
+fn ensure_output_parent_dir(command: &[String]) -> Result<(), String> {
+    let Some(output_path) = command
+        .iter()
+        .rposition(|arg| arg == "-y")
+        .and_then(|index| index.checked_sub(1))
+        .and_then(|index| command.get(index))
+    else {
+        return Ok(());
+    };
+    let Some(parent) = Path::new(output_path).parent() else {
+        return Ok(());
+    };
+    if parent.as_os_str().is_empty() {
+        return Ok(());
+    }
+    fs::create_dir_all(parent).map_err(|err| format!("创建输出目录失败: {err}"))
 }
 
 fn stage_subtitle_to_ascii(dir: &Path, subtitle_path: &str) -> Result<String, String> {
