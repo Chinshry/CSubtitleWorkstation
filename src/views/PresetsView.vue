@@ -74,7 +74,7 @@ const selectedOutputDirMode = computed({
     return mode === 'fixed' ? 'fixed' : 'sameAsVideo'
   },
   set(value: string | number) {
-    setOutputDirMode(String(value))
+    void setOutputDirMode(String(value))
   },
 })
 
@@ -108,15 +108,34 @@ async function loadPresetConfig() {
 
 async function persistOutputTemplates(message = '命名模板已保存') {
   if (!appConfig.value) return
+  const hasEmptyFixedDir = outputTemplates.value.some(
+    (item) => item.outputDirMode === 'fixed' && !item.fixedOutputDir?.trim()
+  )
+  if (hasEmptyFixedDir) {
+    toast.error('固定目录不能为空，请先选择目录')
+    return
+  }
   const defaultId = outputTemplates.value.find((item) => item.isDefault)?.id ?? selectedTemplateId.value
+  const previous = appConfig.value
   const next: AppConfig = {
-    ...appConfig.value,
+    ...previous,
     outputTemplates: outputTemplates.value,
     defaultOutputTemplateId: defaultId,
   }
-  await saveConfig(next)
-  appConfig.value = next
-  toast.success(message)
+  try {
+    await saveConfig(next)
+    appConfig.value = next
+    toast.success(message)
+  } catch (err) {
+    // 保存失败：回滚内存到磁盘上的旧状态，避免 UI 显示已保存但实际未落盘
+    outputTemplates.value = normalizeOutputTemplates(previous)
+    if (!outputTemplates.value.some((item) => item.id === selectedTemplateId.value)) {
+      selectedTemplateId.value = previous.defaultOutputTemplateId
+        || outputTemplates.value[0]?.id
+        || 'default'
+    }
+    toast.error(`保存失败：${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 function newTemplate() {
@@ -125,6 +144,7 @@ function newTemplate() {
     name: `模板 ${outputTemplates.value.length + 1}`,
     pattern: DEFAULT_OUTPUT_TEMPLATE.pattern,
     outputDirMode: 'sameAsVideo',
+    isDefault: false,
   }
   outputTemplates.value = [...outputTemplates.value, tpl]
   selectedTemplateId.value = tpl.id
@@ -190,24 +210,42 @@ function insertVariable(key: string) {
   })
 }
 
-function setOutputDirMode(value: string) {
-  if (value === 'sameAsVideo' || value === 'fixed') {
+async function setOutputDirMode(value: string) {
+  if (value === 'sameAsVideo') {
     updateSelectedTemplate({ outputDirMode: value })
+    return
+  }
+  if (value === 'fixed') {
+    if (selectedTemplate.value?.fixedOutputDir?.trim()) {
+      updateSelectedTemplate({ outputDirMode: 'fixed' })
+      return
+    }
+    const fixedOutputDir = await chooseFixedOutputDirPath()
+    if (!fixedOutputDir) {
+      toast.error('固定目录不能为空，请先选择目录')
+      return
+    }
+    updateSelectedTemplate({ outputDirMode: 'fixed', fixedOutputDir })
   }
 }
 
 async function chooseFixedOutputDir() {
+  const path = await chooseFixedOutputDirPath()
+  if (!path) return
+  updateSelectedTemplate({
+    outputDirMode: 'fixed',
+    fixedOutputDir: path,
+  })
+}
+
+async function chooseFixedOutputDirPath() {
   const selected = await open({
     title: '选择固定输出目录',
     directory: true,
     multiple: false,
   })
   const path = Array.isArray(selected) ? selected[0] : selected
-  if (typeof path !== 'string' || !path) return
-  updateSelectedTemplate({
-    outputDirMode: 'fixed',
-    fixedOutputDir: path,
-  })
+  return typeof path === 'string' && path ? path : null
 }
 
 function rememberPatternCursor(event: Event) {
@@ -220,14 +258,26 @@ async function persistEncodePresets(message = '压制预设已保存') {
   const selectedId = encodePresets.value.some((item) => item.id === selectedEncodePresetId.value)
     ? selectedEncodePresetId.value
     : encodePresets.value[0]?.id
+  const previous = appConfig.value
   const next: AppConfig = {
-    ...appConfig.value,
+    ...previous,
     encodePresets: encodePresets.value,
     defaultEncodePresetId: selectedId,
   }
-  await saveConfig(next)
-  appConfig.value = next
-  toast.success(message)
+  try {
+    await saveConfig(next)
+    appConfig.value = next
+    toast.success(message)
+  } catch (err) {
+    // 保存失败：回滚内存到磁盘上的旧状态，避免 UI 显示已保存但实际未落盘
+    encodePresets.value = normalizeEncodePresets(previous)
+    if (!encodePresets.value.some((item) => item.id === selectedEncodePresetId.value)) {
+      selectedEncodePresetId.value = previous.defaultEncodePresetId
+        || encodePresets.value[0]?.id
+        || 'balanced-x264'
+    }
+    toast.error(`保存失败：${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 function startTemplateDrag(id: string, event: PointerEvent) {
@@ -300,6 +350,7 @@ function newEncodePreset() {
     encoder: 'libx264',
     crf: 18,
     customVideoArgs: '-preset slow -profile:v high -pix_fmt yuv420p',
+    isDefault: false,
   }
   encodePresets.value = [...encodePresets.value, tpl]
   selectedEncodePresetId.value = tpl.id
@@ -313,6 +364,7 @@ function duplicateEncodePreset(id = selectedEncodePresetId.value) {
     ...source,
     id: crypto.randomUUID(),
     name: `${source.name} 副本`,
+    isDefault: false,
   }
   encodePresets.value = [...encodePresets.value, tpl]
   selectedEncodePresetId.value = tpl.id
@@ -697,8 +749,8 @@ onBeforeUnmount(() => {
             <div class="fixed-dir-row">
               <input
                 :value="selectedTemplate.fixedOutputDir ?? ''"
-                placeholder="E:\Output"
-                @input="updateSelectedTemplate({ fixedOutputDir: ($event.target as HTMLInputElement).value })"
+                placeholder="请点击右侧按钮选择目录"
+                readonly
               />
               <button
                 type="button"
@@ -708,6 +760,7 @@ onBeforeUnmount(() => {
                 选择目录
               </button>
             </div>
+            <small class="field-hint">固定目录必须通过系统目录选择器设置</small>
           </label>
 
           <div class="template-preview">
@@ -980,6 +1033,11 @@ onBeforeUnmount(() => {
   min-height: 34px;
   padding: 0 14px;
   white-space: nowrap;
+}
+.field-hint {
+  color: #697782;
+  font-size: 12px;
+  line-height: 1.4;
 }
 .preset-fields {
   display: grid;

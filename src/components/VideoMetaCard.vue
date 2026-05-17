@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { OutputNameTemplate, VideoMeta } from '../types'
 import { globalDragActive } from '../stores/dropStore'
-import AppSelect from './AppSelect.vue'
+import { validateOutputParentDir } from '../api/compress'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps<{
   meta: VideoMeta | null
@@ -27,6 +28,10 @@ const emit = defineEmits<{
 const outputPath = defineModel<string>('outputPath', { default: '' })
 
 const isEditingOutput = ref(false)
+const draftOutputPath = ref('')
+const isTemplateMenuOpen = ref(false)
+const templateMenuRef = ref<HTMLElement | null>(null)
+const toast = useToast()
 
 const hasAnyPath = computed(
   () => !!props.videoPath || !!props.subtitlePath
@@ -61,6 +66,26 @@ async function chooseSubtitle() {
 }
 
 // dropzone 多选：一次选视频 + 字幕，按扩展名自动分发
+function beginOutputEdit() {
+  draftOutputPath.value = outputPath.value
+  isEditingOutput.value = true
+}
+
+async function saveOutputEdit() {
+  const next = draftOutputPath.value.trim()
+  try {
+    await validateOutputParentDir(next)
+    outputPath.value = next
+    isEditingOutput.value = false
+  } catch (error) {
+    toast.error(formatError(error))
+  }
+}
+
+function formatError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 async function chooseFiles() {
   const sel = await open({
     multiple: true,
@@ -266,22 +291,43 @@ const hasVideoFields = computed(() => videoFields.value.length > 0)
 const hasAudioFields = computed(() => audioFields.value.length > 0)
 const templateOptions = computed(() => props.outputTemplates ?? [])
 
-const templateSelectOptions = computed(() =>
-  templateOptions.value.map((tpl) => ({
-    value: tpl.id,
-    label: tpl.name,
-    title: tpl.pattern
-  }))
-)
+const selectedTemplateId = computed(() => props.selectedOutputTemplateId ?? templateOptions.value[0]?.id ?? '')
+const selectedTemplateName = computed(() => {
+  return templateOptions.value.find((tpl) => tpl.id === selectedTemplateId.value)?.name ?? '命名模板'
+})
 
-const selectedTemplateModel = computed({
-  get() {
-    return props.selectedOutputTemplateId ?? templateOptions.value[0]?.id ?? ''
-  },
-  set(value: string | number) {
-    emit('update:selectedOutputTemplateId', String(value))
-    emit('apply-output-template')
+function toggleTemplateMenu() {
+  isTemplateMenuOpen.value = !isTemplateMenuOpen.value
+}
+
+function applyTemplate(id: string) {
+  emit('update:selectedOutputTemplateId', id)
+  emit('apply-output-template')
+  isTemplateMenuOpen.value = false
+}
+
+function closeTemplateMenuOnOutside(event: MouseEvent) {
+  const target = event.target
+  if (!(target instanceof Node)) return
+  if (!templateMenuRef.value?.contains(target)) {
+    isTemplateMenuOpen.value = false
   }
+}
+
+function closeTemplateMenuOnEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    isTemplateMenuOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', closeTemplateMenuOnOutside)
+  document.addEventListener('keydown', closeTemplateMenuOnEscape)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', closeTemplateMenuOnOutside)
+  document.removeEventListener('keydown', closeTemplateMenuOnEscape)
 })
 </script>
 
@@ -358,29 +404,50 @@ const selectedTemplateModel = computed({
           <dd class="path-row">
             <input
               v-if="isEditingOutput"
-              v-model="outputPath"
+              v-model="draftOutputPath"
               class="path-input"
               placeholder="例如：E:\path\to\output.mp4"
-              @blur="isEditingOutput = false"
-              @keyup.enter="isEditingOutput = false"
+              @blur="saveOutputEdit"
+              @keyup.enter="saveOutputEdit"
+              @keyup.esc="isEditingOutput = false"
             />
             <span v-else class="path-text" :title="outputPath || '未设置'">{{ outputPath || '—' }}</span>
+            <div v-if="templateOptions.length" ref="templateMenuRef" class="path-template-menu">
+              <button
+                class="path-action"
+                :class="{ active: isTemplateMenuOpen }"
+                data-tip="套用命名模板"
+                type="button"
+                @click="toggleTemplateMenu"
+                :aria-label="`套用命名模板：${selectedTemplateName}`"
+                :aria-expanded="isTemplateMenuOpen"
+                aria-haspopup="menu"
+              >
+                <span aria-hidden="true" class="template-action-icon"></span>
+              </button>
+              <div v-if="isTemplateMenuOpen" class="template-popover" role="menu">
+                <button
+                  v-for="tpl in templateOptions"
+                  :key="tpl.id"
+                  class="template-popover-item"
+                  :class="{ selected: tpl.id === selectedTemplateId }"
+                  type="button"
+                  role="menuitem"
+                  :title="tpl.pattern"
+                  @click="applyTemplate(tpl.id)"
+                >
+                  <span>{{ tpl.name }}</span>
+                  <span v-if="tpl.id === selectedTemplateId" aria-hidden="true">✓</span>
+                </button>
+              </div>
+            </div>
             <button
               class="path-action"
               data-tip="编辑输出路径"
-              @click="isEditingOutput = !isEditingOutput"
+              type="button"
+              @click="isEditingOutput ? (isEditingOutput = false) : beginOutputEdit()"
               aria-label="编辑输出"
             >✎</button>
-          </dd>
-        </div>
-        <div v-if="templateOptions.length">
-          <dt>命名模板</dt>
-          <dd class="path-row template-control">
-            <AppSelect
-              v-model="selectedTemplateModel"
-              class="template-select-control"
-              :options="templateSelectOptions"
-            />
           </dd>
         </div>
       </dl>

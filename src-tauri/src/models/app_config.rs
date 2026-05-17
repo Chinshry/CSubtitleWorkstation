@@ -32,8 +32,11 @@ pub struct VideoEncodePreset {
     pub name: String,
     pub encoder: String,
     pub crf: u8,
+    #[serde(default)]
     pub max_bitrate: Option<i32>,
+    #[serde(default)]
     pub custom_video_args: Option<String>,
+    #[serde(default)]
     pub is_default: bool,
 }
 
@@ -57,7 +60,9 @@ pub struct OutputNameTemplate {
     pub name: String,
     pub pattern: String,
     pub output_dir_mode: OutputDirMode,
+    #[serde(default)]
     pub fixed_output_dir: Option<String>,
+    #[serde(default)]
     pub is_default: bool,
 }
 

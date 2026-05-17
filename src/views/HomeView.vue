@@ -6,6 +6,7 @@ import { loadConfig, saveConfig } from '../api/config'
 import { inspectVideoMeta, clearFrameCache } from '../api/video'
 import { pendingDrop, pushDiag } from '../stores/dropStore'
 import { currentVideoPath } from '../stores/currentJobStore'
+import { configRevision } from '../stores/configStore'
 import { ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
 import type {
   AppConfig,
@@ -392,6 +393,11 @@ watch(
     }
   }
 )
+
+watch(configRevision, () => {
+  if (!homeReady) return
+  void refreshHomeConfig()
+})
 
 // 消费 App.vue 全局拖拽事件
 watch(pendingDrop, (drop) => {
