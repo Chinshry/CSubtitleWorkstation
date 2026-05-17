@@ -97,9 +97,40 @@
 
 ---
 
-## 📸 演示
+## 📸 界面截图
 
-> 待补充：拖拽压制过程 GIF 或截图
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/01-home.png"><img src="docs/screenshots/01-home.png" alt="主页 - 拖拽导入与压制参数" /></a>
+      <br/><sub><b>主页</b> · 拖拽视频和字幕即可开始，压制参数一目了然</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/02-encoding.png"><img src="docs/screenshots/02-encoding.png" alt="压制中 - 视频信息、字幕检查、实时进度与日志" /></a>
+      <br/><sub><b>压制中</b> · 视频信息卡 + 字幕检查 + 实时进度 + ffmpeg 日志</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/03-logo-editor.png"><img src="docs/screenshots/03-logo-editor.png" alt="LOGO 可视化编辑器" /></a>
+      <br/><sub><b>LOGO 编辑器</b> · 在视频抽帧上拖放缩放，按分辨率/方向自动保存布局</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/04-subtitle-check.png"><img src="docs/screenshots/04-subtitle-check.png" alt="字幕检查面板" /></a>
+      <br/><sub><b>字幕检查</b> · 图片缺失、字体未装、色彩矩阵、特效标签分级提示</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/05-presets.png"><img src="docs/screenshots/05-presets.png" alt="预设管理 - 编码预设与文件名模板" /></a>
+      <br/><sub><b>预设管理</b> · 编码预设 + 输出文件名模板，可导入导出</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/06-settings.png"><img src="docs/screenshots/06-settings.png" alt="设置面板 - ffmpeg、AVS、应用更新" /></a>
+      <br/><sub><b>设置</b> · ffmpeg / AviSynth+ 自检与应用更新检查</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
