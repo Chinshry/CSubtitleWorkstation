@@ -21,6 +21,11 @@ export interface SubtitleAnalysisResult {
     style: string
     line: number
   }>
+  /** ASS [Events] 段 Effect 字段命中的 Banner 滚动横幅；非空意味需要 AVS 压制 */
+  bannerHits: Array<{
+    line: number
+    raw: string
+  }>
 }
 
 export function previewFfmpegCommand(job: CompressJob) {

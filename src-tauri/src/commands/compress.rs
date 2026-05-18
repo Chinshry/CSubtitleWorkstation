@@ -37,6 +37,8 @@ pub struct SubtitleAnalysisResult {
     pub missing_img_paths: Vec<subtitle_analyzer::SubtitleResourceIssue>,
     pub missing_fonts: Vec<subtitle_analyzer::SubtitleFontIssue>,
     pub missing_styles: Vec<subtitle_analyzer::SubtitleStyleIssue>,
+    /// ASS [Events] 段 Effect 字段命中的 Banner 滚动横幅（携带行号 / 原始字符串）
+    pub banner_hits: Vec<subtitle_analyzer::SubtitleBannerHit>,
 }
 
 #[tauri::command]
@@ -59,6 +61,7 @@ pub fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult,
         missing_img_paths: analysis.missing_img_paths,
         missing_fonts: analysis.missing_fonts,
         missing_styles: analysis.missing_styles,
+        banner_hits: analysis.banner_hits,
     })
 }
 

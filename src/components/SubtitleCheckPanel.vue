@@ -93,16 +93,25 @@ const items = computed<CheckItem[]>(() => {
   }
 
   const tags = props.analysis?.detectedTags ?? []
+  const bannerHits = props.analysis?.bannerHits ?? []
   if (tags.length > 0) {
     const hasImg = tags.some((tag) => /img/i.test(tag))
     const hasModTag = tags.some((tag) => !/img/i.test(tag))
+    const hasBanner = bannerHits.length > 0
     next.push({
       id: 'effects',
       level: 'info',
       label: levelLabel('info'),
       title: effectTitle(),
-      detail: effectDetail(hasImg, hasModTag),
+      detail: effectDetail(hasImg, hasModTag, hasBanner),
       suggestion: hasImg ? '建议启用 AVS 压制模式，或确认非 AVS 输出是否符合预期。' : undefined,
+      // 命中行号详情（仅 banner 需要，VSFilterMod override 标签无行号信息）
+      meta: hasBanner
+        ? bannerHits.slice(0, 12).map((hit) => ({
+            label: `第 ${hit.line} 行`,
+            value: hit.raw,
+          }))
+        : undefined,
       tagValues: tags,
     })
   }
@@ -150,7 +159,10 @@ function effectTitle() {
   return '检测到 VSFilterMod 标签，建议启用 AVS 压制模式'
 }
 
-function effectDetail(hasImg: boolean, hasModTag: boolean) {
+function effectDetail(hasImg: boolean, hasModTag: boolean, hasBanner: boolean) {
+  if (hasBanner) {
+    return '检测到 ASS Effect 字段的 Banner 滚动横幅（带 fadeawaywidth 或小写 banner），ffmpeg libass 渲染不支持该效果，必须使用 AVS+VSFilterMod 才能正确还原。'
+  }
   if (hasImg) {
     return '这些标签通常依赖 AVS/VSFilterMod 渲染；请确认素材资源完整，并开启 AVS 压制以尽量还原字幕效果。'
   }

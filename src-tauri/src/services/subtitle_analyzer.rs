@@ -29,6 +29,20 @@ pub struct SubtitleStyleIssue {
     pub line: usize,
 }
 
+/// ASS [Events] 段 Dialogue/Comment 行命中的 Banner Effect 字段
+///
+/// 命中规则（必须走 AVS 压制）：
+///   - 小写 `banner;...`（任意参数）
+///   - 大写 `Banner;delay;lefttoright;fadeawaywidth` 且 fadeawaywidth != 0
+/// 不命中（可普通压制）：
+///   - 大写 `Banner;8`、`Banner;8;0`、`Banner;8;0;0`
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleBannerHit {
+    pub line: usize,
+    pub raw: String,
+}
+
 pub struct SubtitleAnalysis {
     pub has_effects: bool,
     pub detected_tags: Vec<String>,
@@ -37,6 +51,7 @@ pub struct SubtitleAnalysis {
     pub missing_img_paths: Vec<SubtitleResourceIssue>,
     pub missing_fonts: Vec<SubtitleFontIssue>,
     pub missing_styles: Vec<SubtitleStyleIssue>,
+    pub banner_hits: Vec<SubtitleBannerHit>,
 }
 
 pub fn analyze_subtitle(subtitle_path: &str) -> Result<SubtitleAnalysis, String> {
@@ -48,7 +63,7 @@ pub fn analyze_subtitle(subtitle_path: &str) -> Result<SubtitleAnalysis, String>
     let content =
         fs::read_to_string(path).map_err(|err| format!("Failed to read subtitle file: {err}"))?;
 
-    let (has_effects, detected_tags) = detect_effect_tags(&content);
+    let (mut has_effects, mut detected_tags) = detect_effect_tags(&content);
     let ass_matrix = parse_ass_matrix(&content);
 
     let is_ass_like = path
@@ -57,12 +72,26 @@ pub fn analyze_subtitle(subtitle_path: &str) -> Result<SubtitleAnalysis, String>
         .map(|value| value.eq_ignore_ascii_case("ass") || value.eq_ignore_ascii_case("ssa"))
         .unwrap_or(false);
 
-    let (missing_fonts, missing_styles) = if is_ass_like {
+    let (missing_fonts, missing_styles, banner_hits) = if is_ass_like {
         analyze_ass_references(&content)
     } else {
-        (Vec::new(), Vec::new())
+        (Vec::new(), Vec::new(), Vec::new())
     };
     let missing_img_paths = find_missing_img_paths(&content, path.parent());
+
+    // Banner Effect 字段命中即视为需要 AVS：与 VSFilterMod 标签复用 has_effects / detected_tags
+    // 链路，CompressForm 会自动开启 AVS 并展示「检测到特殊标签」提示。
+    if !banner_hits.is_empty() {
+        has_effects = true;
+        let mut seen: HashSet<String> = detected_tags.iter().cloned().collect();
+        for hit in &banner_hits {
+            let label = format!("{}(滚动横幅)", hit.raw);
+            if seen.insert(label.clone()) {
+                detected_tags.push(label);
+            }
+        }
+        detected_tags.sort();
+    }
 
     Ok(SubtitleAnalysis {
         has_effects,
@@ -71,6 +100,7 @@ pub fn analyze_subtitle(subtitle_path: &str) -> Result<SubtitleAnalysis, String>
         missing_img_paths,
         missing_fonts,
         missing_styles,
+        banner_hits,
     })
 }
 
@@ -82,6 +112,7 @@ fn empty_analysis() -> SubtitleAnalysis {
         missing_img_paths: vec![],
         missing_fonts: vec![],
         missing_styles: vec![],
+        banner_hits: vec![],
     }
 }
 
@@ -178,7 +209,13 @@ fn resolve_subtitle_resource_path(raw_path: &str, subtitle_dir: Option<&Path>) -
         .unwrap_or_else(|| PathBuf::from(raw_path))
 }
 
-fn analyze_ass_references(content: &str) -> (Vec<SubtitleFontIssue>, Vec<SubtitleStyleIssue>) {
+fn analyze_ass_references(
+    content: &str,
+) -> (
+    Vec<SubtitleFontIssue>,
+    Vec<SubtitleStyleIssue>,
+    Vec<SubtitleBannerHit>,
+) {
     let parsed = parse_ass_sections(content);
     let installed_fonts = installed_font_names();
 
@@ -207,13 +244,14 @@ fn analyze_ass_references(content: &str) -> (Vec<SubtitleFontIssue>, Vec<Subtitl
         }
     }
 
-    (missing_fonts, missing_styles)
+    (missing_fonts, missing_styles, parsed.banner_hits)
 }
 
 struct ParsedAssReferences {
     defined_styles: HashSet<String>,
     used_styles: Vec<SubtitleStyleIssue>,
     fonts: Vec<SubtitleFontIssue>,
+    banner_hits: Vec<SubtitleBannerHit>,
 }
 
 fn parse_ass_sections(content: &str) -> ParsedAssReferences {
@@ -223,6 +261,7 @@ fn parse_ass_sections(content: &str) -> ParsedAssReferences {
     let mut defined_styles = HashSet::new();
     let mut used_styles = Vec::new();
     let mut fonts = Vec::new();
+    let mut banner_hits = Vec::new();
 
     for (line_idx, raw) in content.lines().enumerate() {
         let line_no = line_idx + 1;
@@ -280,6 +319,15 @@ fn parse_ass_sections(content: &str) -> ParsedAssReferences {
                     });
                 }
             }
+            if let Some(effect) = ass_field(&event_format, &fields, "effect") {
+                let effect = effect.trim();
+                if banner_effect_requires_avs(effect) {
+                    banner_hits.push(SubtitleBannerHit {
+                        line: line_no,
+                        raw: effect.to_string(),
+                    });
+                }
+            }
             if let Some(text) = ass_field(&event_format, &fields, "text") {
                 fonts.extend(parse_override_fonts(text, line_no));
             }
@@ -290,6 +338,53 @@ fn parse_ass_sections(content: &str) -> ParsedAssReferences {
         defined_styles,
         used_styles,
         fonts,
+        banner_hits,
+    }
+}
+
+/// 判定 ASS Effect 字段是否为需要 AVS 的 Banner（横幅滚动）特效
+///
+/// ASS 规范：`Banner;delay[;lefttoright;fadeawaywidth]`
+///
+/// 命中规则（→ 需要 AVS）：
+///   - 严格小写 `banner;...`（无论参数）—— 非标准写法，统一按需 AVS 处理
+///   - 首字母大写 `Banner;...` 且 `fadeawaywidth` 显式给出且不为 0
+///
+/// 不命中（→ 可普通压制）：
+///   - 首字母大写 `Banner` 缺省 `fadeawaywidth`（`Banner;8`、`Banner;8;0`）
+///   - 首字母大写 `Banner` 且 `fadeawaywidth = 0`（`Banner;8;0;0`）
+fn banner_effect_requires_avs(effect: &str) -> bool {
+    if effect.is_empty() {
+        return false;
+    }
+    let mut parts = effect.split(';');
+    let name = match parts.next() {
+        Some(name) => name.trim(),
+        None => return false,
+    };
+    let is_lowercase = name == "banner";
+    let is_proper_case = name == "Banner";
+    if !is_lowercase && !is_proper_case {
+        return false;
+    }
+    if is_lowercase {
+        return true;
+    }
+    // Banner（首字母大写）：跳过 delay、lefttoright，取第 3 个分号后的 fadeawaywidth
+    let _delay = parts.next();
+    let _lefttoright = parts.next();
+    let fadeaway = match parts.next() {
+        Some(value) => value.trim(),
+        None => return false,
+    };
+    if fadeaway.is_empty() {
+        return false;
+    }
+    match fadeaway.parse::<i64>() {
+        Ok(0) => false,
+        Ok(_) => true,
+        // 数字解析失败：保守按缺省处理，不强制 AVS
+        Err(_) => false,
     }
 }
 
@@ -581,7 +676,7 @@ fn parse_ass_matrix(content: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_missing_img_paths, parse_ass_matrix, parse_ass_sections,
+        banner_effect_requires_avs, find_missing_img_paths, parse_ass_matrix, parse_ass_sections,
         resolve_subtitle_resource_path,
     };
     use std::path::Path;
@@ -646,5 +741,108 @@ Dialogue: 0,0:00:00.00,0:00:01.00,Default,{\1img(E:\missing\100.png)}Hi";
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].tag, "\\1img");
         assert_eq!(issues[0].line, 2);
+    }
+
+    // ────────── Banner Effect 字段检测 ──────────
+
+    #[test]
+    fn lowercase_banner_always_requires_avs() {
+        // 小写 banner 任意参数都必须走 AVS
+        assert!(banner_effect_requires_avs("banner;8"));
+        assert!(banner_effect_requires_avs("banner;8;0"));
+        assert!(banner_effect_requires_avs("banner;8;0;0"));
+        assert!(banner_effect_requires_avs("banner;8;0;50"));
+    }
+
+    #[test]
+    fn proper_case_banner_without_fadeawaywidth_is_normal_compress() {
+        // 缺省 fadeawaywidth → 普通压制
+        assert!(!banner_effect_requires_avs("Banner;8"));
+        assert!(!banner_effect_requires_avs("Banner;8;0"));
+        assert!(!banner_effect_requires_avs("Banner;8;1"));
+    }
+
+    #[test]
+    fn proper_case_banner_with_zero_fadeawaywidth_is_normal_compress() {
+        // fadeawaywidth = 0 显式给出 → 普通压制
+        assert!(!banner_effect_requires_avs("Banner;8;0;0"));
+        assert!(!banner_effect_requires_avs("Banner;8;1;0"));
+    }
+
+    #[test]
+    fn proper_case_banner_with_nonzero_fadeawaywidth_requires_avs() {
+        // fadeawaywidth ≠ 0 → AVS
+        assert!(banner_effect_requires_avs("Banner;8;0;50"));
+        assert!(banner_effect_requires_avs("Banner;8;1;30"));
+        assert!(banner_effect_requires_avs("Banner;8;0;1"));
+    }
+
+    #[test]
+    fn banner_other_casing_does_not_match() {
+        // 严格大小写：全大写 / 混合大小写不被识别为 banner
+        assert!(!banner_effect_requires_avs("BANNER;8;0;50"));
+        assert!(!banner_effect_requires_avs("BaNnEr;8;0;50"));
+        assert!(!banner_effect_requires_avs("bANNER;8;0;50"));
+    }
+
+    #[test]
+    fn non_banner_effect_does_not_match() {
+        assert!(!banner_effect_requires_avs(""));
+        assert!(!banner_effect_requires_avs("Karaoke"));
+        assert!(!banner_effect_requires_avs("Scroll up;10;100;5;0"));
+        assert!(!banner_effect_requires_avs("Scroll down;10;100;5;0"));
+    }
+
+    #[test]
+    fn banner_with_unparseable_fadeawaywidth_falls_back_to_normal() {
+        // 解析失败按缺省处理，不强制 AVS
+        assert!(!banner_effect_requires_avs("Banner;8;0;abc"));
+        assert!(!banner_effect_requires_avs("Banner;8;0;"));
+    }
+
+    #[test]
+    fn parses_banner_hits_from_events_section() {
+        let ass = "\
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,Banner;8;0;50,Roll text
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,Banner;8;0;0,Quiet roll
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,Banner;8,Default roll
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,banner;8,Lowercase
+Comment: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,Karaoke,Not banner
+";
+        let parsed = parse_ass_sections(ass);
+        // 命中：第 3 行 Banner;8;0;50、第 6 行 banner;8
+        // 不命中：Banner;8;0;0、Banner;8、Karaoke
+        assert_eq!(parsed.banner_hits.len(), 2);
+        assert_eq!(parsed.banner_hits[0].line, 3);
+        assert_eq!(parsed.banner_hits[0].raw, "Banner;8;0;50");
+        assert_eq!(parsed.banner_hits[1].line, 6);
+        assert_eq!(parsed.banner_hits[1].raw, "banner;8");
+    }
+
+    #[test]
+    fn parses_banner_hits_when_effect_column_reordered() {
+        // Format 列序变动，Effect 移到 Text 前最后一列；命中仍应按列名匹配
+        let ass = "\
+[Events]
+Format: Layer, Start, End, Style, Name, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.00,Default,,Banner;8;0;50,Hi
+";
+        let parsed = parse_ass_sections(ass);
+        assert_eq!(parsed.banner_hits.len(), 1);
+        assert_eq!(parsed.banner_hits[0].raw, "Banner;8;0;50");
+    }
+
+    #[test]
+    fn no_banner_hits_when_effect_is_empty_or_unrelated() {
+        let ass = "\
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Hi
+Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,Karaoke,Hi2
+";
+        let parsed = parse_ass_sections(ass);
+        assert!(parsed.banner_hits.is_empty());
     }
 }
