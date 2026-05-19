@@ -1326,6 +1326,70 @@ select option {
   margin-top: 16px;
 }
 
+/* —— 关于面板 —— */
+/* 三种 chip 的视觉高度统一为 28px，与 .current-version / .repo-link 一致 */
+.author-link {
+  align-items: center;
+  border-radius: 999px;
+  color: #1a2530;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 12px 2px 2px;
+  text-decoration: none;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.author-link:hover {
+  background: #eef4f7;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.author-avatar {
+  background: #eef4f7;
+  border: 1px solid #d8e5eb;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 24px;
+  object-fit: cover;
+  width: 24px;
+}
+
+.author-avatar-fallback {
+  align-items: center;
+  color: #687682;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.author-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* 许可证小徽章：浅绿色突出"开源"语义 */
+.license-chip {
+  align-items: center;
+  background: #eef7ee;
+  border: 1px solid #c8e0c8;
+  border-radius: 999px;
+  color: #2f6b30;
+  display: inline-flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  min-height: 28px;
+  padding: 0 12px;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.license-chip:hover {
+  background: #ddeedd;
+  border-color: #2f6b30;
+}
+
 .actions.left {
   align-items: center;
   flex-wrap: wrap;
