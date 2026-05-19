@@ -665,8 +665,8 @@ onBeforeUnmount(() => {
             <div class="le-section-title">当前 LOGO</div>
             <div v-if="hasValidLogo" class="le-current-card">
               <img :src="logoUrl" class="le-thumb" alt="LOGO" />
-              <div class="le-current-name" :title="currentDisplayName">{{ currentDisplayName }}</div>
-              <div class="le-current-path" :title="logoPath">
+              <div class="le-current-name" v-tooltip="currentDisplayName">{{ currentDisplayName }}</div>
+              <div class="le-current-path" v-tooltip="logoPath">
                 <svg class="le-path-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                 </svg>
@@ -684,7 +684,7 @@ onBeforeUnmount(() => {
                 :key="item.path"
                 :class="{ active: item.path === logoPath, editing: editingPath === item.path }"
                 @click="editingPath !== item.path && applyLogoPath(item.path)"
-                :title="item.path"
+                v-tooltip="item.path"
               >
                 <img :src="convertFileSrc(item.path)" class="le-thumb-sm" alt="" />
                 <input
@@ -705,7 +705,7 @@ onBeforeUnmount(() => {
                   v-if="editingPath !== item.path"
                   type="button"
                   class="le-recent-act le-recent-rename"
-                  title="重命名"
+                  v-tooltip="'重命名'"
                   aria-label="重命名"
                   @click="startRename(item, $event)"
                 >
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
                   v-if="editingPath !== item.path"
                   type="button"
                   class="le-recent-act le-recent-del"
-                  :title="`移除 ${displayLabel(item)}`"
+                  v-tooltip="`移除 ${displayLabel(item)}`"
                   aria-label="移除"
                   @click="removeRecent(item.path, $event)"
                 >
@@ -796,7 +796,7 @@ onBeforeUnmount(() => {
               type="button"
               :class="{ loading: frameLoading }"
               :disabled="frameLoading"
-              :title="frameLoading ? '抽帧中…' : '重新抽取当前帧'"
+              v-tooltip="frameLoading ? '抽帧中…' : '重新抽取当前帧'"
               :aria-label="frameLoading ? '抽帧中' : '重新抽取当前帧'"
               @click="refreshFrame"
             >

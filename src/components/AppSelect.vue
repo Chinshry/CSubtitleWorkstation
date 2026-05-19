@@ -136,7 +136,7 @@ watch(
       type="button"
       class="app-select-trigger"
       :disabled="disabled"
-      :title="title"
+      v-tooltip="title"
       @click="toggle"
       @keydown="onKeydown"
     >
@@ -176,7 +176,7 @@ watch(
               selected: opt.value === modelValue,
               highlighted: idx === highlight
             }"
-            :title="opt.title"
+            v-tooltip="opt.title"
             @click="pick(opt)"
             @mousemove="highlight = idx"
           >

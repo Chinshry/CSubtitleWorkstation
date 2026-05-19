@@ -633,7 +633,7 @@ onUnmounted(() => {
         class="secondary command-toggle"
         :class="{ active: showCommandPreview }"
         :disabled="!command.length"
-        :title="command.length ? '' : '等待视频与参数就绪后自动生成命令'"
+        v-tooltip="command.length ? '' : '等待视频与参数就绪后自动生成命令'"
         @click="showCommandPreview = !showCommandPreview"
       >
         {{ showCommandPreview ? '隐藏命令预览' : '显示命令预览' }}

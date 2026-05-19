@@ -205,7 +205,7 @@ async function copyCommand() {
         <p>{{ viewHintText }}</p>
       </div>
       <div class="command-tools">
-        <span class="quote-platform-chip" :title="`默认使用${nativePlatformText}对应的命令格式`">
+        <span class="quote-platform-chip" v-tooltip="`默认使用${nativePlatformText}对应的命令格式`">
           {{ nativePlatformText }}
         </span>
         <AppSelect

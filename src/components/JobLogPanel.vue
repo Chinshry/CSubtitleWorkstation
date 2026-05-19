@@ -137,15 +137,15 @@ const estimatedSizeKb = computed(() => {
       </div>
 
       <div class="eta-pills" v-if="(elapsedSeconds ?? 0) > 0">
-        <span class="eta-pill" title="壁钟耗时：从开始压制到现在的真实流逝时间">
+        <span class="eta-pill" v-tooltip="'壁钟耗时：从开始压制到现在的真实流逝时间'">
           <em>已用</em>
           <span>{{ formatTime(elapsedSeconds) }}</span>
         </span>
-        <span class="eta-pill estimate" title="预计总耗时 = 已用 + 剩余（按当前平滑速度估算）">
+        <span class="eta-pill estimate" v-tooltip="'预计总耗时 = 已用 + 剩余（按当前平滑速度估算）'">
           <em>预计</em>
           <span>{{ formatTimeOrDash(etaSeconds) }}</span>
         </span>
-        <span class="eta-pill highlight" title="剩余 = (视频总时长 − 已压制) / 当前速度">
+        <span class="eta-pill highlight" v-tooltip="'剩余 = (视频总时长 − 已压制) / 当前速度'">
           <em>剩余</em>
           <span>{{ formatTimeOrDash(remainingSeconds) }}</span>
         </span>
@@ -177,7 +177,7 @@ const estimatedSizeKb = computed(() => {
         </div>
       </div>
 
-      <div v-if="statusLine" class="status-line" :title="statusLine">{{ statusLine }}</div>
+      <div v-if="statusLine" class="status-line" v-tooltip="statusLine">{{ statusLine }}</div>
 
       <div class="log-lines">
         <p v-for="(line, index) in lines" :key="index">{{ line }}</p>

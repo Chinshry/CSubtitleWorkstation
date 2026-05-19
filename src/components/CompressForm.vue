@@ -288,7 +288,7 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
         <button
           type="button"
           class="secondary preset-menu-trigger"
-          :title="selectedEncodePresetName ? `上次套用：${selectedEncodePresetName}` : '选择一个压制预设并套用到当前参数'"
+          v-tooltip="selectedEncodePresetName ? `上次套用：${selectedEncodePresetName}` : '选择一个压制预设并套用到当前参数'"
           @click="togglePresetMenu"
         >
           套用预设
@@ -305,7 +305,7 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
             :key="option.value"
             type="button"
             class="preset-menu-option"
-            :title="option.title"
+            v-tooltip="option.title"
             @click="applyEncodePresetOption(String(option.value), option.label)"
           >
             <span>{{ option.label }}</span>
@@ -391,14 +391,14 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
             class="secondary logo-config-btn"
             :class="{ disabled: logoButtonDisabled }"
             :disabled="logoButtonDisabled"
-            :title="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
+            v-tooltip="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
             @click="onOpenLogoEditor"
           >
             {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
           </button>
           <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
           <span v-else class="logo-summary muted">尚未配置 LOGO</span>
-          <div class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }" :title="logoLayerTip">
+          <div class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }" v-tooltip="logoLayerTip">
             <span class="logo-layer-label">LOGO 层级</span>
             <AppSelect
               v-model="logoLayerValue"

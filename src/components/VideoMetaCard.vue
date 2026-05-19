@@ -355,14 +355,14 @@ onBeforeUnmount(() => {
       <div class="meta-head">
         <h2>视频信息</h2>
         <span v-if="loading" class="meta-status loading">解析中…</span>
-        <span v-else-if="error" class="meta-status error" :title="error">{{ error }}</span>
+        <span v-else-if="error" class="meta-status error" v-tooltip="error">{{ error }}</span>
       </div>
 
       <dl class="path-grid">
         <div>
           <dt>视频</dt>
           <dd class="path-row">
-            <span class="path-text readonly" :title="videoPath || '未导入'">{{ videoPath || '—' }}</span>
+            <span class="path-text readonly" v-tooltip="videoPath || '未导入'">{{ videoPath || '—' }}</span>
             <button
               v-if="videoPath"
               class="path-action"
@@ -382,7 +382,7 @@ onBeforeUnmount(() => {
         <div>
           <dt>字幕</dt>
           <dd class="path-row">
-            <span class="path-text readonly" :title="subtitlePath || '未导入'">{{ subtitlePath || '—' }}</span>
+            <span class="path-text readonly" v-tooltip="subtitlePath || '未导入'">{{ subtitlePath || '—' }}</span>
             <button
               v-if="subtitlePath"
               class="path-action"
@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
               @keyup.enter="saveOutputEdit"
               @keyup.esc="isEditingOutput = false"
             />
-            <span v-else class="path-text" :title="outputPath || '未设置'">{{ outputPath || '—' }}</span>
+            <span v-else class="path-text" v-tooltip="outputPath || '未设置'">{{ outputPath || '—' }}</span>
             <div v-if="templateOptions.length" ref="templateMenuRef" class="path-template-menu">
               <button
                 class="path-action"
@@ -433,7 +433,7 @@ onBeforeUnmount(() => {
                   :class="{ selected: tpl.id === selectedTemplateId }"
                   type="button"
                   role="menuitem"
-                  :title="tpl.pattern"
+                  v-tooltip="tpl.pattern"
                   @click="applyTemplate(tpl.id)"
                 >
                   <span>{{ tpl.name }}</span>
@@ -456,15 +456,15 @@ onBeforeUnmount(() => {
         <div class="wide">
           <dt>文件</dt>
           <dd class="kv-line">
-            <span class="kv" title="文件大小">
+            <span class="kv" v-tooltip="'文件大小'">
               <em>大小</em>
               <span>{{ fileText }}</span>
             </span>
-            <span class="kv" title="媒体时长（起始时间若不为 0 会在括号中标出）">
+            <span class="kv" v-tooltip="'媒体时长（起始时间若不为 0 会在括号中标出）'">
               <em>时长</em>
               <span>{{ durationText }}</span>
             </span>
-            <span class="kv" v-if="containerField" :title="containerField.title">
+            <span class="kv" v-if="containerField" v-tooltip="containerField.title">
               <em>容器</em>
               <span>{{ containerField.value }}</span>
             </span>
@@ -473,7 +473,7 @@ onBeforeUnmount(() => {
         <div class="wide" v-if="hasVideoFields">
           <dt>视频</dt>
           <dd class="kv-line">
-            <span class="kv" v-for="f in videoFields" :key="f.label" :title="f.title">
+            <span class="kv" v-for="f in videoFields" :key="f.label" v-tooltip="f.title">
               <em>{{ f.label }}</em>
               <span>{{ f.value }}</span>
             </span>
@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
         <div class="wide" v-if="hasAudioFields">
           <dt>音频</dt>
           <dd class="kv-line">
-            <span class="kv" v-for="f in audioFields" :key="f.label" :title="f.title">
+            <span class="kv" v-for="f in audioFields" :key="f.label" v-tooltip="f.title">
               <em>{{ f.label }}</em>
               <span>{{ f.value }}</span>
             </span>

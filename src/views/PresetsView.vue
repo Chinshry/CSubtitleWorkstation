@@ -552,7 +552,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action"
-                title="复制"
+                v-tooltip="'复制'"
                 aria-label="复制"
                 @click.stop="duplicateEncodePreset(preset.id)"
               >
@@ -564,7 +564,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action danger"
-                title="删除"
+                v-tooltip="'删除'"
                 aria-label="删除"
                 :disabled="encodePresets.length <= 1"
                 @click.stop="deleteEncodePreset(preset.id)"
@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action"
-                title="复制"
+                v-tooltip="'复制'"
                 aria-label="复制"
                 @click.stop="duplicateTemplate(tpl.id)"
               >
@@ -681,7 +681,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action danger"
-                title="删除"
+                v-tooltip="'删除'"
                 aria-label="删除"
                 :disabled="tpl.id === 'default'"
                 @click.stop="deleteTemplate(tpl.id)"

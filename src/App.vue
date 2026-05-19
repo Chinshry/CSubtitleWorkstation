@@ -106,7 +106,7 @@ onUnmounted(() => {
         </div>
       </div>
       <nav>
-        <button :class="{ active: active === 'home' }" @click="active = 'home'" title="压制">
+        <button :class="{ active: active === 'home' }" @click="active = 'home'" v-tooltip="'压制'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -115,7 +115,7 @@ onUnmounted(() => {
           </span>
           <span>压制</span>
         </button>
-        <button :class="{ active: active === 'presets' }" @click="active = 'presets'" title="预设">
+        <button :class="{ active: active === 'presets' }" @click="active = 'presets'" v-tooltip="'预设'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 7h16" />
@@ -128,7 +128,7 @@ onUnmounted(() => {
           </span>
           <span>预设</span>
         </button>
-        <button :class="{ active: active === 'settings' }" @click="active = 'settings'" title="设置">
+        <button :class="{ active: active === 'settings' }" @click="active = 'settings'" v-tooltip="'设置'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -139,7 +139,7 @@ onUnmounted(() => {
           <span v-if="hasAvailableUpdate" class="nav-update-dot" aria-hidden="true"></span>
         </button>
       </nav>
-      <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? '展开' : '折叠'">
+      <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" v-tooltip="sidebarCollapsed ? '展开' : '折叠'">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>

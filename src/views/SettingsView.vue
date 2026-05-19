@@ -222,15 +222,15 @@ onMounted(async () => {
         <div>
           <dt>状态</dt>
           <dd>
-            <span class="status-pill" :class="status?.available ? 'ok' : 'bad'" :title="status?.ffmpegPath ?? 'ffmpeg 未找到'">
+            <span class="status-pill" :class="status?.available ? 'ok' : 'bad'" v-tooltip="status?.ffmpegPath ?? 'ffmpeg 未找到'">
               <span class="status-icon">{{ status?.available ? '✓' : '✕' }}</span>
               <span>ffmpeg</span>
             </span>
-            <span class="status-pill" :class="status?.ffprobePath ? 'ok' : 'bad'" style="margin-left:8px;" :title="status?.ffprobePath ?? 'ffprobe 未找到（影响视频信息精度，无法检测 CFR/VFR、总帧数）'">
+            <span class="status-pill" :class="status?.ffprobePath ? 'ok' : 'bad'" style="margin-left:8px;" v-tooltip="status?.ffprobePath ?? 'ffprobe 未找到（影响视频信息精度，无法检测 CFR/VFR、总帧数）'">
               <span class="status-icon">{{ status?.ffprobePath ? '✓' : '✕' }}</span>
               <span>ffprobe</span>
             </span>
-            <span class="status-pill" :class="status?.subtitleFilterAvailable ? 'ok' : 'bad'" style="margin-left:8px;" :title="status?.subtitleFilterAvailable ? '可压制 ASS 字幕' : '缺少 subtitles/libass filter，无法压制 ASS 字幕'">
+            <span class="status-pill" :class="status?.subtitleFilterAvailable ? 'ok' : 'bad'" style="margin-left:8px;" v-tooltip="status?.subtitleFilterAvailable ? '可压制 ASS 字幕' : '缺少 subtitles/libass filter，无法压制 ASS 字幕'">
               <span class="status-icon">{{ status?.subtitleFilterAvailable ? '✓' : '✕' }}</span>
               <span>subtitles/libass</span>
             </span>
@@ -396,7 +396,7 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
             <span
               class="status-pill"
               :class="avsStatus?.ffmpegDemuxerAvailable ? 'ok' : 'bad'"
-              title="ffmpeg 是否启用 --enable-avisynth 构建"
+              v-tooltip="'ffmpeg 是否启用 --enable-avisynth 构建'"
             >
               <span class="status-icon">{{ avsStatus?.ffmpegDemuxerAvailable ? '✓' : '✕' }}</span>
               <span>ffmpeg avisynth demuxer</span>
@@ -405,7 +405,7 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
               class="status-pill"
               :class="avsStatus?.avisynthInstalled ? 'ok' : 'bad'"
               style="margin-left:8px;"
-              title="系统是否安装 AviSynth+ 运行环境"
+              v-tooltip="'系统是否安装 AviSynth+ 运行环境'"
             >
               <span class="status-icon">{{ avsStatus?.avisynthInstalled ? '✓' : '✕' }}</span>
               <span>AviSynth+</span>
@@ -485,6 +485,18 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           <div class="update-title-row">
             <h2>应用更新</h2>
             <span class="current-version">当前版本 v{{ appVersion }}</span>
+            <a
+              class="repo-link"
+              href="https://github.com/Chinshry/CSubtitleWorkstation"
+              target="_blank"
+              rel="noopener noreferrer"
+              v-tooltip="'在 GitHub 查看项目源码 / 提 Issue'"
+            >
+              <svg class="repo-link-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path fill="currentColor" fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+              </svg>
+              GitHub 仓库
+            </a>
           </div>
         </div>
       </div>

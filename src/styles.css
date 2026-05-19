@@ -1358,6 +1358,32 @@ select option {
   padding: 0 12px;
 }
 
+.repo-link {
+  align-items: center;
+  background: #24292f;
+  border: 1px solid #24292f;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.repo-link:hover {
+  background: #3a434c;
+  border-color: #3a434c;
+}
+
+.repo-link-icon {
+  display: inline-block;
+  flex: none;
+}
+
 .update-result {
   align-items: flex-start;
   border: 1px solid #d8e2e8;
@@ -1888,4 +1914,54 @@ select option {
 .workspace > * {
   max-width: 100%;
   min-width: 0;
+}
+
+/* —— 全局 tooltip（v-tooltip 指令注入的浮层） —— */
+/* 单例节点，挂在 document.body 下；定位由 JS 计算后写到 style.left/top */
+.app-tooltip {
+  background: rgba(28, 32, 38, 0.96);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  color: #f4f6f8;
+  display: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 1.5;
+  max-width: 320px;
+  opacity: 0;
+  padding: 6px 10px;
+  pointer-events: none;
+  position: fixed;
+  /* 比 modal/对话框略低；高于普通页面浮层（10）。如需置顶 toast 可再上调 */
+  transform: translateY(-2px);
+  transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+  white-space: pre-line; /* 支持 \n 换行；长文本仍受 max-width 自动折行 */
+  word-break: break-word;
+  z-index: 9999;
+}
+
+.app-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.app-tooltip-text {
+  display: block;
+}
+
+/* 箭头：默认指向上方（浮层在触发元素上方），left 由 JS 动态写入 */
+.app-tooltip-arrow {
+  background: rgba(28, 32, 38, 0.96);
+  bottom: -3px;
+  height: 8px;
+  position: absolute;
+  transform: rotate(45deg);
+  width: 8px;
+}
+
+/* 浮层放到下方时翻转箭头 */
+.app-tooltip.app-tooltip-bottom .app-tooltip-arrow {
+  bottom: auto;
+  top: -3px;
 }
