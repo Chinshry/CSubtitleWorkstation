@@ -1,13 +1,13 @@
 {
-  "version": "0.1.4",
-  "notes": "请查看 GitHub Release 获取本次更新内容。",
-  "pub_date": "2026-05-18T14:43:30.404Z",
+  "version": "0.1.5",
+  "notes": "支持 VP9 视频帧数显示；Logo 调整页新增焦点管理、快捷键缩放、缩放比例控件；设置页新增「关于」面板；自定义 Tooltip 指令；修复 Logo 缩放尺寸偏差。",
+  "pub_date": "2026-05-29T15:56:29.914Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.4/CSubtitleWorkstation_0.1.4_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.5/CSubtitleWorkstation_0.1.5_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.4/CSubtitleWorkstation_0.1.4_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.5/CSubtitleWorkstation_0.1.5_universal.dmg"
     }
   }
 }
