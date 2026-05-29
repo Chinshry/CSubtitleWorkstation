@@ -31,6 +31,7 @@ pub struct VideoMeta {
     pub tbr: Option<f64>,
     pub video_bitrate_kbps: Option<i32>,
     pub total_frames: Option<u64>,
+    pub total_frames_estimated: bool,
     pub frame_rate_mode: Option<String>, // "CFR" | "VFR"
 
     // 音频流
@@ -232,10 +233,30 @@ fn fill_video_stream(s: &Value, meta: &mut VideoMeta) {
         .and_then(|s| s.parse::<i64>().ok())
         .map(|bps| (bps / 1000) as i32);
 
-    meta.total_frames = s
-        .get("nb_frames")
-        .and_then(|v| v.as_str())
-        .and_then(|s| s.parse::<u64>().ok());
+    if let Some(frames) = parse_frame_count(s, "nb_frames") {
+        meta.total_frames = Some(frames);
+        meta.total_frames_estimated = false;
+    } else {
+        meta.total_frames = estimate_total_frames(meta.duration_seconds, meta.fps);
+        meta.total_frames_estimated = meta.total_frames.is_some();
+    }
+}
+
+fn parse_frame_count(s: &Value, key: &str) -> Option<u64> {
+    let value = s.get(key)?;
+    if let Some(raw) = value.as_str() {
+        return raw.parse::<u64>().ok();
+    }
+    value.as_u64()
+}
+
+fn estimate_total_frames(duration_seconds: Option<f64>, fps: Option<f64>) -> Option<u64> {
+    let duration = duration_seconds?;
+    let fps = fps?;
+    if duration <= 0.0 || fps <= 0.0 {
+        return None;
+    }
+    Some((duration * fps).round() as u64)
 }
 
 fn fill_audio_stream(s: &Value, meta: &mut VideoMeta) {
@@ -657,4 +678,52 @@ fn parse_timestamp(value: &str) -> Option<f64> {
     let m = parts.next()?.parse::<f64>().ok()?;
     let s = parts.next()?.parse::<f64>().ok()?;
     Some(h * 3600.0 + m * 60.0 + s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn total_frames_falls_back_to_duration_estimate() {
+        let stream = json!({
+            "codec_type": "video",
+            "codec_name": "vp9",
+            "width": 1920,
+            "height": 1080,
+            "avg_frame_rate": "30000/1001",
+            "r_frame_rate": "30000/1001"
+        });
+        let mut meta = VideoMeta {
+            duration_seconds: Some(101.067633),
+            ..VideoMeta::default()
+        };
+
+        fill_video_stream(&stream, &mut meta);
+
+        assert_eq!(meta.total_frames, Some(3029));
+        assert!(meta.total_frames_estimated);
+    }
+
+    #[test]
+    fn container_frame_count_wins_over_counted_frames() {
+        let stream = json!({
+            "codec_type": "video",
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1080,
+            "nb_frames": "1605",
+            "avg_frame_rate": "30/1"
+        });
+        let mut meta = VideoMeta {
+            duration_seconds: Some(53.567),
+            ..VideoMeta::default()
+        };
+
+        fill_video_stream(&stream, &mut meta);
+
+        assert_eq!(meta.total_frames, Some(1605));
+        assert!(!meta.total_frames_estimated);
+    }
 }

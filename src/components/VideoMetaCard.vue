@@ -202,8 +202,10 @@ const videoFields = computed<Field[]>(() => {
   if (m.totalFrames) {
     fields.push({
       label: '总帧数',
-      value: m.totalFrames.toLocaleString(),
-      title: '容器中记录的总帧数（来自 ffprobe nb_frames）'
+      value: `${m.totalFramesEstimated ? '约 ' : ''}${m.totalFrames.toLocaleString()}`,
+      title: m.totalFramesEstimated
+        ? '估算总帧数（ffprobe 未提供 nb_frames，按时长 × 帧率计算；未进行耗时逐帧统计）'
+        : '容器中记录的总帧数（来自 ffprobe nb_frames）'
     })
   }
   if (m.colorSpace) {

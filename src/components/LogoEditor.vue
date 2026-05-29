@@ -191,17 +191,31 @@ function applyEntry(entry: LogoLayoutEntry) {
   yPct.value = entry.yPct
   wPct.value = entry.wPct
   hPct.value = entry.hPct
-  void preloadLogoAspect(entry.path)
+  void preloadLogoAspect(entry.path).then(fixHeightByAspect)
 }
 
 // 按 logoAspect + 当前视频宽高比反算 hPct，保留 wPct/xPct/yPct 不动。
 // 用于跨分辨率桶套用旧布局时防止 LOGO 拉伸（例如横屏 1080 切到竖屏 720）。
 function fixHeightByAspect() {
+  hPct.value = heightPctForWidthPct(wPct.value)
+}
+
+function heightPctForWidthPct(widthPct: number) {
   if (logoAspect.value > 0 && props.videoWidth && props.videoHeight) {
-    const targetW = wPct.value * props.videoWidth
+    const targetW = widthPct * props.videoWidth
     const targetH = targetW / logoAspect.value
-    hPct.value = clamp01(targetH / props.videoHeight)
+    return clamp01(targetH / props.videoHeight)
   }
+  return hPct.value
+}
+
+function widthPctForHeightPct(heightPct: number) {
+  if (logoAspect.value > 0 && props.videoWidth && props.videoHeight) {
+    const targetH = heightPct * props.videoHeight
+    const targetW = targetH * logoAspect.value
+    return clamp01(targetW / props.videoWidth)
+  }
+  return wPct.value
 }
 
 async function preloadLogoAspect(path: string) {
@@ -397,9 +411,7 @@ async function applyLogoPath(path: string) {
   }
   // 未命中记忆：保持位置/宽度，按新图宽高比反算高度，避免变形
   if (logoAspect.value > 0 && props.videoWidth && props.videoHeight) {
-    const targetW = wPct.value * props.videoWidth
-    const targetH = targetW / logoAspect.value
-    hPct.value = clamp01(targetH / props.videoHeight)
+    hPct.value = heightPctForWidthPct(wPct.value)
   }
   dirty.value = true
 }
@@ -457,14 +469,7 @@ function onPointerMove(ev: PointerEvent) {
     return
   }
 
-  // 缩放：以对角点为锚保持位置；用宽度变化驱动，再按 logoAspect 反算高度
-  const aspect = logoAspect.value > 0 ? logoAspect.value : 1
-  // stage 的"像素宽高比"用于把高度百分比换算成等价的宽度百分比
-  // 在 stage 坐标下：物理宽 = wPct * stageW, 物理高 = hPct * stageH
-  // logoAspect = (wPct * stageW) / (hPct * stageH) → hPct = (wPct * stageW) / (aspect * stageH)
-  const stageW = dragStart.stageW
-  const stageH = dragStart.stageH
-
+  // 缩放：以对角点为锚保持位置；用宽度变化驱动，再按真实视频比例反算高度。
   let newW = dragStart.w
   let newX = dragStart.x
   let newY = dragStart.y
@@ -492,7 +497,7 @@ function onPointerMove(ev: PointerEvent) {
 
   if (newW < 0.02) newW = 0.02
   if (newW > 1) newW = 1
-  let newH = (newW * stageW) / (aspect * stageH)
+  let newH = heightPctForWidthPct(newW)
 
   // 顶部手柄要让"下边沿"保持锚定
   if (dragMode === 'tl' || dragMode === 'tr') {
@@ -507,7 +512,7 @@ function onPointerMove(ev: PointerEvent) {
   const maxW = 1 - newX
   if (newW > maxW) {
     newW = Math.max(0.02, maxW)
-    newH = (newW * stageW) / (aspect * stageH)
+    newH = heightPctForWidthPct(newW)
     if (dragMode === 'tl' || dragMode === 'tr') {
       const bottomY = dragStart.y + dragStart.h
       newY = Math.max(0, bottomY - newH)
@@ -516,7 +521,7 @@ function onPointerMove(ev: PointerEvent) {
   const maxH = 1 - newY
   if (newH > maxH) {
     newH = Math.max(0.001, maxH)
-    newW = Math.max(0.02, (newH * aspect * stageH) / stageW)
+    newW = Math.max(0.02, widthPctForHeightPct(newH))
     if (dragMode === 'tl' || dragMode === 'tr') {
       const bottomY = dragStart.y + dragStart.h
       newY = Math.max(0, bottomY - newH)

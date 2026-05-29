@@ -149,6 +149,7 @@ export type VideoMeta = {
   tbr?: number
   videoBitrateKbps?: number
   totalFrames?: number
+  totalFramesEstimated?: boolean
   frameRateMode?: 'CFR' | 'VFR' | string
   audioCodec?: string
   audioProfile?: string
