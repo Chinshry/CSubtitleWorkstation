@@ -146,6 +146,17 @@ async function checkUpdate() {
   await refreshAppUpdate()
 }
 
+const updateResultTitle = computed(() => {
+  if (updateState.value === 'error') return '无法检查更新'
+  if (updateState.value === 'progress') return '正在处理'
+  if (updateInfo.value?.available) return '发现新版本'
+  return '当前版本'
+})
+
+const updateNotesTitle = computed(() => (
+  updateInfo.value?.available ? '新版本更新日志' : '当前版本更新日志'
+))
+
 async function setStartupUpdateCheck(value: boolean) {
   if (!appConfig.value) return
   const next = {
@@ -517,10 +528,13 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
         </span>
         <div>
           <strong>
-            {{ updateState === 'error' ? '无法检查更新' : updateState === 'success' ? '更新状态' : '正在处理' }}
+            {{ updateResultTitle }}
           </strong>
           <p>{{ updateMessage }}</p>
-          <p v-if="updateInfo?.notes" class="update-notes">{{ updateInfo.notes }}</p>
+          <p v-if="updateInfo?.notes" class="update-notes">
+            <span class="update-notes-title">{{ updateNotesTitle }}</span>
+            {{ updateInfo.notes }}
+          </p>
           <p v-if="updateState === 'success' && updateInfo?.available" class="update-notes">
             请在 GitHub Releases 下载新版安装包，关闭当前应用后安装。
             <a

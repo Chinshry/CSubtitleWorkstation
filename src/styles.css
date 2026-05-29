@@ -1497,6 +1497,13 @@ select option {
   white-space: pre-wrap;
 }
 
+.update-result .update-notes-title {
+  color: #314250;
+  display: block;
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
 .update-result .update-download-link {
   margin-left: 10px;
   white-space: nowrap;
