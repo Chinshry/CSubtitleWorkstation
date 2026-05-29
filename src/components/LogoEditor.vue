@@ -35,6 +35,7 @@ const frameLoading = ref(false)
 const frameError = ref('')
 const currentTime = ref(0)
 const stageEl = ref<HTMLDivElement | null>(null)
+const logoBoxEl = ref<HTMLDivElement | null>(null)
 const stageWrapEl = ref<HTMLDivElement | null>(null)
 // stage 实际 px 尺寸：由 JS 根据 wrap 可用空间 + 视频宽高比算出
 const stageBoxStyle = ref<Record<string, string>>({})
@@ -51,6 +52,16 @@ const videoAspect = computed(() => {
   const h = props.videoHeight ?? 0
   if (w > 0 && h > 0) return w / h
   return 16 / 9
+})
+
+const MIN_STAGE_ZOOM = 1
+const MAX_STAGE_ZOOM = 5
+const STAGE_ZOOM_STEP = 0.25
+const stageZoom = ref(1)
+const stageZoomPercent = computed(() => Math.round(stageZoom.value * 100))
+const stageZoomPercentInput = computed<number>({
+  get: () => stageZoomPercent.value,
+  set: (value) => setStageZoom(Number(value) / 100)
 })
 
 const duration = computed(() => Math.max(0, props.videoDuration ?? 0))
@@ -103,9 +114,10 @@ function recalcStageBox() {
     h = availH
     w = h * ratio
   }
+  const zoom = stageZoom.value
   stageBoxStyle.value = {
-    width: `${Math.floor(w)}px`,
-    height: `${Math.floor(h)}px`
+    width: `${Math.floor(w * zoom)}px`,
+    height: `${Math.floor(h * zoom)}px`
   }
 }
 
@@ -115,6 +127,10 @@ watch(videoAspect, () => {
 })
 
 // === LOGO 状态 ===
+watch(stageZoom, () => {
+  void nextTick(recalcStageBox)
+})
+
 const logoPath = ref<string>('')
 // 自然宽高比（LOGO 图片本身），用于缩放时锁定形变
 const logoAspect = ref<number>(1)
@@ -135,6 +151,80 @@ const pxW = computed(() => Math.round(wPct.value * (props.videoWidth ?? 0)))
 const pxH = computed(() => Math.round(hPct.value * (props.videoHeight ?? 0)))
 
 const hasValidLogo = computed(() => !!logoPath.value)
+const logoFocused = ref(false)
+const logoActive = computed(() => hasValidLogo.value && logoFocused.value)
+
+function clampZoom(v: number) {
+  if (!Number.isFinite(v)) return 1
+  return Math.min(MAX_STAGE_ZOOM, Math.max(MIN_STAGE_ZOOM, v))
+}
+
+function setStageZoom(v: number) {
+  stageZoom.value = clampZoom(Math.round(v * 100) / 100)
+}
+
+function zoomAroundClientPoint(nextZoom: number, clientX: number, clientY: number) {
+  const wrap = stageWrapEl.value
+  const stage = stageEl.value
+  if (!wrap || !stage) {
+    setStageZoom(nextZoom)
+    return
+  }
+  const oldRect = stage.getBoundingClientRect()
+  if (oldRect.width <= 0 || oldRect.height <= 0) {
+    setStageZoom(nextZoom)
+    return
+  }
+
+  const focusX = clamp01((clientX - oldRect.left) / oldRect.width)
+  const focusY = clamp01((clientY - oldRect.top) / oldRect.height)
+  const wrapRect = wrap.getBoundingClientRect()
+  const viewportX = clientX - wrapRect.left
+  const viewportY = clientY - wrapRect.top
+
+  setStageZoom(nextZoom)
+  void nextTick(() => {
+    recalcStageBox()
+    void nextTick(() => {
+      const nextContentX = stage.offsetLeft + stage.offsetWidth * focusX
+      const nextContentY = stage.offsetTop + stage.offsetHeight * focusY
+      wrap.scrollLeft = nextContentX - viewportX
+      wrap.scrollTop = nextContentY - viewportY
+    })
+  })
+}
+
+function zoomAroundViewportCenter(nextZoom: number) {
+  const wrap = stageWrapEl.value
+  if (!wrap) {
+    setStageZoom(nextZoom)
+    return
+  }
+  const rect = wrap.getBoundingClientRect()
+  zoomAroundClientPoint(nextZoom, rect.left + rect.width / 2, rect.top + rect.height / 2)
+}
+
+function stepStageZoom(delta: number, clientPoint?: { x: number; y: number }) {
+  const nextZoom = stageZoom.value + delta
+  if (clientPoint) {
+    zoomAroundClientPoint(nextZoom, clientPoint.x, clientPoint.y)
+    return
+  }
+  zoomAroundViewportCenter(nextZoom)
+}
+
+function resetStageZoom() {
+  zoomAroundViewportCenter(1)
+}
+
+function onStageWheel(ev: WheelEvent) {
+  if (!ev.ctrlKey) return
+  ev.preventDefault()
+  stepStageZoom(ev.deltaY < 0 ? STAGE_ZOOM_STEP : -STAGE_ZOOM_STEP, {
+    x: ev.clientX,
+    y: ev.clientY
+  })
+}
 
 // 当前 LOGO 的主显示名：优先 recentLogos 里的别名，回退到 path 文件名。
 // 这样列表里命名后，「当前 LOGO」卡片也能立刻显示同名。
@@ -435,10 +525,26 @@ let dragStart = {
   h: 0
 }
 
+function focusLogoBox() {
+  logoFocused.value = true
+  logoBoxEl.value?.focus({ preventScroll: true })
+}
+
+function onLogoBlur() {
+  if (!dragMode) logoFocused.value = false
+}
+
+function onStagePointerDown(ev: PointerEvent) {
+  if (ev.target === stageEl.value) {
+    logoFocused.value = false
+  }
+}
+
 function onPointerDown(mode: DragMode, ev: PointerEvent) {
   if (!stageEl.value || !hasValidLogo.value) return
   ev.preventDefault()
   ev.stopPropagation()
+  focusLogoBox()
   const rect = stageEl.value.getBoundingClientRect()
   dragMode = mode
   dragStart = {
@@ -538,6 +644,9 @@ function onPointerMove(ev: PointerEvent) {
 function onPointerUp(ev: PointerEvent) {
   if (!dragMode) return
   dragMode = null
+  if (document.activeElement !== logoBoxEl.value) {
+    logoFocused.value = false
+  }
   try {
     ;(ev.target as Element).releasePointerCapture(ev.pointerId)
   } catch {
@@ -607,6 +716,22 @@ function onCancel() {
 function onKey(ev: KeyboardEvent) {
   if (ev.key === 'Escape') {
     onCancel()
+    return
+  }
+  if (!ev.ctrlKey) return
+  if (ev.key === '+' || ev.key === '=') {
+    ev.preventDefault()
+    stepStageZoom(STAGE_ZOOM_STEP)
+    return
+  }
+  if (ev.key === '-' || ev.key === '_') {
+    ev.preventDefault()
+    stepStageZoom(-STAGE_ZOOM_STEP)
+    return
+  }
+  if (ev.key === '0') {
+    ev.preventDefault()
+    resetStageZoom()
   }
 }
 
@@ -745,35 +870,64 @@ onBeforeUnmount(() => {
             <span class="muted">视频：{{ videoWidth ?? '?' }}×{{ videoHeight ?? '?' }}</span>
           </div>
 
-          <div class="le-stage-wrap" ref="stageWrapEl">
-            <div
-              ref="stageEl"
-              class="le-stage"
-              :style="stageBoxStyle"
-            >
-              <img v-if="frameUrl" :src="frameUrl" class="le-frame" alt="预览帧" draggable="false" />
-              <div v-else class="le-frame-placeholder">
-                <span v-if="frameLoading">抽帧中…</span>
-                <span v-else-if="frameError">{{ frameError }}</span>
-                <span v-else>等待视频帧…</span>
-              </div>
-
+          <div class="le-stage-shell" @wheel="onStageWheel">
+            <div class="le-stage-wrap" ref="stageWrapEl">
               <div
-                v-if="hasValidLogo"
-                class="le-logo-box"
-                :style="{
-                  left: xPct * 100 + '%',
-                  top: yPct * 100 + '%',
-                  width: wPct * 100 + '%',
-                  height: hPct * 100 + '%'
-                }"
-                @pointerdown.stop="(e) => onPointerDown('move', e)"
+                ref="stageEl"
+                class="le-stage"
+                :style="stageBoxStyle"
+                @pointerdown="onStagePointerDown"
               >
-                <img :src="logoUrl" class="le-logo-img" alt="LOGO" draggable="false" />
-                <span class="le-handle tl" @pointerdown.stop="(e) => onPointerDown('tl', e)"></span>
-                <span class="le-handle tr" @pointerdown.stop="(e) => onPointerDown('tr', e)"></span>
-                <span class="le-handle bl" @pointerdown.stop="(e) => onPointerDown('bl', e)"></span>
-                <span class="le-handle br" @pointerdown.stop="(e) => onPointerDown('br', e)"></span>
+                <img v-if="frameUrl" :src="frameUrl" class="le-frame" alt="预览帧" draggable="false" />
+                <div v-else class="le-frame-placeholder">
+                  <span v-if="frameLoading">抽帧中…</span>
+                  <span v-else-if="frameError">{{ frameError }}</span>
+                  <span v-else>等待视频帧…</span>
+                </div>
+
+                <div
+                  v-if="hasValidLogo"
+                  ref="logoBoxEl"
+                  class="le-logo-box"
+                  :class="{ active: logoActive }"
+                  tabindex="0"
+                  :style="{
+                    left: xPct * 100 + '%',
+                    top: yPct * 100 + '%',
+                    width: wPct * 100 + '%',
+                    height: hPct * 100 + '%'
+                  }"
+                  @focus="logoFocused = true"
+                  @blur="onLogoBlur"
+                  @pointerdown.stop="(e) => onPointerDown('move', e)"
+                >
+                  <img :src="logoUrl" class="le-logo-img" alt="LOGO" draggable="false" />
+                  <span v-if="logoActive" class="le-handle tl" @pointerdown.stop="(e) => onPointerDown('tl', e)"></span>
+                  <span v-if="logoActive" class="le-handle tr" @pointerdown.stop="(e) => onPointerDown('tr', e)"></span>
+                  <span v-if="logoActive" class="le-handle bl" @pointerdown.stop="(e) => onPointerDown('bl', e)"></span>
+                  <span v-if="logoActive" class="le-handle br" @pointerdown.stop="(e) => onPointerDown('br', e)"></span>
+                </div>
+              </div>
+            </div>
+            <div class="le-zoom-control" data-tooltip-content="">
+              <input
+                v-model.number="stageZoomPercentInput"
+                class="le-zoom-input"
+                type="number"
+                min="100"
+                max="500"
+                step="25"
+                aria-label="画面缩放比例"
+                @keydown.stop
+              />
+              <span class="le-zoom-suffix">%</span>
+              <div class="le-zoom-tip" role="tooltip">
+                <div class="le-zoom-tip-row">
+                  <span>缩放:</span><kbd>Ctrl</kbd><span>+</span><kbd>滚轮</kbd><span>/</span><kbd>+/-</kbd>
+                </div>
+                <div class="le-zoom-tip-row">
+                  <span>复位:</span><kbd>Ctrl</kbd><span>+</span><kbd>0</kbd>
+                </div>
               </div>
             </div>
           </div>
@@ -1228,26 +1382,130 @@ input.le-recent-input {
   font-size: inherit;
   margin-top: 0;
 }
+.le-zoom-control {
+  align-items: center;
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(214, 222, 229, 0.9);
+  border-radius: 7px;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.16);
+  display: flex;
+  gap: 3px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 64px;
+  z-index: 5;
+}
+.le-zoom-control input.le-zoom-input {
+  appearance: textfield;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: #18202a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  height: 24px;
+  line-height: 24px;
+  min-height: 0;
+  outline: none;
+  padding: 0;
+  text-align: center;
+  transition: none;
+  width: 34px;
+}
+.le-zoom-control input.le-zoom-input:focus {
+  border: 0;
+  box-shadow: none;
+}
+.le-zoom-control input.le-zoom-input::-webkit-outer-spin-button,
+.le-zoom-control input.le-zoom-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.le-zoom-suffix {
+  color: #5b6772;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 24px;
+}
+.le-zoom-tip {
+  align-items: center;
+  background: rgba(24, 32, 42, 0.94);
+  border-radius: 6px;
+  bottom: calc(100% + 8px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  color: #dce5eb;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 6px;
+  opacity: 0;
+  padding: 7px 9px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  transform: translateY(3px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  white-space: nowrap;
+}
+.le-zoom-tip-row {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+}
+.le-zoom-tip::after {
+  border: 5px solid transparent;
+  border-top-color: rgba(24, 32, 42, 0.94);
+  bottom: -10px;
+  content: '';
+  position: absolute;
+  right: 18px;
+}
+.le-zoom-tip kbd {
+  background: #f5f8fa;
+  border: 1px solid #c8d2da;
+  border-bottom-color: #9aa7b1;
+  border-radius: 4px;
+  color: #18202a;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 5px;
+}
+.le-zoom-control:hover .le-zoom-tip,
+.le-zoom-control:focus-within .le-zoom-tip {
+  opacity: 1;
+  transform: translateY(0);
+}
 .muted {
   color: #9aa7b1;
 }
 
-.le-stage-wrap {
-  align-items: center;
+.le-stage-shell {
   background: #0e1822;
   border-radius: 8px;
-  display: flex;
   flex: 1 1 auto;
-  justify-content: center;
   min-height: 0;
-  overflow: hidden;
+  position: relative;
+}
+.le-stage-wrap {
+  display: block;
+  height: 100%;
+  overflow: auto;
   padding: 6px;
+  scrollbar-gutter: stable both-edges;
+  width: 100%;
 }
 .le-stage {
   background: #000;
-  flex-shrink: 0;
-  max-height: 100%;
-  max-width: 100%;
+  margin: 0 auto;
   position: relative;
 }
 .le-frame {
@@ -1268,11 +1526,17 @@ input.le-recent-input {
 }
 
 .le-logo-box {
-  border: 1px dashed rgba(56, 189, 248, 0.85);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  border: 1px dashed transparent;
   cursor: move;
   position: absolute;
   touch-action: none;
+}
+.le-logo-box.active {
+  border-color: rgba(56, 189, 248, 0.85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.le-logo-box:focus {
+  outline: none;
 }
 .le-logo-img {
   height: 100%;
