@@ -157,6 +157,24 @@ const updateNotesTitle = computed(() => (
   updateInfo.value?.available ? '新版本更新日志' : '当前版本更新日志'
 ))
 
+const formattedUpdatePubDate = computed(() => formatUpdatePubDate(updateInfo.value?.pubDate))
+
+function formatUpdatePubDate(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short'
+  }).format(date)
+}
+
 async function setStartupUpdateCheck(value: boolean) {
   if (!appConfig.value) return
   const next = {
@@ -531,10 +549,13 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
             {{ updateResultTitle }}
           </strong>
           <p>{{ updateMessage }}</p>
-          <p v-if="updateInfo?.notes" class="update-notes">
+          <div v-if="updateInfo?.notes" class="update-notes">
             <span class="update-notes-title">{{ updateNotesTitle }}</span>
-            {{ updateInfo.notes }}
-          </p>
+            <span v-if="formattedUpdatePubDate" class="update-notes-date">
+              发布于 {{ formattedUpdatePubDate }}
+            </span>
+            <span class="update-notes-body">{{ updateInfo.notes }}</span>
+          </div>
           <p v-if="updateState === 'success' && updateInfo?.available" class="update-notes">
             请在 GitHub Releases 下载新版安装包，关闭当前应用后安装。
             <a

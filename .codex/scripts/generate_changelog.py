@@ -12,25 +12,14 @@ SECTION_ORDER = [
     ("feat", "新增"),
     ("fix", "修复"),
     ("perf", "性能"),
-    ("refactor", "重构"),
-    ("docs", "文档"),
     ("build", "构建与发布"),
-    ("ci", "CI"),
-    ("test", "测试"),
-    ("chore", "维护"),
-    ("other", "其他"),
 ]
 
 TYPE_MAP = {
     "feat": "feat",
     "fix": "fix",
     "perf": "perf",
-    "refactor": "refactor",
-    "docs": "docs",
     "build": "build",
-    "ci": "ci",
-    "test": "test",
-    "chore": "chore",
 }
 
 RELEASE_COMMIT_RE = re.compile(r"^chore(?:\([^)]*\))?:\s*release\s+v?\d", re.I)
@@ -42,6 +31,8 @@ def run_git(repo: Path, args: list[str], check: bool = True) -> str:
         ["git", *args],
         cwd=repo,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -85,13 +76,13 @@ def infer_next_version(from_tag: str | None) -> str:
 def parse_commit(line: str) -> dict:
     sha, subject, author, date = line.split("\x1f", 3)
     match = CONVENTIONAL_RE.match(subject)
-    category = "other"
+    category = None
     clean_subject = subject
     breaking = False
 
     if match:
         commit_type = match.group("type").lower()
-        category = TYPE_MAP.get(commit_type, "other")
+        category = TYPE_MAP.get(commit_type)
         clean_subject = match.group("subject").strip()
         breaking = bool(match.group("breaking"))
         if breaking:
@@ -119,6 +110,8 @@ def collect_commits(repo: Path, from_tag: str | None, to_ref: str) -> list[dict]
             continue
         commit = parse_commit(line)
         if RELEASE_COMMIT_RE.match(commit["raw_subject"]):
+            continue
+        if not commit["category"]:
             continue
         commits.append(commit)
     return commits
@@ -170,16 +163,17 @@ def main() -> int:
     version = args.version or infer_next_version(from_tag)
     commits = collect_commits(repo, from_tag, args.to_ref)
 
+    markdown = render_markdown(version, from_tag, args.to_ref, commits)
     if args.json:
         print(json.dumps({
             "version": version,
             "from_tag": from_tag,
             "to_ref": args.to_ref,
             "commits": commits,
-            "markdown": render_markdown(version, from_tag, args.to_ref, commits),
+            "markdown": markdown,
         }, ensure_ascii=False, indent=2))
     else:
-        print(render_markdown(version, from_tag, args.to_ref, commits))
+        print(markdown)
 
     return 0
 

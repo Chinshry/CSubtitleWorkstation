@@ -1,4 +1,0 @@
-interface:
-  display_name: "CSubtitle 发版流程"
-  short_description: "同步代码、生成日志并触发项目发版构建。"
-  default_prompt: "使用 $csubtitle-release 为 CSubtitleWorkstation 准备并执行下一版本发版。"
