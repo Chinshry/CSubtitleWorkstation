@@ -1474,6 +1474,11 @@ select option {
   width: 22px;
 }
 
+.update-result-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .update-result strong {
   color: #24313c;
   display: block;
@@ -1482,11 +1487,22 @@ select option {
   line-height: 1.25;
 }
 
+.update-result-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.update-result-heading {
+  min-width: 0;
+}
+
 .update-result p {
   color: #5d6b76;
   font-size: 13px;
   line-height: 1.45;
-  margin-top: 3px;
+  margin: 3px 0 0;
   overflow-wrap: anywhere;
 }
 
@@ -1520,7 +1536,7 @@ select option {
 }
 
 .update-result .update-download-link {
-  margin-left: 10px;
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
@@ -1976,8 +1992,9 @@ select option {
     flex-wrap: wrap;
   }
   /* 更新结果卡片允许下载链接换行 */
-  .update-result .update-download-link {
-    margin-left: 0;
+  .update-result-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

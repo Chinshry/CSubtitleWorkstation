@@ -544,11 +544,22 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
         <span class="update-result-icon">
           {{ updateState === 'error' ? '!' : updateState === 'success' ? '✓' : 'i' }}
         </span>
-        <div>
-          <strong>
-            {{ updateResultTitle }}
-          </strong>
-          <p>{{ updateMessage }}</p>
+        <div class="update-result-content">
+          <div class="update-result-header">
+            <div class="update-result-heading">
+              <strong>
+                {{ updateResultTitle }}
+              </strong>
+              <p>{{ updateMessage }}</p>
+            </div>
+            <a
+              v-if="updateState === 'success' && updateInfo?.available"
+              class="button-link update-download-link"
+              :href="updateReleaseUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >前往 GitHub 下载 v{{ availableUpdateVersion }}</a>
+          </div>
           <div v-if="updateInfo?.notes" class="update-notes">
             <span class="update-notes-title">{{ updateNotesTitle }}</span>
             <span v-if="formattedUpdatePubDate" class="update-notes-date">
@@ -556,15 +567,6 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
             </span>
             <span class="update-notes-body">{{ updateInfo.notes }}</span>
           </div>
-          <p v-if="updateState === 'success' && updateInfo?.available" class="update-notes">
-            请在 GitHub Releases 下载新版安装包，关闭当前应用后安装。
-            <a
-              class="button-link update-download-link"
-              :href="updateReleaseUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-            >前往 GitHub 下载 v{{ availableUpdateVersion }}</a>
-          </p>
         </div>
       </div>
     </section>

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { AppUpdateInfo } from '../types'
+import appPackage from '../../package.json'
 
 const UPDATE_MANIFEST_URL = 'https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json'
 
@@ -10,8 +10,8 @@ type UpdateManifest = {
   platforms?: Record<string, { url?: string }>
 }
 
-export function getCurrentAppVersion() {
-  return invoke<string>('get_current_app_version')
+export async function getCurrentAppVersion() {
+  return appPackage.version
 }
 
 export async function checkAppUpdate(): Promise<AppUpdateInfo> {
