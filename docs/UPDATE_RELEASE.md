@@ -1,8 +1,8 @@
-# 应用更新发布流程
+# 应用更新与发布流程
 
-本项目只做"检测新版并引导用户到 GitHub Releases 下载"，不在应用内自动下载或覆盖安装。
+本项目只在应用内做“检查新版本并引导用户到 GitHub Releases 下载”，不在应用内自动下载、覆盖或静默安装。
 
-更新检查地址固定为：
+应用更新清单地址固定为：
 
 ```text
 https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json
@@ -19,94 +19,120 @@ docs/updates/latest.json
 在 GitHub 仓库启用 Pages：
 
 ```text
-Settings -> Pages -> Deploy from a branch -> main -> /docs
+Settings -> Pages -> Deploy from a branch -> master -> /docs
 ```
 
-## 推荐：GitHub Actions 一键发版
+发布前确认 `gh auth status` 正常，且当前分支已推送到 GitHub。
 
-仓库已接入 `.github/workflows/release.yml`，覆盖 Windows NSIS 与 macOS Universal DMG 的构建。两种触发方式：
+## 推荐发布方式
 
-### 方式 A：推送 tag 自动发版
+仓库已接入 `.github/workflows/release.yml`。推荐通过 GitHub Actions 手动触发 `Release` 工作流发布正式版本。
 
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-流水线会自动：
-
-1. 把 `package.json` 与 `src-tauri/Cargo.toml` 的版本号校准到 `0.1.1`。
-2. 在 Windows runner 上 `npm run tauri build` 出 NSIS 安装包。
-3. 在 macOS runner 上 `npm run tauri build --target universal-apple-darwin` 出兼容 Intel + Apple Silicon 的 DMG。
-4. 创建 GitHub Release `v0.1.1` 并上传安装包。
-
-### 方式 B：手动触发（含一键覆盖发布）
-
-在 GitHub Actions 页面选择 `Release` 工作流 → `Run workflow`，填入：
+在 GitHub Actions 页面选择 `Release` -> `Run workflow`，填写：
 
 | 输入 | 说明 |
-|------|------|
-| `version` | 目标版本号，如 `0.1.1`（无需 `v` 前缀） |
-| `overwrite` | `true` 时会先删除已存在的同 tag Release 与远端 tag，再重新发布 |
-| `notes` | 写入 GitHub Release Body 的更新说明 |
+| --- | --- |
+| `version` | 目标版本号，例如 `0.1.6`，不需要 `v` 前缀 |
+| `overwrite` | `true` 时删除同名 Release/tag 后重建，默认 `false` |
+| `notes` | 已确认的 Markdown 更新说明，同时写入 GitHub Release 和应用内更新清单 |
 
-`overwrite=true` 适用于：
+工作流会自动完成：
 
-- 刚发布的版本立刻发现严重问题，需要重新构建覆盖同一个 tag。
-- 调试发版流程，避免每次都换版本号。
+1. 校验版本号并解析目标 tag，例如 `0.1.6` -> `v0.1.6`。
+2. 生成提交范围内的 changelog 原始材料。
+3. 将 `package.json`、`src-tauri/Cargo.toml` 和 `docs/updates/latest.json` 更新到目标版本。
+4. 自动提交 `chore: release vX.Y.Z` 并推送回当前分支。
+5. 创建或更新 draft GitHub Release。
+6. 在 Windows runner 构建 NSIS 安装包，在 macOS runner 构建 Universal DMG。
+7. 将产物上传到 draft release。
+8. 发布 release。
+9. 读取 GitHub Release 的 `publishedAt`，回写到 `docs/updates/latest.json` 的 `pub_date`，再提交 `chore: sync release publish date`。
 
-> 默认 `overwrite=false`，意味着同 tag 重复触发会失败，保护既有版本不被误覆盖。
+发布完成后，GitHub Pages 会把新的 `docs/updates/latest.json` 暴露给旧版本客户端。
 
-### 发布完成后
+## Codex 发布命令
 
-GitHub Actions 不会自动更新应用内的 manifest，需要手动同步：
+仓库内保留了 Codex 命令：
 
-1. 编辑 `docs/updates/latest.json`，把 `version` / `notes` / `pub_date` / `platforms[*].url` 改成新版的值。
+```text
+.codex/commands/release.md
+```
 
-   ```json
-   {
-     "version": "0.1.1",
-     "notes": "本次更新说明。",
-     "pub_date": "2026-05-17T00:00:00Z",
-     "platforms": {
-       "windows-x86_64": {
-         "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.1/CSubtitleWorkstation_0.1.1_x64-setup.exe"
-       },
-       "darwin-universal": {
-         "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.1/CSubtitleWorkstation_0.1.1_universal.dmg"
-       }
-     }
-   }
-   ```
+该命令用于准备发布材料、生成 changelog、整理面向用户的中文更新说明，并在用户确认后触发 `Release` workflow。更新说明必须先由用户确认，再作为 `notes` 传给工作流。
 
-2. 提交并 push `docs/updates/latest.json`，GitHub Pages 会自动更新。
+## Tag 推送发布
 
-3. 用旧版本点击"检查应用更新"，验证：
+也可以推送 tag 触发发布：
 
-   - 能检测到新版本。
-   - 能显示更新说明。
-   - 点击"前往 GitHub 下载"后能打开对应 Release 页面。
-   - manifest 格式错误或网络失败时能显示明确错误。
+```bash
+git tag v0.1.6
+git push origin v0.1.6
+```
 
-## 备用：本地手工发版
+这种方式适合版本文件和 `docs/updates/latest.json` 已经提前准备好的情况。tag push 不会自动修改并提交 `package.json`、`src-tauri/Cargo.toml` 或更新清单，因此普通发版优先使用手动触发 workflow。
 
-无法触发 CI 时可在本机出包：
+## overwrite=true 的使用场景
 
-1. 提升版本号：
+`overwrite=true` 会删除远端同名 Release/tag 并重建。只在这些场景使用：
+
+- 刚发布的版本发现严重问题，需要用同一版本号重新构建。
+- 调试发布流水线，明确需要覆盖同一个 tag。
+
+默认保持 `overwrite=false`，避免误覆盖已经公开的版本。
+
+## 应用内更新展示
+
+应用前端从 `package.json` 读取当前版本，用 `docs/updates/latest.json` 中的 `version` 比较是否有新版本。
+
+`latest.json` 的核心字段：
+
+```json
+{
+  "version": "0.1.6",
+  "notes": "本次更新说明。",
+  "pub_date": "2026-06-01T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.6/CSubtitleWorkstation_0.1.6_x64-setup.exe"
+    },
+    "darwin-universal": {
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.6/CSubtitleWorkstation_0.1.6_universal.dmg"
+    }
+  }
+}
+```
+
+设置页会显示当前版本、最新版本、发布时间和完整更新说明；发现新版本后引导用户打开对应的 GitHub Release 页面下载。
+
+## 发布后验证
+
+发布完成后至少验证：
+
+1. GitHub Release 已发布，Windows `*-setup.exe` 和 macOS `*_universal.dmg` 均已上传。
+2. `docs/updates/latest.json` 中的 `version`、`notes`、`pub_date` 和下载 URL 与 release 一致。
+3. GitHub Pages 上的 `https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json` 可以访问。
+4. 旧版本点击“检查应用更新”能检测到新版本，并能打开对应 Release 页面。
+5. manifest 格式错误或网络失败时，设置页能显示明确错误提示。
+
+## 本地手工发布备用方案
+
+只有无法使用 GitHub Actions 时才走本地备用方案：
+
+1. 手动更新：
 
    ```text
    package.json
    src-tauri/Cargo.toml
+   docs/updates/latest.json
    ```
 
-2. 构建安装包：
+2. 本地构建安装包：
 
    ```powershell
    npm run tauri build
    ```
 
-   macOS 需指定 `--target universal-apple-darwin` 才能出双架构 DMG。
+   macOS 需要指定 `--target universal-apple-darwin` 才能产出 Universal DMG。
 
-3. 在 GitHub Releases 手动创建 `v0.1.1` 并上传安装包。
-
-4. 同步 `docs/updates/latest.json`（同上）并 push。
+3. 在 GitHub Releases 手动创建 `vX.Y.Z` 并上传安装包。
+4. 提交并推送 `docs/updates/latest.json`，等待 GitHub Pages 生效。

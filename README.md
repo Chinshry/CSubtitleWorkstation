@@ -54,7 +54,7 @@
 - 🎨 **可视化参数** — CRF、码率、编码器（x264/x265/NVENC/AMF/VideoToolbox）一目了然
 - 🧰 **编码预设管理** — 内置 `x264 平衡` / `x265 体积优先` / `NVENC 快速` / `AMF 快速` / `Apple 快速` 等多套预设，可在「预设」页新增/编辑/导入导出，主页直接切换
 - 📝 **输出文件名模板** — 支持 `{video_name}` / `{resolution}` / `{encoder}` / `{crf}` / `{date:YYYYMMDD}` 等变量，默认生成 `{video_name} 中字.mp4`；可保存多套模板并设为默认
-- 🖼️ **LOGO 可视化编辑 + 布局保存** — 在视频抽帧上拖放 LOGO，支持四角缩放，为不同分辨率（720p/1080p/4K）和屏幕方向（横/竖屏）各自保存一套 LOGO 位置，下次打开自动恢复
+- 🖼️ **LOGO 可视化编辑 + 布局保存** — 在视频抽帧上拖放 LOGO，支持四角缩放、画布快捷键缩放、手动输入缩放比例和失焦自动隐藏调整锚点；为不同分辨率（720p/1080p/4K）和屏幕方向（横/竖屏）各自保存一套 LOGO 位置，下次打开自动恢复
 - 🎞️ **反交错处理** — yadif 可选开关，处理交错素材
 - 🔤 **特效字幕压制**（仅 Windows）— 使用 AviSynth+ 脚本引擎处理复杂特效字幕（如矢量绘制、img 标签等），相比 ffmpeg libass 支持更完善
 - 🧠 **特效标签自动识别**（仅 Windows）— 选定字幕后自动扫描 VSFilterMod 扩展标签（`\fsc` / `\xblur` / `\jitter` / `\distort` / `\img` 等），命中即自动勾选「AVS 压制」并在界面提示具体匹配到的标签，省去人工判断特效字幕的步骤
@@ -113,7 +113,7 @@
   <tr>
     <td width="50%" align="center">
       <a href="docs/screenshots/03-logo-editor.png"><img src="docs/screenshots/03-logo-editor.png" alt="LOGO 可视化编辑器" /></a>
-      <br/><sub><b>LOGO 编辑器</b> · 在视频抽帧上拖放缩放，按分辨率/方向自动保存布局</sub>
+      <br/><sub><b>LOGO 编辑器</b> · 在视频抽帧上拖放缩放，支持画布缩放与比例输入，按分辨率/方向自动保存布局</sub>
     </td>
     <td width="50%" align="center">
       <a href="docs/screenshots/04-subtitle-check.png"><img src="docs/screenshots/04-subtitle-check.png" alt="字幕检查面板" /></a>
@@ -203,6 +203,8 @@
 
 在压制页 LOGO 编辑器中保存过的布局会按 (LOGO 图, 分辨率桶) 持久化到本地配置。下次打开同样的视频自动恢复。支持 6 个桶：720p/1080p/4K × 横屏/竖屏。
 
+编辑器支持两类缩放：一类是 LOGO 本身的四角拖拽缩放，用于决定最终压制中的 LOGO 尺寸；另一类是预览画布缩放，用于放大细调位置，不影响最终输出尺寸。预览画布可通过快捷键缩放，也可以直接输入缩放比例；当 LOGO 失去焦点时，调整锚点会自动隐藏，避免遮挡预览。
+
 </details>
 
 <details>
@@ -284,4 +286,6 @@ Issues 和建议欢迎！提交 PR 前请确保代码通过 linter 和测试。
 ## 📚 文档
 
 - [需求与技术方案](docs/REQUIREMENTS.md) — 项目设计文档
+- [应用更新与发布流程](docs/UPDATE_RELEASE.md) — GitHub Actions 发版、更新清单与验证步骤
+- [用户数据与缓存](docs/CACHE_AND_DATA.md) — 本地配置、缓存和临时文件位置
 - [待办事项](docs/TODO.md) — 功能路线图与已知问题
