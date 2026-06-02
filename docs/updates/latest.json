@@ -1,13 +1,13 @@
 {
-  "version": "0.1.5",
-  "notes": "✨ 新增功能\n\n* 支持显示 VP9 视频帧数（估计值）\n* Logo 调整页新增焦点管理功能：当 Logo 失去焦点时，自动隐藏调整锚点\n* Logo 调整页视频区域支持鼠标快捷键缩放画面\n* Logo 调整页新增缩放比例显示控件，并支持手动输入缩放值\n* 设置页新增「关于」面板，包含作者信息、仓库徽章、许可证信息及 GitHub 仓库链接\n* 引入自定义 v-tooltip 指令，替代原生 title 提示浮窗\n\n🐞 问题修复\n\n* 修复 Logo 调整页中，1:1 图片缩放后尺寸显示存在偏差的问题",
-  "pub_date": "2026-05-29T15:56:29.914Z",
+  "version": "0.1.6",
+  "notes": "## 🐞 问题修复\n\n- 修复 VP9 视频在 AVS 压制时可能断帧的问题。\n- 优化导入大 ASS/SSA 字幕后的后台分析流程，避免界面长时间无响应，并显示字幕检查状态。\n- 修复应用更新版本显示的稳定性问题。",
+  "pub_date": "2026-06-02T12:48:47.076Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.5/CSubtitleWorkstation_0.1.5_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.6/CSubtitleWorkstation_0.1.6_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.5/CSubtitleWorkstation_0.1.5_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.6/CSubtitleWorkstation_0.1.6_universal.dmg"
     }
   }
 }
