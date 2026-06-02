@@ -8,18 +8,29 @@ from pathlib import Path
 
 
 SECTION_ORDER = [
-    ("breaking", "重大变更"),
-    ("feat", "新增"),
-    ("fix", "修复"),
-    ("perf", "性能"),
-    ("build", "构建与发布"),
+    ("breaking", "⚠️ 重大变更"),
+    ("feat", "✨ 新增功能"),
+    ("fix", "🐞 问题修复"),
+    ("perf", "⚡ 性能优化"),
+    ("ux", "🎨 体验改进"),
+    ("docs", "📚 文档与流程"),
+    ("maintenance", "🧰 内部维护"),
 ]
 
 TYPE_MAP = {
     "feat": "feat",
     "fix": "fix",
     "perf": "perf",
-    "build": "build",
+    "ui": "ux",
+    "ux": "ux",
+    "docs": "docs",
+    "doc": "docs",
+    "build": "maintenance",
+    "ci": "maintenance",
+    "chore": "maintenance",
+    "refactor": "maintenance",
+    "style": "maintenance",
+    "test": "maintenance",
 }
 
 RELEASE_COMMIT_RE = re.compile(r"^chore(?:\([^)]*\))?:\s*release\s+v?\d", re.I)
