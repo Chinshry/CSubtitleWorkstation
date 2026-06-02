@@ -69,6 +69,130 @@ button.danger {
   background: #b42318;
 }
 
+.avs-staging-overlay {
+  align-items: center;
+  background: rgba(15, 23, 32, 0.46);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 28px;
+  position: fixed;
+  z-index: 80;
+}
+
+.avs-staging-dialog {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #dce3e8;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(15, 23, 32, 0.22);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  max-width: 680px;
+  padding: 22px;
+  width: min(680px, 100%);
+}
+
+.avs-staging-icon {
+  align-items: center;
+  background: #fff4d6;
+  border: 1px solid #f2c94c;
+  border-radius: 8px;
+  color: #925b00;
+  display: flex;
+  font-size: 24px;
+  font-weight: 800;
+  height: 42px;
+  justify-content: center;
+  line-height: 1;
+  width: 42px;
+}
+
+.avs-staging-content {
+  min-width: 0;
+}
+
+.avs-staging-kicker {
+  color: #687681;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.avs-staging-dialog h2 {
+  color: #18202a;
+  font-size: 20px;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.avs-staging-summary {
+  color: #3d4b57;
+  line-height: 1.6;
+  margin: 10px 0 16px;
+}
+
+.avs-staging-facts {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(130px, 0.45fr) minmax(0, 1fr);
+  margin: 0 0 14px;
+}
+
+.avs-staging-facts > div {
+  background: #f6f8fa;
+  border: 1px solid #e4eaf0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.avs-staging-facts dt {
+  color: #6f7d88;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.avs-staging-facts dd {
+  color: #24313c;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.avs-staging-path {
+  background: #f8fafb;
+  border: 1px solid #dde5eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.avs-staging-path span {
+  color: #6f7d88;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.avs-staging-path code {
+  color: #21313d;
+  display: block;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.avs-staging-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 .app-shell {
   display: block;
   height: 100vh;

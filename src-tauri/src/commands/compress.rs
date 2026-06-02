@@ -41,6 +41,16 @@ pub struct SubtitleAnalysisResult {
     pub banner_hits: Vec<subtitle_analyzer::SubtitleBannerHit>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvsStagingPlan {
+    pub required: bool,
+    pub source_size_bytes: u64,
+    pub source_size_label: String,
+    pub temp_path: String,
+    pub reason: String,
+}
+
 #[tauri::command]
 pub fn preview_ffmpeg_command(app: AppHandle, job: CompressJob) -> Result<Vec<String>, String> {
     let config = config_store::load(&app)?;
@@ -73,14 +83,14 @@ pub fn validate_output_parent_dir(output_path: String) -> Result<(), String> {
     }
 
     let output = Path::new(trimmed);
-    let parent = if trimmed.ends_with('\\') || trimmed.ends_with('/') || output.extension().is_none()
-    {
-        output
-    } else {
-        output
-            .parent()
-            .ok_or_else(|| "无法识别输出目录".to_string())?
-    };
+    let parent =
+        if trimmed.ends_with('\\') || trimmed.ends_with('/') || output.extension().is_none() {
+            output
+        } else {
+            output
+                .parent()
+                .ok_or_else(|| "无法识别输出目录".to_string())?
+        };
 
     if !parent.exists() {
         return Err(format!("输出目录不存在: {}", parent.display()));
@@ -89,6 +99,40 @@ pub fn validate_output_parent_dir(output_path: String) -> Result<(), String> {
         return Err(format!("输出目录不是文件夹: {}", parent.display()));
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn inspect_avs_staging_plan(
+    app: AppHandle,
+    job: CompressJob,
+) -> Result<Option<AvsStagingPlan>, String> {
+    if !job.use_avs {
+        return Ok(None);
+    }
+
+    let config = config_store::load(&app)?;
+    let status = ffmpeg_locator::detect(&config);
+    let Some(ffmpeg_path) = status.ffmpeg_path else {
+        return Ok(None);
+    };
+    let video_info = command_builder::inspect_video(&ffmpeg_path, &job.video_path)?;
+    if !should_use_directshow_avs_source(&video_info) {
+        return Ok(None);
+    }
+
+    let source_size_bytes = fs::metadata(&job.video_path)
+        .map_err(|err| format!("读取源视频大小失败: {err}"))?
+        .len();
+    let temp_dir = temp_cleanup::filter_temp_dir(&app)?.join(sanitize_job_id(&job.id));
+    let temp_path = staged_video_path(&temp_dir, &job.video_path);
+
+    Ok(Some(AvsStagingPlan {
+        required: true,
+        source_size_bytes,
+        source_size_label: format_bytes(source_size_bytes),
+        temp_path: temp_path.to_string_lossy().to_string(),
+        reason: "VP9 视频在当前 64 位 AVS 的 LWLibavVideoSource 路径下可能中途断帧，需要临时复制到 ASCII 路径并改用 DirectShowSource 读取视频。".to_string(),
+    }))
 }
 
 #[tauri::command]
@@ -156,6 +200,7 @@ pub fn start_compress(
     }
 
     // AVS 模式：先检测环境，再写入 input.avs 临时脚本
+    let mut avs_audio_input_path: Option<String> = None;
     let avs_script_path: Option<String> = if command_job.use_avs {
         let avs_status = avs_detector::detect(Some(&ffmpeg_path));
         if !avs_status.available {
@@ -164,12 +209,44 @@ pub fn start_compress(
                 .unwrap_or_else(|| "AVS 环境不可用".to_string()));
         }
         let workspace = avs_workspace::resolve(&app)?;
-        let script = avs_workspace::build_avs_script(
-            &workspace.vsfiltermod_path(),
-            &workspace.lsmashsource_path(),
-            &command_job.video_path,
-            &command_job.subtitle_path,
-        );
+        let script = if should_use_directshow_avs_source(&video_info) {
+            if let Ok(size) = fs::metadata(&command_job.video_path).map(|meta| meta.len()) {
+                let _ = app.emit(
+                    "compress-log",
+                    format!(
+                        "AVS VP9 fallback: staging source video to ASCII temp path; temporary extra disk usage is about {}.",
+                        format_bytes(size)
+                    ),
+                );
+            }
+            let staged_video_path = stage_video_to_ascii(&temp_dir, &command_job.video_path)?;
+            let _ = app.emit(
+                "compress-log",
+                format!("AVS VP9 fallback: staged source video at {staged_video_path}."),
+            );
+            let fps = video_info.fps.unwrap_or(30000.0 / 1001.0);
+            avs_audio_input_path = Some(command_job.video_path.clone());
+            let _ = app.emit(
+                "compress-log",
+                format!(
+                    "AVS VP9 fallback: using DirectShowSource for video at {:.8} fps; audio will be mapped from the original file.",
+                    fps
+                ),
+            );
+            avs_workspace::build_avs_directshow_script(
+                &workspace.vsfiltermod_path(),
+                &staged_video_path,
+                fps,
+                &command_job.subtitle_path,
+            )
+        } else {
+            avs_workspace::build_avs_script(
+                &workspace.vsfiltermod_path(),
+                &workspace.lsmashsource_path(),
+                &command_job.video_path,
+                &command_job.subtitle_path,
+            )
+        };
         let script_path = avs_workspace::write_script(&workspace, &script)?;
         let path_str = script_path.to_string_lossy().to_string();
         let _ = app.emit("compress-log", format!("AVS script written: {path_str}"));
@@ -182,6 +259,7 @@ pub fn start_compress(
         &ffmpeg_path,
         &command_job,
         avs_script_path.as_deref(),
+        avs_audio_input_path.as_deref(),
     )?;
 
     app.emit("compress-log", format!("Command: {}", command.join(" ")))
@@ -456,6 +534,54 @@ fn stage_subtitle_to_ascii(dir: &Path, subtitle_path: &str) -> Result<String, St
     let staged = dir.join(format!("subtitle.{safe_ext}"));
     fs::copy(src, &staged).map_err(|err| format!("复制字幕到临时路径失败: {err}"))?;
     Ok(staged.to_string_lossy().to_string())
+}
+
+fn stage_video_to_ascii(dir: &Path, video_path: &str) -> Result<String, String> {
+    let staged = staged_video_path(dir, video_path);
+    fs::copy(video_path, &staged).map_err(|err| format!("Failed to stage video for AVS: {err}"))?;
+    Ok(staged.to_string_lossy().to_string())
+}
+
+fn staged_video_path(dir: &Path, video_path: &str) -> PathBuf {
+    dir.join(format!("source.{}", safe_video_ext(video_path)))
+}
+
+fn safe_video_ext(video_path: &str) -> String {
+    let src = Path::new(video_path);
+    let ext = src
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("mkv")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "mkv" | "mp4" | "mov" | "webm" | "avi" | "ts" | "m2ts" => ext,
+        _ => "mkv".to_string(),
+    }
+}
+
+fn should_use_directshow_avs_source(video_info: &command_builder::VideoInfo) -> bool {
+    video_info
+        .codec_name
+        .as_deref()
+        .is_some_and(|codec| codec.eq_ignore_ascii_case("vp9"))
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = UNITS[0];
+    for next in &UNITS[1..] {
+        if value < 1024.0 {
+            break;
+        }
+        value /= 1024.0;
+        unit = next;
+    }
+    if unit == "B" {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.2} {unit}")
+    }
 }
 
 fn cleanup_temp_dir(app: &AppHandle, dir: &Path) {

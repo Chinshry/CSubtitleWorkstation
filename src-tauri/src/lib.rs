@@ -62,6 +62,7 @@ pub fn run() {
             commands::compress::preview_ffmpeg_command,
             commands::compress::analyze_subtitle,
             commands::compress::validate_output_parent_dir,
+            commands::compress::inspect_avs_staging_plan,
             commands::compress::start_compress,
             commands::compress::cancel_compress,
             commands::video::inspect_video_meta,

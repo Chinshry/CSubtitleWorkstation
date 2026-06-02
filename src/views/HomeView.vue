@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onActivated, onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { cancelCompress, previewFfmpegCommand, startCompress } from '../api/compress'
+import { cancelCompress, inspectAvsStagingPlan, previewFfmpegCommand, startCompress } from '../api/compress'
 import { loadConfig, saveConfig } from '../api/config'
 import { inspectVideoMeta, clearFrameCache } from '../api/video'
 import { pendingDrop, pushDiag } from '../stores/dropStore'
@@ -25,7 +25,7 @@ import VideoMetaCard from '../components/VideoMetaCard.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import LogoEditor from '../components/LogoEditor.vue'
 import SubtitleCheckPanel from '../components/SubtitleCheckPanel.vue'
-import type { SubtitleAnalysisResult } from '../api/compress'
+import type { AvsStagingPlan, SubtitleAnalysisResult } from '../api/compress'
 import { checkColorMatrix } from '../utils/colorMatrix'
 import { buildOutputPath, getDefaultOutputTemplate, normalizeOutputTemplates } from '../utils/outputTemplates'
 import { applyEncodePresetToJob, getDefaultEncodePreset, normalizeEncodePresets } from '../utils/encodePresets'
@@ -39,6 +39,8 @@ const showCommandPreview = ref(false)
 // ffmpeg 状态来自全局 store（首次 init 后缓存，避免每次切页面重复检测；调试 mock 也通过 store 透传过来）
 const command = ref<string[]>([])
 const logs = ref<string[]>([])
+const avsStagingPlan = ref<AvsStagingPlan | null>(null)
+let avsStagingResolve: ((value: boolean) => void) | null = null
 const percent = ref(0)
 const statusLine = ref('')
 const currentSeconds = ref(0)
@@ -330,6 +332,12 @@ async function runJob() {
     pushDiag(msg)
     return
   }
+  const canContinue = await confirmAvsStagingIfNeeded()
+  if (!canContinue) {
+    logs.value.push('已取消压制：VP9 AVS 兼容模式需要临时复制源视频。')
+    pushDiag('runJob cancelled by AVS staging confirmation')
+    return
+  }
   running.value = true
   cancelled.value = false
   // 不立即启动 ticker，等收到第一条进度事件再启动
@@ -347,6 +355,23 @@ async function runJob() {
     logs.value.push(`runJob 异常：${msg}`)
     pushDiag(`runJob exception: ${msg}`)
   }
+}
+
+async function confirmAvsStagingIfNeeded() {
+  const plan = await inspectAvsStagingPlan(job.value)
+  if (!plan?.required) return true
+
+  avsStagingPlan.value = plan
+  return new Promise<boolean>((resolve) => {
+    avsStagingResolve = resolve
+  })
+}
+
+function resolveAvsStagingConfirm(value: boolean) {
+  avsStagingPlan.value = null
+  const resolve = avsStagingResolve
+  avsStagingResolve = null
+  resolve?.(value)
 }
 
 async function cancelJob() {
@@ -673,5 +698,34 @@ onUnmounted(() => {
       @cancel="onLogoEditorCancel"
       @update-recent="onLogoEditorUpdateRecent"
     />
+
+    <div v-if="avsStagingPlan" class="avs-staging-overlay app-modal-active" role="presentation">
+      <section class="avs-staging-dialog" role="dialog" aria-modal="true" aria-labelledby="avs-staging-title">
+        <div class="avs-staging-icon" aria-hidden="true">!</div>
+        <div class="avs-staging-content">
+          <p class="avs-staging-kicker">AVS 兼容模式</p>
+          <h2 id="avs-staging-title">需要临时复制 VP9 源视频</h2>
+          <p class="avs-staging-summary">
+            为避免当前 64 位 AVS 的 LWLibavVideoSource 读取 VP9 时中途断帧，本次会先把源视频复制到 ASCII 临时路径，再用 DirectShowSource 读取视频。
+          </p>
+
+          <dl class="avs-staging-facts">
+            <div>
+              <dt>临时占用</dt>
+              <dd>{{ avsStagingPlan.sourceSizeLabel }}</dd>
+            </div>
+            <div class="avs-staging-path">
+              <span>临时路径</span>
+              <code>{{ avsStagingPlan.tempPath }}</code>
+            </div>
+          </dl>
+
+          <div class="avs-staging-actions">
+            <button class="secondary" type="button" @click="resolveAvsStagingConfirm(false)">取消</button>
+            <button type="button" @click="resolveAvsStagingConfirm(true)">继续压制</button>
+          </div>
+        </div>
+      </section>
+    </div>
   </main>
 </template>

@@ -14,7 +14,7 @@ fn no_window(builder: &mut Command) {
 fn no_window(_: &mut Command) {}
 
 pub fn build_preview(ffmpeg_path: &str, job: &CompressJob) -> Result<Vec<String>, String> {
-    build_with_options(ffmpeg_path, job, None)
+    build_with_options(ffmpeg_path, job, None, None)
 }
 
 /// 构建 ffmpeg 命令；`avs_input_override` 在 AVS 模式压制时由调用方传入实际写好的 input.avs 路径。
@@ -23,6 +23,7 @@ pub fn build_with_options(
     ffmpeg_path: &str,
     job: &CompressJob,
     avs_input_override: Option<&str>,
+    avs_audio_input_override: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let video_info = inspect_video(ffmpeg_path, &job.video_path).unwrap_or_default();
     // LOGO overlay 像素换算优先使用前端传入的"显示尺寸"（inspect_video_meta 已应用 rotation）。
@@ -45,6 +46,18 @@ pub fn build_with_options(
         "-i".to_string(),
         input_path,
     ];
+    if job.use_avs {
+        if let Some(audio_input) = avs_audio_input_override {
+            args.extend([
+                "-i".to_string(),
+                audio_input.to_string(),
+                "-map".to_string(),
+                "0:v:0".to_string(),
+                "-map".to_string(),
+                "1:a:0?".to_string(),
+            ]);
+        }
+    }
 
     let mut filters = Vec::new();
 
@@ -334,6 +347,8 @@ pub struct VideoInfo {
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub bitrate_kbps: Option<i32>,
+    pub fps: Option<f64>,
+    pub codec_name: Option<String>,
 }
 
 pub fn inspect_video(ffmpeg_path: &str, video_path: &str) -> Result<VideoInfo, String> {
@@ -355,6 +370,8 @@ pub fn inspect_video(ffmpeg_path: &str, video_path: &str) -> Result<VideoInfo, S
         width: size.map(|item| item.0),
         height: size.map(|item| item.1),
         bitrate_kbps: parse_bitrate_kbps(&text),
+        fps: parse_video_fps(&text),
+        codec_name: parse_video_codec_name(&text),
     })
 }
 
@@ -497,6 +514,35 @@ fn parse_video_size(text: &str) -> Option<(i32, i32)> {
             if width >= 100 && height >= 100 {
                 return Some((width, height));
             }
+        }
+    }
+    None
+}
+
+pub fn parse_video_fps(text: &str) -> Option<f64> {
+    for line in text.lines().filter(|line| line.contains("Video:")) {
+        let mut previous: Option<&str> = None;
+        for token in line.split_whitespace() {
+            let token = token.trim_end_matches(',');
+            if token == "fps" {
+                return previous?.parse::<f64>().ok();
+            }
+            previous = Some(token);
+        }
+    }
+    None
+}
+
+pub fn parse_video_codec_name(text: &str) -> Option<String> {
+    for line in text.lines().filter(|line| line.contains("Video:")) {
+        let start = line.find("Video:")? + "Video:".len();
+        let codec = line[start..]
+            .trim_start()
+            .split(|c: char| c == ',' || c == '(' || c.is_whitespace())
+            .next()?
+            .trim();
+        if !codec.is_empty() {
+            return Some(codec.to_ascii_lowercase());
         }
     }
     None
@@ -727,12 +773,66 @@ mod tests {
             video_width: Some(1920),
             video_height: Some(1080),
         };
-        let command = build_with_options("definitely-missing-ffmpeg.exe", &job, None).unwrap();
+        let command =
+            build_with_options("definitely-missing-ffmpeg.exe", &job, None, None).unwrap();
         let vf_index = command.iter().position(|arg| arg == "-vf").unwrap();
 
         assert_eq!(
             command.get(vf_index + 1).map(String::as_str),
             Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',scale=384:108[wm];[in][wm]overlay=38:22,subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'")
         );
+    }
+
+    #[test]
+    fn avs_audio_override_adds_second_input_and_maps_streams() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mkv".to_string(),
+            subtitle_path: r"E:\sub.ass".to_string(),
+            output_path: r"E:\out.mp4".to_string(),
+            crf: 18,
+            max_bitrate: None,
+            need_logo: false,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: true,
+            logo_layout: None,
+            logo_on_top: false,
+            video_width: None,
+            video_height: None,
+        };
+        let command = build_with_options(
+            "definitely-missing-ffmpeg.exe",
+            &job,
+            Some(r"C:\temp\input.avs"),
+            Some(r"E:\video.mkv"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            &command[0..10],
+            &[
+                "definitely-missing-ffmpeg.exe",
+                "-hide_banner",
+                "-i",
+                r"C:\temp\input.avs",
+                "-i",
+                r"E:\video.mkv",
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0?",
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_video_fps_and_codec_name() {
+        let text =
+            "Stream #0:0: Video: vp9 (Profile 0), yuv420p(tv), 2160x3840, 29.97 fps, 29.97 tbr";
+        assert_eq!(parse_video_codec_name(text).as_deref(), Some("vp9"));
+        assert_eq!(parse_video_fps(text), Some(29.97));
     }
 }

@@ -40,6 +40,18 @@ export function validateOutputParentDir(outputPath: string) {
   return invoke<void>('validate_output_parent_dir', { outputPath })
 }
 
+export interface AvsStagingPlan {
+  required: boolean
+  sourceSizeBytes: number
+  sourceSizeLabel: string
+  tempPath: string
+  reason: string
+}
+
+export function inspectAvsStagingPlan(job: CompressJob) {
+  return invoke<AvsStagingPlan | null>('inspect_avs_staging_plan', { job })
+}
+
 export function startCompress(job: CompressJob) {
   return invoke<void>('start_compress', { job })
 }

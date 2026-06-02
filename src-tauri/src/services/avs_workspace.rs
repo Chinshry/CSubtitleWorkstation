@@ -61,13 +61,32 @@ pub fn build_avs_script(
     format!(
         "LoadPlugin(\"{vs}\")\n\
          LoadPlugin(\"{ls}\")\n\
-         Video=LWLibavVideoSource(\"{video}\")\n\
-         Audio=LWLibavAudioSource(\"{video}\")\n\
+         Video=LWLibavVideoSource(\"{video}\", cache=false)\n\
+         Audio=LWLibavAudioSource(\"{video}\", cache=false)\n\
          AudioDub(Video,Audio)\n\
          TextSubMod(\"{sub}\")\n",
         vs = escape_avs_string(strip_extended_path_prefix(&vs_str)),
         ls = escape_avs_string(strip_extended_path_prefix(&ls_str)),
         video = escape_avs_string(strip_extended_path_prefix(video_path)),
+        sub = escape_avs_string(strip_extended_path_prefix(subtitle_path)),
+    )
+}
+
+pub fn build_avs_directshow_script(
+    vsfiltermod: &Path,
+    video_path: &str,
+    fps: f64,
+    subtitle_path: &str,
+) -> String {
+    let vs_str = vsfiltermod.to_string_lossy();
+    format!(
+        "LoadPlugin(\"{vs}\")\n\
+         Video=DirectShowSource(\"{video}\", fps={fps:.8}, audio=false, convertfps=false)\n\
+         Video\n\
+         TextSubMod(\"{sub}\")\n",
+        vs = escape_avs_string(strip_extended_path_prefix(&vs_str)),
+        video = escape_avs_string(strip_extended_path_prefix(video_path)),
+        fps = fps,
         sub = escape_avs_string(strip_extended_path_prefix(subtitle_path)),
     )
 }
@@ -119,7 +138,23 @@ mod tests {
         let script = build_avs_script(&vs, &ls, r"E:\video.mp4", r"E:\sub.ass");
         assert!(script.contains(r#"LoadPlugin("E:\\Project\\resources\\avs\\VSFilterMod.dll")"#));
         assert!(script.contains(r#"LoadPlugin("E:\\Project\\resources\\avs\\LSMASHSource.dll")"#));
+        assert!(script.contains(r#"LWLibavVideoSource("E:\\video.mp4", cache=false)"#));
+        assert!(script.contains(r#"LWLibavAudioSource("E:\\video.mp4", cache=false)"#));
         assert!(!script.contains(r"\\?\"));
+    }
+
+    #[test]
+    fn build_directshow_script_outputs_video_only_source() {
+        let vs = PathBuf::from(r"E:\Project\resources\avs\VSFilterMod.dll");
+        let script =
+            build_avs_directshow_script(&vs, r"E:\stage\source.mkv", 29.97002997, r"E:\sub.ass");
+        assert!(script.contains(r#"LoadPlugin("E:\\Project\\resources\\avs\\VSFilterMod.dll")"#));
+        assert!(script.contains(
+            r#"DirectShowSource("E:\\stage\\source.mkv", fps=29.97002997, audio=false, convertfps=false)"#
+        ));
+        assert!(script.contains(r#"TextSubMod("E:\\sub.ass")"#));
+        assert!(!script.contains("LWLibavVideoSource"));
+        assert!(!script.contains("AudioDub"));
     }
 }
 
