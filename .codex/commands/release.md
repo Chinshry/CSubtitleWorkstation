@@ -28,7 +28,7 @@ $ARGUMENTS
   - `## 🎨 体验改进`
   - `## 📚 文档与流程`
   - `## 🧰 内部维护`
-- 应用内 `notes` 与 GitHub Release 的更新说明使用同一份确认后的 Markdown 文案。
+- GitHub Release 使用确认后的 Markdown 文案；应用内 `latest.json.notes` 由 workflow 自动转换成纯文本，避免旧客户端原样显示 `##`、`-` 等 Markdown 标记。
 - 仓库的发布工作流是 `.github/workflows/release.yml`；以它的 workflow inputs 为准。
 
 ## 流程
@@ -63,7 +63,7 @@ $ARGUMENTS
    - 目标 tag。
    - overwrite 模式。
    - 原始脚本素材。
-   - 准备同时写入 GitHub Release 和 `docs/updates/latest.json` `notes` 的最终 Markdown 更新说明。
+   - 准备写入 GitHub Release 的最终 Markdown 更新说明；workflow 会派生纯文本版本写入 `docs/updates/latest.json` `notes`。
    - 即将执行的 GitHub Actions workflow 命令。
 
 5. 用户明确确认后，触发发布工作流：

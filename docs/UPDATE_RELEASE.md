@@ -34,7 +34,7 @@ Settings -> Pages -> Deploy from a branch -> master -> /docs
 | --- | --- |
 | `version` | 目标版本号，例如 `0.1.6`，不需要 `v` 前缀 |
 | `overwrite` | `true` 时删除同名 Release/tag 后重建，默认 `false` |
-| `notes` | 已确认的 Markdown 更新说明，同时写入 GitHub Release 和应用内更新清单 |
+| `notes` | 已确认的 Markdown 更新说明；GitHub Release 保留 Markdown，应用内更新清单会自动写入纯文本版本 |
 
 工作流会自动完成：
 
@@ -58,7 +58,7 @@ Settings -> Pages -> Deploy from a branch -> master -> /docs
 .codex/commands/release.md
 ```
 
-该命令用于准备发布材料、生成 changelog、整理面向用户的中文更新说明，并在用户确认后触发 `Release` workflow。更新说明必须先由用户确认，再作为 `notes` 传给工作流。
+该命令用于准备发布材料、生成 changelog、整理面向用户的中文更新说明，并在用户确认后触发 `Release` workflow。更新说明必须先由用户确认，再作为 `notes` 传给工作流；工作流会为应用内更新清单生成去除 Markdown 标记的纯文本 notes。
 
 ## Tag 推送发布
 
