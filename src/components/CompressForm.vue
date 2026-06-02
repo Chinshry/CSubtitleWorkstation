@@ -25,6 +25,7 @@ const emit = defineEmits<{
   (e: 'open-logo-editor'): void
   (e: 'update:selected-encode-preset-id', value: string): void
   (e: 'apply-encode-preset', value?: string): void
+  (e: 'subtitle-analyzing', value: boolean): void
   /** 字幕被分析后，把后端结果透传给上层（HomeView 用来做色彩矩阵匹配） */
   (e: 'subtitle-analyzed', result: SubtitleAnalysisResult | null): void
 }>()
@@ -35,6 +36,7 @@ const avsAutoEnabledReason = ref<string>('')
 const advancedOpen = ref(false)
 const presetMenuOpen = ref(false)
 const toast = useToast()
+let subtitleAnalyzeSeq = 0
 
 const encodePresetOptions = computed(() => {
   return (props.encodePresets ?? []).map((preset) => ({
@@ -106,19 +108,32 @@ watch(avsToggleDisabled, syncAvsAvailability)
 // 字幕分析：检测是否包含特效标签，自动勾选 AVS；同时把结果透传给上层用于色彩矩阵匹配
 async function analyzeSubtitleForEffects() {
   const subtitlePath = job.value.subtitlePath?.trim()
+  const seq = ++subtitleAnalyzeSeq
   if (!subtitlePath) {
     avsAutoEnabledReason.value = ''
+    emit('subtitle-analyzing', false)
     emit('subtitle-analyzed', null)
     return
   }
 
   let result: SubtitleAnalysisResult | null = null
+  emit('subtitle-analyzing', true)
+  emit('subtitle-analyzed', null)
   try {
     result = await analyzeSubtitle(subtitlePath)
   } catch (err) {
+    if (seq !== subtitleAnalyzeSeq) return
     console.error('Failed to analyze subtitle:', err)
     avsAutoEnabledReason.value = ''
     emit('subtitle-analyzed', null)
+    return
+  } finally {
+    if (seq === subtitleAnalyzeSeq) {
+      emit('subtitle-analyzing', false)
+    }
+  }
+
+  if (seq !== subtitleAnalyzeSeq) {
     return
   }
 

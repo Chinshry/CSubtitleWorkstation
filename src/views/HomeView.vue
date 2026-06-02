@@ -127,6 +127,7 @@ watch(
 
 // 字幕分析结果（来自 CompressForm 的 emit，避免重复调用后端 analyze_subtitle）
 const subtitleAnalysis = ref<SubtitleAnalysisResult | null>(null)
+const subtitleAnalyzing = ref(false)
 const outputTemplates = computed(() => normalizeOutputTemplates(appConfig.value))
 const encodePresets = computed(() => normalizeEncodePresets(appConfig.value))
 const selectedOutputTemplate = computed(() => {
@@ -153,6 +154,10 @@ const colorMatrixCheck = computed(() => {
 
 function onSubtitleAnalyzed(result: SubtitleAnalysisResult | null) {
   subtitleAnalysis.value = result
+}
+
+function onSubtitleAnalyzing(value: boolean) {
+  subtitleAnalyzing.value = value
 }
 
 function applyOutputTemplate() {
@@ -637,7 +642,11 @@ onUnmounted(() => {
       @pick-video="(p: string) => (job.videoPath = p)"
       @pick-subtitle="(p: string) => (job.subtitlePath = p)"
     />
-    <SubtitleCheckPanel :matrix-check="colorMatrixCheck" :analysis="subtitleAnalysis" />
+    <SubtitleCheckPanel
+      :matrix-check="colorMatrixCheck"
+      :analysis="subtitleAnalysis"
+      :analyzing="subtitleAnalyzing"
+    />
     <CompressForm
       v-model="job"
       :encode-presets="encodePresets"
@@ -647,6 +656,7 @@ onUnmounted(() => {
       @update:selected-encode-preset-id="selectedEncodePresetId = $event"
       @apply-encode-preset="applyEncodePreset"
       @open-logo-editor="openLogoEditor"
+      @subtitle-analyzing="onSubtitleAnalyzing"
       @subtitle-analyzed="onSubtitleAnalyzed"
     />
 

@@ -18,6 +18,7 @@ type CheckItem = {
 const props = defineProps<{
   matrixCheck: ColorMatrixCheck | null
   analysis: SubtitleAnalysisResult | null
+  analyzing?: boolean
 }>()
 
 const expanded = ref(true)
@@ -120,6 +121,11 @@ const items = computed<CheckItem[]>(() => {
 })
 
 const issueCount = computed(() => items.value.length)
+const headerTitle = computed(() => props.analyzing ? '字幕检查中' : '字幕检查')
+const headerSummary = computed(() => {
+  if (props.analyzing) return '正在分析字幕特效、字体和资源引用'
+  return `发现 ${issueCount.value} 个需要确认的项目`
+})
 const highestLevel = computed<CheckLevel>(() => {
   if (items.value.some((item) => item.level === 'error')) return 'error'
   if (items.value.some((item) => item.level === 'warn')) return 'warn'
@@ -181,18 +187,18 @@ function toggleItem(id: string) {
 </script>
 
 <template>
-  <section v-if="issueCount" class="subtitle-check" :class="panelClass">
+  <section v-if="props.analyzing || issueCount" class="subtitle-check" :class="panelClass">
     <div class="subtitle-check-head">
       <div>
-        <h3>字幕检查</h3>
-        <p>发现 {{ issueCount }} 个需要确认的项目</p>
+        <h3>{{ headerTitle }}</h3>
+        <p>{{ headerSummary }}</p>
       </div>
-      <button type="button" class="subtitle-check-toggle" @click="expanded = !expanded">
+      <button v-if="issueCount" type="button" class="subtitle-check-toggle" @click="expanded = !expanded">
         {{ expanded ? '收起' : '展开' }}
       </button>
     </div>
 
-    <div v-if="expanded" class="subtitle-check-list">
+    <div v-if="expanded && issueCount" class="subtitle-check-list">
       <article v-for="item in items" :key="item.id" class="check-item" :class="`item-${item.level}`">
         <div class="check-item-main">
           <span class="check-level">{{ item.label }}</span>

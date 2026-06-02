@@ -62,17 +62,21 @@ pub fn preview_ffmpeg_command(app: AppHandle, job: CompressJob) -> Result<Vec<St
 }
 
 #[tauri::command]
-pub fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult, String> {
-    let analysis = subtitle_analyzer::analyze_subtitle(&subtitle_path)?;
-    Ok(SubtitleAnalysisResult {
-        has_effects: analysis.has_effects,
-        detected_tags: analysis.detected_tags,
-        ass_matrix: analysis.ass_matrix,
-        missing_img_paths: analysis.missing_img_paths,
-        missing_fonts: analysis.missing_fonts,
-        missing_styles: analysis.missing_styles,
-        banner_hits: analysis.banner_hits,
+pub async fn analyze_subtitle(subtitle_path: String) -> Result<SubtitleAnalysisResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let analysis = subtitle_analyzer::analyze_subtitle(&subtitle_path)?;
+        Ok(SubtitleAnalysisResult {
+            has_effects: analysis.has_effects,
+            detected_tags: analysis.detected_tags,
+            ass_matrix: analysis.ass_matrix,
+            missing_img_paths: analysis.missing_img_paths,
+            missing_fonts: analysis.missing_fonts,
+            missing_styles: analysis.missing_styles,
+            banner_hits: analysis.banner_hits,
+        })
     })
+    .await
+    .map_err(|err| format!("Subtitle analysis task failed: {err}"))?
 }
 
 #[tauri::command]
