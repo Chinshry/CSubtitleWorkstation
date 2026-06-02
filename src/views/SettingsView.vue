@@ -30,7 +30,7 @@ import {
   setPlatformOverride,
   type Platform
 } from '../stores/platformStore'
-import { avsStatus, initAvsStatus, refreshAvsStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
+import { avsStatus, initAvsStatus, refreshAvsStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, isLavFiltersMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, setLavFiltersMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
 import {
   availableUpdateVersion,
   refreshAppUpdate,
@@ -47,6 +47,7 @@ const appVersion = ref('')
 const appConfig = ref<AppConfig | null>(null)
 const guideOpen = ref(false)
 const avsGuideOpen = ref(false)
+const lavGuideOpen = ref(false)
 const debugPanelOpen = ref(false)
 
 // 作者头像：用 vite 打包的本地静态资源，离线 / 网络受限场景始终可用
@@ -116,11 +117,25 @@ const avsDemuxerMissingModel = computed<boolean>({
   get: () => isAvsDemuxerMissingMocked.value,
   set: (value) => setAvsDemuxerMissingMock(value)
 })
+const lavFiltersMissingModel = computed<boolean>({
+  get: () => isLavFiltersMissingMocked.value,
+  set: (value) => setLavFiltersMissingMock(value)
+})
 const avsMockSummary = computed(() => {
   const parts: string[] = []
   if (isAvisynthMissingMocked.value) parts.push('AviSynth+ 缺失')
   if (isAvsDemuxerMissingMocked.value) parts.push('ffmpeg avisynth demuxer 缺失')
+  if (isLavFiltersMissingMocked.value) parts.push('LAV Filters 缺失')
   return parts.join(' + ')
+})
+
+const lavReady = computed(() => {
+  const status = avsStatus.value
+  return Boolean(
+    status?.lavFiltersInstalled &&
+    status.lavFiltersX64Available &&
+    status.lavFiltersDirectshowRegistered
+  )
 })
 
 async function refresh() {
@@ -506,13 +521,66 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
               full 版
             </a>
             默认包含；essentials 版不包含。完成上面两步后点
-            <strong>「重新检测」</strong>，两枚徽章都变 ✓ 即可在「压制参数」里勾选「AVS 兼容模式」。
+            <strong>「重新检测」</strong>，AVS 相关徽章变 ✓ 即可在「压制参数」里勾选「AVS 兼容模式」。
           </li>
         </ol>
         <p class="muted">
           内置 <code>VSFilterMod.dll</code> + <code>LSMASHSource.dll</code> 已随本工具打包，无需手动配置；切勿把 essentials 版的 ffmpeg 当 full 版用，否则会报
           <code>avisynth: Could not initialize ...</code>。
         </p>
+      </div>
+    </section>
+
+    <section v-if="isWindows" class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>VP9 DirectShow 解码器</h2>
+          <p>仅 VP9 视频在 AVS fallback 下需要。普通 AVS 字幕压制不依赖 LAV Filters。</p>
+        </div>
+      </div>
+      <dl class="details">
+        <div>
+          <dt>状态</dt>
+          <dd>
+            <span class="status-pill" :class="lavReady ? 'ok' : 'bad'">
+              <span class="status-icon">{{ lavReady ? '✓' : '✕' }}</span>
+              <span>{{ lavReady ? 'LAV Filters 已就绪' : '需要 64 位 LAV Filters' }}</span>
+            </span>
+          </dd>
+        </div>
+        <div><dt>版本</dt><dd>{{ avsStatus?.lavFiltersVersion ?? '—' }}</dd></div>
+        <div><dt>安装目录</dt><dd>{{ avsStatus?.lavFiltersInstallPath ?? '—' }}</dd></div>
+        <div><dt>x64 组件</dt><dd>{{ avsStatus?.lavFiltersX64Available ? '已检测到' : '未检测到' }}</dd></div>
+        <div><dt>DirectShow 注册</dt><dd>{{ avsStatus?.lavFiltersDirectshowRegistered ? 'Splitter + Video Decoder 已注册' : '未检测到完整注册' }}</dd></div>
+      </dl>
+      <div class="actions left">
+        <button
+          class="secondary"
+          :class="{ 'is-busy': isBusy('avsRefresh') }"
+          @click="withBusy('avsRefresh', refreshAvsStatus)"
+        >重新检测</button>
+        <button class="secondary" @click="lavGuideOpen = !lavGuideOpen">
+          {{ lavGuideOpen ? '收起安装手册' : '没有 LAV Filters？查看安装手册' }}
+        </button>
+      </div>
+      <div v-if="lavGuideOpen" class="install-guide">
+        <h3>什么时候需要 LAV Filters？</h3>
+        <p class="muted" style="margin-top:0;">
+          只有 VP9 视频在 AVS fallback 下使用 <code>DirectShowSource</code> 时需要。它提供 64 位 DirectShow 的 MKV splitter 和 VP9 video decoder。
+        </p>
+        <h3 style="margin-top:14px;">安装步骤</h3>
+        <ol>
+          <li>
+            打开
+            <a href="https://github.com/Nevcairiel/LAVFilters/releases" target="_blank" rel="noopener">
+              LAV Filters Releases
+            </a>
+            ，下载 installer 版本，例如 <code>LAVFilters-x.y.z-Installer.exe</code>。
+          </li>
+          <li>
+            安装时确认包含 <strong>64 位 Splitter</strong> 和 <strong>64 位 Video Decoder</strong>。安装完成后重启本应用，再点击 <strong>「重新检测」</strong>。
+          </li>
+        </ol>
       </div>
     </section>
 
@@ -711,6 +779,19 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
               <span>
                 模拟 ffmpeg avisynth demuxer 缺失
                 <em class="muted">— AVS 面板 demuxer ✕，说明用户用的是 essentials 版 ffmpeg</em>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="debug-group">
+          <h4>VP9 DirectShow 解码器模拟（仅 Windows 生效）</h4>
+          <p class="muted">用于演练 VP9 fallback 依赖缺失时的设置面板状态。</p>
+          <div class="debug-options">
+            <label class="debug-check">
+              <input type="checkbox" v-model="lavFiltersMissingModel" />
+              <span>
+                模拟 LAV Filters 缺失
+                <em class="muted">— VP9 DirectShow 解码器面板 ✕，显示需要 64 位 LAV Filters</em>
               </span>
             </label>
           </div>

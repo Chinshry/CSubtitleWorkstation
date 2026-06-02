@@ -5,10 +5,9 @@ import { detectAvs } from '../api/avs'
 const realStatus = ref<AvsStatus | null>(null)
 let initPromise: Promise<void> | null = null
 
-// === 调试 mock 层 ===
-// 与 ffmpegStore 同思路：localStorage 持久化两个独立开关。
 const MOCK_AVISYNTH_KEY = 'csubtitle-workstation:debug-mock-no-avisynth'
 const MOCK_DEMUXER_KEY = 'csubtitle-workstation:debug-mock-no-avs-demuxer'
+const MOCK_LAV_FILTERS_KEY = 'csubtitle-workstation:debug-mock-no-lav-filters'
 
 function readBoolStorage(key: string): boolean {
   if (typeof localStorage === 'undefined') return false
@@ -17,11 +16,13 @@ function readBoolStorage(key: string): boolean {
 
 const avisynthMissingMock = ref(readBoolStorage(MOCK_AVISYNTH_KEY))
 const demuxerMissingMock = ref(readBoolStorage(MOCK_DEMUXER_KEY))
+const lavFiltersMissingMock = ref(readBoolStorage(MOCK_LAV_FILTERS_KEY))
 
 export const isAvisynthMissingMocked = computed(() => avisynthMissingMock.value)
 export const isAvsDemuxerMissingMocked = computed(() => demuxerMissingMock.value)
+export const isLavFiltersMissingMocked = computed(() => lavFiltersMissingMock.value)
 export const isAvsMocked = computed(
-  () => avisynthMissingMock.value || demuxerMissingMock.value
+  () => avisynthMissingMock.value || demuxerMissingMock.value || lavFiltersMissingMock.value
 )
 
 function persistBool(key: string, value: boolean) {
@@ -40,17 +41,22 @@ export function setAvsDemuxerMissingMock(value: boolean) {
   persistBool(MOCK_DEMUXER_KEY, value)
 }
 
+export function setLavFiltersMissingMock(value: boolean) {
+  lavFiltersMissingMock.value = value
+  persistBool(MOCK_LAV_FILTERS_KEY, value)
+}
+
 export function clearAllAvsMocks() {
   setAvisynthMissingMock(false)
   setAvsDemuxerMissingMock(false)
+  setLavFiltersMissingMock(false)
 }
 
-// 暴露给 UI 的最终状态：mock 在真实状态基础上叠加修改
 export const avsStatus = computed<AvsStatus | null>(() => {
   const real = realStatus.value
   if (!real) return real
 
-  if (!avisynthMissingMock.value && !demuxerMissingMock.value) {
+  if (!avisynthMissingMock.value && !demuxerMissingMock.value && !lavFiltersMissingMock.value) {
     return real
   }
 
@@ -64,15 +70,23 @@ export const avsStatus = computed<AvsStatus | null>(() => {
   if (demuxerMissingMock.value) {
     next.ffmpegDemuxerAvailable = false
   }
+  if (lavFiltersMissingMock.value) {
+    next.lavFiltersInstalled = false
+    next.lavFiltersVersion = undefined
+    next.lavFiltersInstallPath = undefined
+    next.lavFiltersX64Available = false
+    next.lavFiltersDirectshowRegistered = false
+  }
+
   next.available = next.ffmpegDemuxerAvailable && next.avisynthInstalled
   const parts: string[] = []
   if (avisynthMissingMock.value) parts.push('AviSynth+ 缺失')
   if (demuxerMissingMock.value) parts.push('ffmpeg avisynth demuxer 缺失')
+  if (lavFiltersMissingMock.value) parts.push('LAV Filters 缺失')
   next.message = `[调试] 模拟 ${parts.join(' + ')}`
   return next
 })
 
-// 首次调用时检测；后续调用复用结果。ffmpeg 状态切换后请手动 refresh。
 export async function initAvsStatus(): Promise<void> {
   if (realStatus.value) return
   if (initPromise) return initPromise
@@ -80,7 +94,7 @@ export async function initAvsStatus(): Promise<void> {
     try {
       realStatus.value = await detectAvs()
     } catch {
-      // 静默；UI 仍可重试
+      // UI can still retry.
     } finally {
       initPromise = null
     }

@@ -120,7 +120,7 @@ pub fn inspect_avs_staging_plan(
         return Ok(None);
     };
     let video_info = command_builder::inspect_video(&ffmpeg_path, &job.video_path)?;
-    if !should_use_directshow_avs_source(&video_info) {
+    if !should_stage_vp9_avs_source(&video_info) {
         return Ok(None);
     }
 
@@ -135,7 +135,7 @@ pub fn inspect_avs_staging_plan(
         source_size_bytes,
         source_size_label: format_bytes(source_size_bytes),
         temp_path: temp_path.to_string_lossy().to_string(),
-        reason: "VP9 视频在当前 64 位 AVS 的 LWLibavVideoSource 路径下可能中途断帧，需要临时复制到 ASCII 路径并改用 DirectShowSource 读取视频。".to_string(),
+        reason: "VP9 视频在 AVS 模式下会临时复制到 ASCII 路径，并检测本机 64 位 DirectShow 解码链；缺失时需要安装 64 位 LAV Filters。".to_string(),
     }))
 }
 
@@ -213,7 +213,7 @@ pub fn start_compress(
                 .unwrap_or_else(|| "AVS 环境不可用".to_string()));
         }
         let workspace = avs_workspace::resolve(&app)?;
-        let script = if should_use_directshow_avs_source(&video_info) {
+        let script = if should_stage_vp9_avs_source(&video_info) {
             if let Ok(size) = fs::metadata(&command_job.video_path).map(|meta| meta.len()) {
                 let _ = app.emit(
                     "compress-log",
@@ -563,7 +563,7 @@ fn safe_video_ext(video_path: &str) -> String {
     }
 }
 
-fn should_use_directshow_avs_source(video_info: &command_builder::VideoInfo) -> bool {
+fn should_stage_vp9_avs_source(video_info: &command_builder::VideoInfo) -> bool {
     video_info
         .codec_name
         .as_deref()

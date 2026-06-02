@@ -628,7 +628,7 @@ h2 {
 
 .details div {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: 126px minmax(0, 1fr);
   gap: 12px;
 }
 

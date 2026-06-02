@@ -95,6 +95,14 @@ const avsToggleDisabledTip = computed(() => {
   return s.message ?? 'AVS 环境不可用'
 })
 
+// VP9 解码依赖：AVS 环境可用但缺 64 位 LAV Filters 时，在开关旁提示。
+// 读 avsStatus（已叠加调试 mock），故「模拟 LAV 缺失」与真机缺失都会触发。
+const lavMissingHint = computed(
+  () => !avsToggleDisabled.value && avsStatus.value?.lavFiltersInstalled === false
+)
+const lavMissingTip =
+  '未检测到 64 位 LAV Filters。\n压制 VP9 视频时会经 DirectShow 解码链读取，缺少 LAV 可能导致解码失败。\n建议安装 64 位 LAV Filters 后重试。'
+
 // 平台不支持或 mock 切换导致已勾选但不可用时，强制关掉
 function syncAvsAvailability() {
   if (avsToggleDisabled.value && job.value.useAvs) {
@@ -390,6 +398,7 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
             <span class="switch"></span>
             <span>AVS 压制模式</span>
             <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
+            <span v-if="lavMissingHint" class="avs-warn" :data-tip="lavMissingTip" tabindex="0">LAV 缺失</span>
             <InfoHint
               placement="left"
               title="AVS 压制模式"
@@ -630,8 +639,23 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   cursor: help;
   white-space: nowrap;
 }
+.avs-warn {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: #fde8e8;
+  border: 1px solid #f56565;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #c53030;
+  cursor: help;
+  white-space: nowrap;
+}
 /* 复用 .hint::after 的暗卡片 tooltip 风格 */
-.avs-hint::after {
+.avs-hint::after,
+.avs-warn::after {
   background: #1e293b;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
@@ -654,7 +678,9 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   z-index: 50;
 }
 .avs-hint:hover::after,
-.avs-hint:focus::after {
+.avs-hint:focus::after,
+.avs-warn:hover::after,
+.avs-warn:focus::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
   visibility: visible;

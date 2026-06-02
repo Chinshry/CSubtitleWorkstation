@@ -716,7 +716,7 @@ onUnmounted(() => {
           <p class="avs-staging-kicker">AVS 兼容模式</p>
           <h2 id="avs-staging-title">需要临时复制 VP9 源视频</h2>
           <p class="avs-staging-summary">
-            为避免当前 64 位 AVS 的 LWLibavVideoSource 读取 VP9 时中途断帧，本次会先把源视频复制到 ASCII 临时路径，再用 DirectShowSource 读取视频。
+            检测到 VP9 视频。本次会先把源视频复制到 ASCII 临时路径，再通过本机 64 位 DirectShow 解码链读取视频；通常需要 64 位 LAV Filters。
           </p>
 
           <dl class="avs-staging-facts">

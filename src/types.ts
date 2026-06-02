@@ -17,6 +17,11 @@ export type AvsStatus = {
   avisynthVersion?: string
   avisynthInstallPath?: string
   avisynthDllPath?: string
+  lavFiltersInstalled: boolean
+  lavFiltersVersion?: string
+  lavFiltersInstallPath?: string
+  lavFiltersX64Available: boolean
+  lavFiltersDirectshowRegistered: boolean
   available: boolean
   message?: string
 }
