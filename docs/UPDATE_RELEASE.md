@@ -40,13 +40,13 @@ Settings -> Pages -> Deploy from a branch -> master -> /docs
 
 1. 校验版本号并解析目标 tag，例如 `0.1.6` -> `v0.1.6`。
 2. 生成提交范围内的 changelog 原始材料。
-3. 将 `package.json`、`src-tauri/Cargo.toml` 和 `docs/updates/latest.json` 更新到目标版本。
+3. 将 `package.json` 和 `src-tauri/Cargo.toml` 更新到目标版本；如已一致则不提交。
 4. 自动提交 `chore: release vX.Y.Z` 并推送回当前分支。
 5. 创建或更新 draft GitHub Release。
 6. 在 Windows runner 构建 NSIS 安装包，在 macOS runner 构建 Universal DMG。
 7. 将产物上传到 draft release。
 8. 发布 release。
-9. 读取 GitHub Release 的 `publishedAt`，回写到 `docs/updates/latest.json` 的 `pub_date`，再提交 `chore: sync release publish date`。
+9. 发布后读取 GitHub Release 的 `publishedAt`，一次性写入 `docs/updates/latest.json` 的 `version`、`notes`、`pub_date` 和下载 URL，再提交 `chore: sync update manifest for vX.Y.Z`。
 
 发布完成后，GitHub Pages 会把新的 `docs/updates/latest.json` 暴露给旧版本客户端。
 
@@ -86,7 +86,7 @@ git tag v0.1.6
 git push origin v0.1.6
 ```
 
-这种方式适合版本文件和 `docs/updates/latest.json` 已经提前准备好的情况。tag push 不会自动修改并提交 `package.json`、`src-tauri/Cargo.toml` 或更新清单，因此普通发版优先使用手动触发 workflow。
+这种方式适合版本文件和 `docs/updates/latest.json` 已经提前准备好的情况。tag push 不会自动修改并提交 `package.json`、`src-tauri/Cargo.toml`，也不会在发布后同步更新清单，因此普通发版优先使用手动触发 workflow。
 
 ## overwrite=true 的使用场景
 

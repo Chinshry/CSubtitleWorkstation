@@ -32,6 +32,7 @@ jobs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
       sha: ${{ steps.meta.outputs.sha }}
+      app_notes: ${{ steps.meta.outputs.app_notes }}
       release_id: ${{ steps.draft.outputs.release_id }}
 
     steps:
@@ -127,12 +128,6 @@ jobs:
             node -e '
             const fs = require("fs");
             const version = process.env.VERSION;
-            const tag = `v${version}`;
-            const appNotes = process.env.APP_NOTES;
-            const manifestNotes = appNotes
-              .replace(/\r\n/g, "\n")
-              .replace(/\n{3,}/g, "\n\n")
-              .trim();
 
             const pkgPath = "package.json";
             const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
@@ -143,26 +138,11 @@ jobs:
             let cargo = fs.readFileSync(cargoPath, "utf8");
             cargo = cargo.replace(/^version = ".*"$/m, `version = "${version}"`);
             fs.writeFileSync(cargoPath, cargo);
-
-            const manifestPath = "docs/updates/latest.json";
-            const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-            manifest.version = version;
-            manifest.notes = manifestNotes;
-            manifest.pub_date = new Date().toISOString();
-            manifest.platforms = {
-              "windows-x86_64": {
-                url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_x64-setup.exe`
-              },
-              "darwin-universal": {
-                url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_universal.dmg`
-              }
-            };
-            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
             '
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package.json src-tauri/Cargo.toml docs/updates/latest.json
+            git add package.json src-tauri/Cargo.toml
 
             if git diff --cached --quiet; then
               echo "Version files already contain $VERSION"
@@ -333,11 +313,13 @@ jobs:
           set -euo pipefail
           gh release edit "$TAG" --draft=false
 
-      - name: Sync update manifest publish date
+      - name: Sync update manifest
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
         run: |
           set -euo pipefail
 
@@ -348,11 +330,31 @@ jobs:
           fi
 
           export PUBLISHED_AT
+          export VERSION
+          export TAG
+          export APP_NOTES
           node -e '
           const fs = require("fs");
+          const version = process.env.VERSION;
+          const tag = process.env.TAG;
+          const appNotes = process.env.APP_NOTES || "";
+          const manifestNotes = appNotes
+            .replace(/\r\n/g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
           const manifestPath = "docs/updates/latest.json";
           const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          manifest.version = version;
+          manifest.notes = manifestNotes;
           manifest.pub_date = process.env.PUBLISHED_AT;
+          manifest.platforms = {
+            "windows-x86_64": {
+              url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_x64-setup.exe`
+            },
+            "darwin-universal": {
+              url: `https://github.com/Chinshry/CSubtitleWorkstation/releases/download/${tag}/CSubtitleWorkstation_${version}_universal.dmg`
+            }
+          };
           fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
           '
 
@@ -361,8 +363,8 @@ jobs:
           git add docs/updates/latest.json
 
           if git diff --cached --quiet; then
-            echo "Update manifest already contains release publish date"
+            echo "Update manifest already matches $TAG"
           else
-            git commit -m "chore: sync release publish date"
+            git commit -m "chore: sync update manifest for $TAG"
             git push origin HEAD:refs/heads/${{ github.ref_name }}
           fi
