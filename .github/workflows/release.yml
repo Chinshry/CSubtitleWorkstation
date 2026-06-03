@@ -107,7 +107,7 @@ jobs:
             fi
           fi
 
-          python .codex/scripts/generate_changelog.py \
+          python .agents/release/scripts/generate_changelog.py \
             --repo . \
             --version "$VERSION" \
             --to-ref "$TO_REF" > RELEASE_CHANGELOG.md

@@ -50,15 +50,32 @@ Settings -> Pages -> Deploy from a branch -> master -> /docs
 
 发布完成后，GitHub Pages 会把新的 `docs/updates/latest.json` 暴露给旧版本客户端。
 
-## Codex 发布命令
+## AI 助手发布入口
 
-仓库内保留了 Codex 命令：
+仓库内保留了项目级 Codex skill：
 
 ```text
-.codex/commands/release.md
+.codex/skills/release/SKILL.md
 ```
 
-该命令用于准备发布材料、生成 changelog、整理面向用户的中文更新说明，并在用户确认后触发 `Release` workflow。更新说明必须先由用户确认，再作为 `notes` 传给工作流；工作流会为应用内更新清单生成去除 Markdown 标记的纯文本 notes。
+在 Codex 中使用 `$release [version] [--overwrite]` 准备发布材料、生成 changelog、整理面向用户的中文更新说明，并在用户确认后触发 `Release` workflow。
+
+仓库也保留了项目级 Claude Code slash command：
+
+```text
+.claude/commands/release.md
+```
+
+在 Claude Code 中使用 `/release [version] [--overwrite]`。完整流程不写在 command 里，而是由 command 指向共享 `.agents/release/RELEASE.md`。
+
+完整发布流程和共享脚本位于：
+
+```text
+.agents/release/RELEASE.md
+.agents/release/scripts/generate_changelog.py
+```
+
+更新说明必须先由用户确认，再作为 `notes` 传给工作流；工作流会为应用内更新清单生成去除 Markdown 标记的纯文本 notes。
 
 ## Tag 推送发布
 

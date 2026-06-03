@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布"
+  short_description: "准备并触发 CSubtitleWorkstation 发布流程"
+  default_prompt: "使用 release skill 为 CSubtitleWorkstation 准备发布计划、整理发布说明，并在确认后触发 Release workflow。"
