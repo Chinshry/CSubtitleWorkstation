@@ -16,7 +16,7 @@ on:
         default: false
         type: boolean
       notes:
-        description: 'Confirmed Markdown release notes for GitHub Release; latest.json stores a plain-text version derived from it'
+        description: 'Confirmed Markdown release notes used by both GitHub Release and latest.json'
         required: false
         default: ''
         type: string
@@ -129,14 +129,8 @@ jobs:
             const version = process.env.VERSION;
             const tag = `v${version}`;
             const appNotes = process.env.APP_NOTES;
-            const plainAppNotes = appNotes
-              .split(/\r?\n/)
-              .map((line) => line
-                .replace(/^#{1,6}\s*/, "")
-                .replace(/^\s*[-*]\s+/, "")
-                .trimEnd()
-              )
-              .join("\n")
+            const manifestNotes = appNotes
+              .replace(/\r\n/g, "\n")
               .replace(/\n{3,}/g, "\n\n")
               .trim();
 
@@ -153,7 +147,7 @@ jobs:
             const manifestPath = "docs/updates/latest.json";
             const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
             manifest.version = version;
-            manifest.notes = plainAppNotes;
+            manifest.notes = manifestNotes;
             manifest.pub_date = new Date().toISOString();
             manifest.platforms = {
               "windows-x86_64": {

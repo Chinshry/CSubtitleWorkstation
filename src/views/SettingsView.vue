@@ -32,7 +32,6 @@ import {
 } from '../stores/platformStore'
 import { avsStatus, initAvsStatus, refreshAvsStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, isLavFiltersMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, setLavFiltersMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
 import {
-  availableUpdateVersion,
   refreshAppUpdate,
   updateInfo,
   updateMessage,
@@ -161,18 +160,47 @@ async function checkUpdate() {
   await refreshAppUpdate()
 }
 
-const updateResultTitle = computed(() => {
-  if (updateState.value === 'error') return '无法检查更新'
-  if (updateState.value === 'progress') return '正在处理'
-  if (updateInfo.value?.available) return '发现新版本'
-  return '当前版本'
-})
-
-const updateNotesTitle = computed(() => (
-  updateInfo.value?.available ? '新版本更新日志' : '当前版本更新日志'
-))
+const updateNotesTitle = computed(() => '更新日志')
 
 const formattedUpdatePubDate = computed(() => formatUpdatePubDate(updateInfo.value?.pubDate))
+
+const updateNotesMeta = computed(() => {
+  const parts: string[] = []
+  if (formattedUpdatePubDate.value) {
+    parts.push(`发布于 ${formattedUpdatePubDate.value}`)
+  }
+  return parts.filter(Boolean).join(' · ')
+})
+
+const updateNoteLines = computed(() => parseUpdateNotes(updateInfo.value?.notes))
+
+type UpdateNoteLine = {
+  text: string
+  kind: 'section' | 'item' | 'paragraph'
+}
+
+function parseUpdateNotes(notes?: string): UpdateNoteLine[] {
+  return (notes ?? '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(parseUpdateNoteLine)
+}
+
+function parseUpdateNoteLine(line: string): UpdateNoteLine {
+  const heading = line.match(/^#{1,6}\s+(.+)$/)
+  if (heading?.[1]) {
+    return { text: heading[1].trim(), kind: 'section' }
+  }
+
+  const item = line.match(/^[-*]\s+(.+)$/)
+  if (item?.[1]) {
+    return { text: item[1].trim(), kind: 'item' }
+  }
+
+  return { text: line, kind: 'paragraph' }
+}
 
 function formatUpdatePubDate(value?: string) {
   if (!value) return ''
@@ -185,8 +213,7 @@ function formatUpdatePubDate(value?: string) {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short'
+    second: '2-digit'
   }).format(date)
 }
 
@@ -609,31 +636,39 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
         </label>
       </div>
       <div v-if="updateMessage" class="update-result" :class="`update-result-${updateState}`">
-        <span class="update-result-icon">
-          {{ updateState === 'error' ? '!' : updateState === 'success' ? '✓' : 'i' }}
-        </span>
         <div class="update-result-content">
           <div class="update-result-header">
             <div class="update-result-heading">
-              <strong>
-                {{ updateResultTitle }}
-              </strong>
-              <p>{{ updateMessage }}</p>
+              <div class="update-result-title">
+                <span class="update-result-icon">
+                  {{ updateState === 'error' ? '!' : updateState === 'success' ? '✓' : 'i' }}
+                </span>
+                <span class="update-result-message">{{ updateMessage }}</span>
+              </div>
             </div>
-            <a
-              v-if="updateState === 'success' && updateInfo?.available"
-              class="button-link update-download-link"
-              :href="updateReleaseUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-            >前往 GitHub 下载 v{{ availableUpdateVersion }}</a>
+              <a
+                v-if="updateState === 'success' && updateInfo?.available"
+                class="button-link update-download-link"
+                :href="updateReleaseUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+            >前往 GitHub 下载</a>
           </div>
           <div v-if="updateInfo?.notes" class="update-notes">
-            <span class="update-notes-title">{{ updateNotesTitle }}</span>
-            <span v-if="formattedUpdatePubDate" class="update-notes-date">
-              发布于 {{ formattedUpdatePubDate }}
-            </span>
-            <span class="update-notes-body">{{ updateInfo.notes }}</span>
+            <div class="update-notes-head">
+              <span class="update-notes-title">{{ updateNotesTitle }}</span>
+              <span v-if="updateNotesMeta" class="update-notes-meta">
+                {{ updateNotesMeta }}
+              </span>
+            </div>
+            <div class="update-notes-body">
+              <span
+                v-for="(line, index) in updateNoteLines"
+                :key="`${index}-${line.text}`"
+                class="update-note-line"
+                :class="`update-note-line-${line.kind}`"
+              >{{ line.text }}</span>
+            </div>
           </div>
         </div>
       </div>
