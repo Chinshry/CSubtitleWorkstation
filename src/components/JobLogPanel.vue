@@ -141,13 +141,13 @@ const estimatedSizeKb = computed(() => {
           <em>已用</em>
           <span>{{ formatTime(elapsedSeconds) }}</span>
         </span>
+        <span class="eta-pill highlight" v-tooltip="'剩余 = (视频总时长 - 已压制) / 当前速度'">
+          <em>剩余</em>
+          <span>{{ formatTimeOrDash(remainingSeconds) }}</span>
+        </span>
         <span class="eta-pill estimate" v-tooltip="'预计总耗时 = 已用 + 剩余（按当前平滑速度估算）'">
           <em>预计</em>
           <span>{{ formatTimeOrDash(etaSeconds) }}</span>
-        </span>
-        <span class="eta-pill highlight" v-tooltip="'剩余 = (视频总时长 − 已压制) / 当前速度'">
-          <em>剩余</em>
-          <span>{{ formatTimeOrDash(remainingSeconds) }}</span>
         </span>
       </div>
 

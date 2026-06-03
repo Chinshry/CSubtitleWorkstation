@@ -322,7 +322,7 @@ async function runJob() {
   pushDiag('runJob clicked')
   logs.value = []
   percent.value = 0
-  statusLine.value = ''
+  statusLine.value = 'Preparing compression job...'
   currentSeconds.value = 0
   durationSeconds.value = 0
   sizeKb.value = 0
@@ -337,11 +337,16 @@ async function runJob() {
     pushDiag(msg)
     return
   }
+  logs.value.push('正在检查视频与 AVS 预处理需求...')
   const canContinue = await confirmAvsStagingIfNeeded()
   if (!canContinue) {
     logs.value.push('已取消压制：VP9 AVS 兼容模式需要临时复制源视频。')
     pushDiag('runJob cancelled by AVS staging confirmation')
     return
+  }
+  if (job.value.useAvs) {
+    logs.value.push('正在准备 AVS 临时文件；如果源视频是 VP9，大文件复制期间 ffmpeg 进度会暂时保持 0%。')
+    statusLine.value = 'Preparing AVS temporary files...'
   }
   running.value = true
   cancelled.value = false
