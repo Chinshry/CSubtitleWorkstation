@@ -171,12 +171,44 @@
 
 应用启动时会自动检测系统 PATH 上的 `ffmpeg`。如果检测失败或想指定其他版本，进入「设置」页面手动选择 ffmpeg 可执行文件路径。应用会自动在同目录寻找 `ffprobe`。
 
+推荐使用较完整的 ffmpeg 构建：
+
+- Windows：推荐 Gyan.dev 的 `ffmpeg-release-full.7z`，同时包含 `ffprobe`，并支持更多滤镜和 demuxer。
+- macOS：如果字幕压制提示缺少 `subtitles` / `ass` filter，建议改装 Homebrew 的 `ffmpeg-full`。
+
+</details>
+
+<details>
+<summary><strong>macOS 可以压制特效字幕吗？</strong></summary>
+
+macOS 版本不支持 AVS / VSFilterMod 工作流，只能使用 ffmpeg libass 渲染字幕。普通 ASS / SSA / SRT 字幕可以正常压制；依赖 VSFilterMod 扩展标签的特效字幕会提示风险，但不会自动启用 AVS。
+
+如果只是普通字幕却提示 `subtitles` / `ass` filter 缺失，说明当前 ffmpeg 构建不完整。建议安装 `ffmpeg-full` 后，在「设置」页重新检测或手动选择新的 ffmpeg 路径。
+
 </details>
 
 <details>
 <summary><strong>AVS 模式需要什么环境？</strong></summary>
 
 仅 Windows 支持。需要系统已安装 AviSynth+ 且 ffmpeg 启用了 `--enable-avisynth` 构建。推荐使用 Gyan.dev 的 `ffmpeg-release-full.7z`，其中包含 ffprobe 与 AviSynth+ 支持。
+
+</details>
+
+<details>
+<summary><strong>VP9 视频使用 AVS 压制有什么额外要求？</strong></summary>
+
+VP9 视频在 AVS 模式下会走 fallback 流程：应用会先把源视频临时复制到 ASCII 路径，再通过本机 64 位 DirectShow 解码链读取视频，用来避免 VP9 AVS 压制时可能断帧的问题。
+
+因此只有 **VP9 + AVS** 这个组合额外需要 64 位 LAV Filters。普通 AVS 字幕压制不依赖 LAV Filters；非 AVS 压制也不需要这一步。设置页的「VP9 DirectShow 解码器」面板可以检测 LAV Filters 的 x64 组件和 DirectShow 注册状态。
+
+如果源视频很大，开始压制前的临时复制会占用同等大小的临时空间，复制期间 ffmpeg 进度可能暂时保持 0%。确认弹窗中会显示临时占用和临时路径。
+
+</details>
+
+<details>
+<summary><strong>压制过程中能取消吗？</strong></summary>
+
+可以。点击「取消」按钮，ffmpeg 进程会收到 SIGINT 信号优雅退出（相当于 Ctrl+C），已编码的部分会被正确写入文件尾，保证输出仍然可播放。
 
 </details>
 
@@ -199,25 +231,22 @@
 </details>
 
 <details>
+<summary><strong>字幕检查面板里的错误、警告、建议分别是什么意思？</strong></summary>
+
+- **错误**：很可能直接影响输出，例如字幕引用的图片不存在、字体未安装、样式缺失。建议先处理再压制。
+- **警告**：可能造成画面或字幕观感偏差，例如 ASS 色彩矩阵缺失或与视频元数据不一致。可以继续压制，但建议按提示修正。
+- **建议**：不一定会失败，但可能有更合适的处理方式，例如检测到 VSFilterMod 特效标签时建议使用 AVS。
+
+字幕检查不会修改字幕文件，只负责提示风险和给出处理方向。
+
+</details>
+
+<details>
 <summary><strong>LOGO 布局怎么保存？</strong></summary>
 
 在压制页 LOGO 编辑器中保存过的布局会按 (LOGO 图, 分辨率桶) 持久化到本地配置。下次打开同样的视频自动恢复。支持 6 个桶：720p/1080p/4K × 横屏/竖屏。
 
 编辑器支持两类缩放：一类是 LOGO 本身的四角拖拽缩放，用于决定最终压制中的 LOGO 尺寸；另一类是预览画布缩放，用于放大细调位置，不影响最终输出尺寸。预览画布可通过快捷键缩放，也可以直接输入缩放比例；当 LOGO 失去焦点时，调整锚点会自动隐藏，避免遮挡预览。
-
-</details>
-
-<details>
-<summary><strong>应用会在本地保存哪些配置和缓存？</strong></summary>
-
-应用会在系统用户目录下保存配置、窗口状态、WebView 缓存、压制临时字幕、LOGO 预览帧和 AVS 临时脚本。完整路径和清理建议见 [用户数据与缓存](docs/CACHE_AND_DATA.md)。
-
-</details>
-
-<details>
-<summary><strong>压制过程中能取消吗？</strong></summary>
-
-可以。点击「取消」按钮，ffmpeg 进程会收到 SIGINT 信号优雅退出（相当于 Ctrl+C），已编码的部分会被正确写入文件尾，保证输出仍然可播放。
 
 </details>
 
@@ -233,6 +262,12 @@
 
 </details>
 
+<details>
+<summary><strong>应用会在本地保存哪些配置和缓存？</strong></summary>
+
+应用会在系统用户目录下保存配置、窗口状态、WebView 缓存、压制临时字幕、LOGO 预览帧和 AVS 临时脚本。完整路径和清理建议见 [用户数据与缓存](docs/CACHE_AND_DATA.md)。
+
+</details>
 
 ---
 
