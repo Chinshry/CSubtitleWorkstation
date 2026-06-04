@@ -662,6 +662,7 @@ onUnmounted(() => {
       :selected-encode-preset-id="selectedEncodePresetId"
       :logo-button-disabled="logoButtonDisabled"
       :logo-button-disabled-reason="logoButtonDisabledReason"
+      :video-codec="videoMeta?.videoCodec"
       @update:selected-encode-preset-id="selectedEncodePresetId = $event"
       @apply-encode-preset="applyEncodePreset"
       @open-logo-editor="openLogoEditor"

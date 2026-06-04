@@ -19,6 +19,8 @@ const props = defineProps<{
   logoButtonDisabled?: boolean
   /** 配置 LOGO 按钮禁用原因（用于 tooltip） */
   logoButtonDisabledReason?: string
+  /** 当前视频编码（来自 VideoMeta）。VP9 在 AVS fallback 下经 DirectShow 解码，依赖 64 位 LAV Filters */
+  videoCodec?: string
 }>()
 
 const emit = defineEmits<{
@@ -85,20 +87,42 @@ const avsToggleTip = computed(() => {
   return tip
 })
 
-// AVS 开关启用条件：仅 Windows + 检测通过；缺失依赖时禁用并给出提示
-const avsToggleDisabled = computed(() => !isWindows.value || !avsStatus.value?.available)
+// 当前视频是否 VP9：VP9 在 AVS fallback 下经 DirectShow 解码链读取，依赖 64 位 LAV Filters
+const isVp9 = computed(() => props.videoCodec?.toLowerCase() === 'vp9')
+
+// AVS 环境本身是否就绪（仅 Windows + AviSynth/demuxer 检测通过），不含 LAV
+const avsEnvUnavailable = computed(() => !isWindows.value || !avsStatus.value?.available)
+
+// VP9 视频且 LAV 检测结果尚未就绪：解码支持未知，暂时锁住 AVS 开关（仅环境就绪时才有意义）
+const lavResolvingForVp9 = computed(
+  () => !avsEnvUnavailable.value && isVp9.value && (lavChecking.value || !lavStatusLoaded.value)
+)
+
+// AVS 开关启用条件：仅 Windows + 检测通过；VP9 视频的 LAV 检测尚未出结果时暂时禁用
+const avsToggleDisabled = computed(() => avsEnvUnavailable.value || lavResolvingForVp9.value)
 const avsToggleDisabledTip = computed(() => {
   if (!isWindows.value) return 'AVS 压制仅 Windows 支持'
   const s = avsStatus.value
   if (!s) return '正在检测 AVS 环境…'
-  if (s.available) return ''
-  return s.message ?? 'AVS 环境不可用'
+  if (avsEnvUnavailable.value) return s.message ?? 'AVS 环境不可用'
+  if (lavResolvingForVp9.value) return '正在检测 64 位 LAV Filters；VP9 视频需确认 DirectShow 解码支持后才能启用 AVS…'
+  return ''
 })
 
-// VP9 解码依赖：AVS 环境可用但缺 64 位 LAV Filters 时，在开关旁提示。
+// VP9 视频 + LAV 检测中：解码支持未知，显示中性「检测中」提示
+const lavCheckingHint = computed(() => lavResolvingForVp9.value)
+const lavCheckingTip =
+  '正在检测 64 位 LAV Filters。\nVP9 视频经 DirectShow 解码链读取，确认解码支持后才能启用 AVS。'
+
+// VP9 解码依赖：仅 VP9 视频在 AVS fallback 下需要 64 位 LAV Filters，缺失时仅提示（不禁用）。
 // 读 avsStatus（已叠加调试 mock），故「模拟 LAV 缺失」与真机缺失都会触发。
 const lavMissingHint = computed(
-  () => !avsToggleDisabled.value && lavStatusLoaded.value && !lavChecking.value && avsStatus.value?.lavFiltersInstalled === false
+  () =>
+    isVp9.value &&
+    !avsEnvUnavailable.value &&
+    lavStatusLoaded.value &&
+    !lavChecking.value &&
+    avsStatus.value?.lavFiltersInstalled === false
 )
 const lavMissingTip =
   '未检测到 64 位 LAV Filters。\n压制 VP9 视频时会经 DirectShow 解码链读取，缺少 LAV 可能导致解码失败。\n建议安装 64 位 LAV Filters 后重试。'
@@ -397,7 +421,8 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
             <span class="switch"></span>
             <span>AVS 压制模式</span>
             <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
-            <span v-if="lavMissingHint" class="avs-warn" :data-tip="lavMissingTip" tabindex="0">LAV 缺失</span>
+            <span v-if="lavCheckingHint" class="avs-checking" :data-tip="lavCheckingTip" tabindex="0">LAV 检测中…</span>
+            <span v-else-if="lavMissingHint" class="avs-warn" :data-tip="lavMissingTip" tabindex="0">LAV 缺失</span>
             <InfoHint
               placement="left"
               title="AVS 压制模式"
@@ -652,9 +677,24 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   cursor: help;
   white-space: nowrap;
 }
+.avs-checking {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: #e8f0fe;
+  border: 1px solid #90b4f0;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #2c5282;
+  cursor: help;
+  white-space: nowrap;
+}
 /* 复用 .hint::after 的暗卡片 tooltip 风格 */
 .avs-hint::after,
-.avs-warn::after {
+.avs-warn::after,
+.avs-checking::after {
   background: #1e293b;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
@@ -679,7 +719,9 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
 .avs-hint:hover::after,
 .avs-hint:focus::after,
 .avs-warn:hover::after,
-.avs-warn:focus::after {
+.avs-warn:focus::after,
+.avs-checking:hover::after,
+.avs-checking:focus::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
   visibility: visible;
