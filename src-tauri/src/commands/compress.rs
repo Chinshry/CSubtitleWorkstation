@@ -140,11 +140,33 @@ pub fn inspect_avs_staging_plan(
 }
 
 #[tauri::command]
-pub fn start_compress(
+pub async fn start_compress(
     app: AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     job: CompressJob,
 ) -> Result<(), String> {
+    {
+        let mut preparing = state
+            .preparing_jobs
+            .lock()
+            .map_err(|_| "Preparing job state is poisoned.".to_string())?;
+        preparing.insert(job.id.clone());
+    }
+
+    let job_id = job.id.clone();
+    let app_for_cleanup = app.clone();
+    let result =
+        match tauri::async_runtime::spawn_blocking(move || start_compress_blocking(app, job)).await
+        {
+            Ok(result) => result,
+            Err(err) => Err(format!("Compression startup task failed: {err}")),
+        };
+
+    finish_preparing_job(&app_for_cleanup, &job_id);
+    result
+}
+
+fn start_compress_blocking(app: AppHandle, job: CompressJob) -> Result<(), String> {
     // 验证编码器是否在当前平台支持
     if !encoder_detector::is_encoder_supported(&job.encoder) {
         return Err(format!("编码器 {} 在当前平台不支持。", job.encoder));
@@ -223,7 +245,21 @@ pub fn start_compress(
                     ),
                 );
             }
-            let staged_video_path = stage_video_to_ascii(&temp_dir, &command_job.video_path)?;
+            let staged_video_path = match stage_video_to_ascii(
+                &app,
+                &command_job.id,
+                &temp_dir,
+                &command_job.video_path,
+            ) {
+                Ok(path) => path,
+                Err(err) if err == "Compression cancelled." => {
+                    cleanup_temp_dir(&app, &temp_dir);
+                    clear_cancelled_job(&app, &command_job.id);
+                    let _ = app.emit("compress-log", "Compression exited.");
+                    return Ok(());
+                }
+                Err(err) => return Err(err),
+            };
             let _ = app.emit(
                 "compress-log",
                 format!("AVS VP9 fallback: staged source video at {staged_video_path}."),
@@ -266,6 +302,13 @@ pub fn start_compress(
         avs_audio_input_path.as_deref(),
     )?;
 
+    if is_job_cancelled(&app, &command_job.id) {
+        cleanup_temp_dir(&app, &temp_dir);
+        clear_cancelled_job(&app, &command_job.id);
+        let _ = app.emit("compress-log", "Compression exited.");
+        return Ok(());
+    }
+
     app.emit("compress-log", format!("Command: {}", command.join(" ")))
         .map_err(|err| format!("Failed to emit log event: {err}"))?;
 
@@ -299,11 +342,35 @@ pub fn start_compress(
     let pid = child.id();
 
     {
+        let state = app.state::<AppState>();
         let mut jobs = state
             .jobs
             .lock()
             .map_err(|_| "Job state is poisoned.".to_string())?;
         jobs.insert(job.id.clone(), JobHandle { pid, stdin });
+    }
+
+    if is_job_cancelled(&app, &job.id) {
+        let handle = {
+            let state = app.state::<AppState>();
+            let mut jobs = state
+                .jobs
+                .lock()
+                .map_err(|_| "Job state is poisoned.".to_string())?;
+            jobs.remove(&job.id)
+        };
+        if let Some(mut handle) = handle {
+            if let Some(mut stdin) = handle.stdin.take() {
+                let _ = stdin.write_all(b"q\n");
+                let _ = stdin.flush();
+            }
+        }
+        let _ = kill_process_tree(pid);
+        let _ = child.wait();
+        cleanup_temp_dir(&app, &temp_dir);
+        clear_cancelled_job(&app, &job.id);
+        let _ = app.emit("compress-log", "Compression exited.");
+        return Ok(());
     }
 
     if let Some(stderr) = stderr {
@@ -417,6 +484,25 @@ pub fn cancel_compress(
     };
 
     let Some(mut handle) = handle else {
+        let is_preparing = {
+            let preparing = state
+                .preparing_jobs
+                .lock()
+                .map_err(|_| "Preparing job state is poisoned.".to_string())?;
+            preparing.contains(&job_id)
+        };
+        if is_preparing {
+            let mut cancelled = state
+                .cancelled_jobs
+                .lock()
+                .map_err(|_| "Cancelled jobs state is poisoned.".to_string())?;
+            cancelled.insert(job_id.clone());
+            let _ = app.emit(
+                "compress-log",
+                "已收到取消请求：正在停止 AVS 临时文件准备。",
+            );
+            return Ok(());
+        }
         return Err("No running job matched the requested id.".to_string());
     };
 
@@ -460,6 +546,34 @@ pub fn cancel_compress(
             "无法通过 stdin 通知 ffmpeg，将直接结束进程（输出文件可能不完整）。",
         );
         kill_process_tree(pid)
+    }
+}
+
+fn is_job_cancelled(app: &AppHandle, job_id: &str) -> bool {
+    app.try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .cancelled_jobs
+                .lock()
+                .ok()
+                .map(|cancelled| cancelled.contains(job_id))
+        })
+        .unwrap_or(false)
+}
+
+fn clear_cancelled_job(app: &AppHandle, job_id: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(mut cancelled) = state.cancelled_jobs.lock() {
+            cancelled.remove(job_id);
+        }
+    }
+}
+
+fn finish_preparing_job(app: &AppHandle, job_id: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(mut preparing) = state.preparing_jobs.lock() {
+            preparing.remove(job_id);
+        }
     }
 }
 
@@ -540,9 +654,91 @@ fn stage_subtitle_to_ascii(dir: &Path, subtitle_path: &str) -> Result<String, St
     Ok(staged.to_string_lossy().to_string())
 }
 
-fn stage_video_to_ascii(dir: &Path, video_path: &str) -> Result<String, String> {
+fn stage_video_to_ascii(
+    app: &AppHandle,
+    job_id: &str,
+    dir: &Path,
+    video_path: &str,
+) -> Result<String, String> {
     let staged = staged_video_path(dir, video_path);
-    fs::copy(video_path, &staged).map_err(|err| format!("Failed to stage video for AVS: {err}"))?;
+    let total_bytes = fs::metadata(video_path)
+        .map_err(|err| format!("Failed to inspect source video for AVS staging: {err}"))?
+        .len();
+    let mut input = fs::File::open(video_path)
+        .map_err(|err| format!("Failed to open source video for AVS staging: {err}"))?;
+    let mut output = fs::File::create(&staged)
+        .map_err(|err| format!("Failed to create AVS staging video: {err}"))?;
+
+    let _ = app.emit(
+        "compress-log",
+        format!(
+            "AVS VP9 fallback: copying source video to temporary ASCII path ({}).",
+            format_bytes(total_bytes)
+        ),
+    );
+
+    let mut copied_bytes = 0u64;
+    let mut last_reported_percent = -1.0f64;
+    let mut buffer = vec![0u8; 1024 * 1024];
+
+    loop {
+        if is_job_cancelled(app, job_id) {
+            drop(output);
+            let _ = fs::remove_file(&staged);
+            let _ = app.emit(
+                "compress-log",
+                "AVS VP9 fallback: source video copy cancelled.",
+            );
+            return Err("Compression cancelled.".to_string());
+        }
+        let read = input
+            .read(&mut buffer)
+            .map_err(|err| format!("Failed to read source video for AVS staging: {err}"))?;
+        if read == 0 {
+            break;
+        }
+        output
+            .write_all(&buffer[..read])
+            .map_err(|err| format!("Failed to write AVS staging video: {err}"))?;
+        copied_bytes = copied_bytes.saturating_add(read as u64);
+
+        let percent = if total_bytes > 0 {
+            Some(((copied_bytes as f64 / total_bytes as f64) * 100.0).clamp(0.0, 100.0))
+        } else {
+            None
+        };
+        let should_report = match percent {
+            Some(value) => value - last_reported_percent >= 1.0 || copied_bytes >= total_bytes,
+            None => copied_bytes == 0,
+        };
+        if should_report {
+            if let Some(value) = percent {
+                last_reported_percent = value;
+            }
+            let _ = app.emit(
+                "compress-status",
+                CompressStatus {
+                    job_id: job_id.to_string(),
+                    status_line: format!(
+                        "Copying VP9 source for AVS: {} / {}",
+                        format_bytes(copied_bytes),
+                        format_bytes(total_bytes)
+                    ),
+                    percent,
+                    current_seconds: None,
+                    duration_seconds: None,
+                    size_kb: Some(copied_bytes / 1024),
+                    bitrate_kbps: None,
+                    speed: None,
+                    fps: None,
+                },
+            );
+        }
+    }
+
+    output
+        .flush()
+        .map_err(|err| format!("Failed to flush AVS staging video: {err}"))?;
     Ok(staged.to_string_lossy().to_string())
 }
 

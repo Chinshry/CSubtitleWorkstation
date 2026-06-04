@@ -31,7 +31,7 @@ import {
   setPlatformOverride,
   type Platform
 } from '../stores/platformStore'
-import { avsStatus, initAvsStatus, refreshAvsStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, isLavFiltersMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, setLavFiltersMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
+import { avsStatus, initAvsStatus, initLavFiltersStatus, refreshAvsStatus, refreshLavFiltersStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, isLavFiltersMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, setLavFiltersMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
 import {
   refreshAppUpdate,
   updateInfo,
@@ -175,7 +175,7 @@ async function refreshAvsPanel() {
 async function refreshLavPanel() {
   lavPanelChecking.value = true
   try {
-    return await refreshAvsStatus()
+    return await refreshLavFiltersStatus()
   } finally {
     lavPanelChecking.value = false
   }
@@ -286,11 +286,14 @@ onMounted(async () => {
   await initFfmpegStatus()
   if (isWindows.value) {
     avsPanelChecking.value = true
-    try {
-      await initAvsStatus()
-    } finally {
+    void initAvsStatus().finally(() => {
       avsPanelChecking.value = false
-    }
+    })
+
+    lavPanelChecking.value = true
+    void initLavFiltersStatus().finally(() => {
+      lavPanelChecking.value = false
+    })
   }
 })
 </script>

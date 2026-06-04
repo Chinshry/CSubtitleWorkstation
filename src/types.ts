@@ -26,6 +26,14 @@ export type AvsStatus = {
   message?: string
 }
 
+export type LavFiltersStatus = {
+  lavFiltersInstalled: boolean
+  lavFiltersVersion?: string
+  lavFiltersInstallPath?: string
+  lavFiltersX64Available: boolean
+  lavFiltersDirectshowRegistered: boolean
+}
+
 export type AppConfig = {
   ffmpegMode: 'system' | 'custom'
   ffmpegPath?: string

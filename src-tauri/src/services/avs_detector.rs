@@ -1,4 +1,4 @@
-use crate::models::avs_status::AvsStatus;
+use crate::models::avs_status::{AvsStatus, LavFiltersStatus};
 use std::path::Path;
 use std::process::Command;
 
@@ -42,8 +42,6 @@ pub fn detect(ffmpeg_path: Option<&str>) -> AvsStatus {
 
     let detected = detect_avisynth();
     let avisynth_installed = detected.installed;
-    let lav = detect_lav_filters();
-
     let available = demuxer_available && avisynth_installed;
 
     let message = if available {
@@ -63,13 +61,28 @@ pub fn detect(ffmpeg_path: Option<&str>) -> AvsStatus {
         avisynth_version: detected.version,
         avisynth_install_path: detected.install_path,
         avisynth_dll_path: detected.dll_path,
+        lav_filters_installed: false,
+        lav_filters_version: None,
+        lav_filters_install_path: None,
+        lav_filters_x64_available: false,
+        lav_filters_directshow_registered: false,
+        available,
+        message,
+    }
+}
+
+pub fn detect_lav_filters_status() -> LavFiltersStatus {
+    if !is_supported_platform() {
+        return LavFiltersStatus::default();
+    }
+
+    let lav = detect_lav_filters();
+    LavFiltersStatus {
         lav_filters_installed: lav.installed,
         lav_filters_version: lav.version,
         lav_filters_install_path: lav.install_path,
         lav_filters_x64_available: lav.x64_available,
         lav_filters_directshow_registered: lav.directshow_registered,
-        available,
-        message,
     }
 }
 
@@ -206,7 +219,11 @@ fn query_lav_uninstall_entry(root: &str) -> Option<(Option<String>, Option<Strin
     }
 
     let list_text = String::from_utf8_lossy(&list_output.stdout);
-    for key in list_text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for key in list_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         let mut cmd = Command::new("reg");
         cmd.args(["query", key]);
         no_window(&mut cmd);

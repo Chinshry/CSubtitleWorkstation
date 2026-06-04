@@ -1,4 +1,4 @@
-use crate::models::avs_status::AvsStatus;
+use crate::models::avs_status::{AvsStatus, LavFiltersStatus};
 use crate::services::{avs_detector, config_store, ffmpeg_locator};
 use tauri::AppHandle;
 
@@ -12,4 +12,11 @@ pub async fn detect_avs(app: AppHandle) -> Result<AvsStatus, String> {
     })
     .await
     .map_err(|err| format!("AVS detection task failed: {err}"))?
+}
+
+#[tauri::command]
+pub async fn detect_lav_filters() -> Result<LavFiltersStatus, String> {
+    tauri::async_runtime::spawn_blocking(avs_detector::detect_lav_filters_status)
+        .await
+        .map_err(|err| format!("LAV Filters detection task failed: {err}"))
 }

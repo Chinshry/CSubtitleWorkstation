@@ -1,10 +1,14 @@
 import { computed, ref } from 'vue'
-import type { AvsStatus } from '../types'
-import { detectAvs } from '../api/avs'
+import type { AvsStatus, LavFiltersStatus } from '../types'
+import { detectAvs, detectLavFilters } from '../api/avs'
 
 const realStatus = ref<AvsStatus | null>(null)
+const realLavStatus = ref<LavFiltersStatus | null>(null)
 export const avsChecking = ref(false)
+export const lavChecking = ref(false)
+export const lavStatusLoaded = computed(() => realLavStatus.value !== null)
 let initPromise: Promise<void> | null = null
+let lavInitPromise: Promise<void> | null = null
 
 const MOCK_AVISYNTH_KEY = 'csubtitle-workstation:debug-mock-no-avisynth'
 const MOCK_DEMUXER_KEY = 'csubtitle-workstation:debug-mock-no-avs-demuxer'
@@ -57,11 +61,23 @@ export const avsStatus = computed<AvsStatus | null>(() => {
   const real = realStatus.value
   if (!real) return real
 
+  const lav = realLavStatus.value
+  let next: AvsStatus = lav
+    ? {
+        ...real,
+        lavFiltersInstalled: lav.lavFiltersInstalled,
+        lavFiltersVersion: lav.lavFiltersVersion,
+        lavFiltersInstallPath: lav.lavFiltersInstallPath,
+        lavFiltersX64Available: lav.lavFiltersX64Available,
+        lavFiltersDirectshowRegistered: lav.lavFiltersDirectshowRegistered,
+      }
+    : real
+
   if (!avisynthMissingMock.value && !demuxerMissingMock.value && !lavFiltersMissingMock.value) {
-    return real
+    return next
   }
 
-  const next: AvsStatus = { ...real }
+  next = { ...next }
   if (avisynthMissingMock.value) {
     next.avisynthInstalled = false
     next.avisynthVersion = undefined
@@ -105,6 +121,23 @@ export async function initAvsStatus(): Promise<void> {
   return initPromise
 }
 
+export async function initLavFiltersStatus(): Promise<void> {
+  if (realLavStatus.value) return
+  if (lavInitPromise) return lavInitPromise
+  lavInitPromise = (async () => {
+    lavChecking.value = true
+    try {
+      realLavStatus.value = await detectLavFilters()
+    } catch {
+      // UI can still retry.
+    } finally {
+      lavChecking.value = false
+      lavInitPromise = null
+    }
+  })()
+  return lavInitPromise
+}
+
 export async function refreshAvsStatus(): Promise<AvsStatus | null> {
   avsChecking.value = true
   try {
@@ -115,5 +148,18 @@ export async function refreshAvsStatus(): Promise<AvsStatus | null> {
     return realStatus.value
   } finally {
     avsChecking.value = false
+  }
+}
+
+export async function refreshLavFiltersStatus(): Promise<LavFiltersStatus | null> {
+  lavChecking.value = true
+  try {
+    const next = await detectLavFilters()
+    realLavStatus.value = next
+    return next
+  } catch {
+    return realLavStatus.value
+  } finally {
+    lavChecking.value = false
   }
 }

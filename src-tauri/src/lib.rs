@@ -21,6 +21,7 @@ pub struct JobHandle {
 #[derive(Default)]
 pub struct AppState {
     pub jobs: Mutex<HashMap<String, JobHandle>>,
+    pub preparing_jobs: Mutex<HashSet<String>>,
     pub cancelled_jobs: Mutex<HashSet<String>>,
 }
 
@@ -62,6 +63,7 @@ pub fn run() {
             commands::ffmpeg::set_ffmpeg_path,
             commands::ffmpeg::reset_ffmpeg_to_system,
             commands::avs::detect_avs,
+            commands::avs::detect_lav_filters,
             commands::compress::preview_ffmpeg_command,
             commands::compress::analyze_subtitle,
             commands::compress::validate_output_parent_dir,

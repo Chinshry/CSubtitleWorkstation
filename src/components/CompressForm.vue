@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CompressJob, VideoEncodePreset } from '../types'
 import { isWindows } from '../stores/platformStore'
-import { avsStatus, initAvsStatus } from '../stores/avsStore'
+import { avsStatus, initAvsStatus, initLavFiltersStatus, lavChecking, lavStatusLoaded } from '../stores/avsStore'
 import { analyzeSubtitle, type SubtitleAnalysisResult } from '../api/compress'
 import { useEncoderOptions } from '../composables/useEncoderOptions'
 import { useToast } from '../composables/useToast'
@@ -98,7 +98,7 @@ const avsToggleDisabledTip = computed(() => {
 // VP9 解码依赖：AVS 环境可用但缺 64 位 LAV Filters 时，在开关旁提示。
 // 读 avsStatus（已叠加调试 mock），故「模拟 LAV 缺失」与真机缺失都会触发。
 const lavMissingHint = computed(
-  () => !avsToggleDisabled.value && avsStatus.value?.lavFiltersInstalled === false
+  () => !avsToggleDisabled.value && lavStatusLoaded.value && !lavChecking.value && avsStatus.value?.lavFiltersInstalled === false
 )
 const lavMissingTip =
   '未检测到 64 位 LAV Filters。\n压制 VP9 视频时会经 DirectShow 解码链读取，缺少 LAV 可能导致解码失败。\n建议安装 64 位 LAV Filters 后重试。'
@@ -169,6 +169,7 @@ onMounted(() => {
 
   if (isWindows.value) {
     void initAvsStatus().finally(syncAvsAvailability)
+    void initLavFiltersStatus()
   }
   syncAvsAvailability()
 })

@@ -31,6 +31,16 @@ pub struct AvsStatus {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LavFiltersStatus {
+    pub lav_filters_installed: bool,
+    pub lav_filters_version: Option<String>,
+    pub lav_filters_install_path: Option<String>,
+    pub lav_filters_x64_available: bool,
+    pub lav_filters_directshow_registered: bool,
+}
+
 impl Default for AvsStatus {
     fn default() -> Self {
         Self {
