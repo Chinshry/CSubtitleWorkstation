@@ -147,7 +147,7 @@ jobs:
             if git diff --cached --quiet; then
               echo "Version files already contain $VERSION"
             else
-              git commit -m "chore: release $TAG"
+              git commit -m "chore: 发布 $TAG"
               git push origin HEAD:refs/heads/${{ github.ref_name }}
             fi
           fi
@@ -313,7 +313,7 @@ jobs:
           set -euo pipefail
           gh release edit "$TAG" --draft=false
 
-      - name: Sync update manifest
+      - name: Finalize release metadata
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -363,8 +363,18 @@ jobs:
           git add docs/updates/latest.json
 
           if git diff --cached --quiet; then
-            echo "Update manifest already matches $TAG"
+            echo "Release metadata already matches $TAG"
           else
-            git commit -m "chore: sync update manifest for $TAG"
-            git push origin HEAD:refs/heads/${{ github.ref_name }}
+            if git log -1 --format=%s | grep -Fxq "chore: 发布 $TAG"; then
+              git commit --amend --no-edit
+            else
+              git commit -m "chore: 发布 $TAG"
+            fi
           fi
+
+          FINAL_SHA="$(git rev-parse HEAD)"
+          git tag -f "$TAG" "$FINAL_SHA"
+          git fetch origin ${{ github.ref_name }}:refs/remotes/origin/${{ github.ref_name }} --tags
+          git push --force-with-lease origin HEAD:refs/heads/${{ github.ref_name }}
+          git push --force-with-lease=refs/tags/$TAG origin refs/tags/$TAG
+          gh release edit "$TAG" --target "$FINAL_SHA"

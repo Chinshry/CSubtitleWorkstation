@@ -105,7 +105,7 @@ gh workflow run Release --field version=<version> --field overwrite=<true|false>
 
 正常多行 Markdown 说明应优先通过当前 shell 的变量或文件传入，确保换行完整保留。必要时验证已提交的 workflow inputs。
 
-6. 触发后，报告最新 `Release` workflow run 状态和 URL。说明 workflow 会发布 draft release，并在发布成功后用 GitHub Release 的 `publishedAt` 一次性写入 `docs/updates/latest.json` 的版本、说明、发布时间和下载 URL。
+6. 触发后，报告最新 `Release` workflow run 状态和 URL。说明 workflow 会发布 draft release，并在发布成功后用 GitHub Release 的 `publishedAt` 写入 `docs/updates/latest.json` 的版本、说明、发布时间和下载 URL；这些发布元数据会合并进同一个 `chore: 发布 vX.Y.Z` 提交，最终远端历史只保留一个发布提交。
 
 ## 本地构建替代方案
 
