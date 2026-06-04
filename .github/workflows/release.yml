@@ -374,7 +374,7 @@ jobs:
 
           FINAL_SHA="$(git rev-parse HEAD)"
           git tag -f "$TAG" "$FINAL_SHA"
-          git fetch origin ${{ github.ref_name }}:refs/remotes/origin/${{ github.ref_name }} --tags
+          git fetch origin ${{ github.ref_name }}:refs/remotes/origin/${{ github.ref_name }} --tags --force
           git push --force-with-lease origin HEAD:refs/heads/${{ github.ref_name }}
           git push --force-with-lease=refs/tags/$TAG origin refs/tags/$TAG
           gh release edit "$TAG" --target "$FINAL_SHA"
