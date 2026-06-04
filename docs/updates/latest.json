@@ -1,13 +1,13 @@
 {
-  "version": "0.1.7",
-  "notes": "## 🐞 问题修复\n\n- 修复应用启动时窗口位置闪动的问题。\n\n## 🎨 体验改进\n\n- 优化 AVS 准备阶段的进度提示，让准备过程更清晰直观。\n- 优化应用更新状态的界面布局。",
-  "pub_date": "2026-06-03T16:13:15Z",
+  "version": "0.1.8",
+  "notes": "## ⚡ 性能优化\n\n- 优化启动阶段的 ffmpeg、AVS 与 VP9 解码环境检测流程，改为后台执行，减少启动等待和界面卡顿。\n\n## 🎨 体验改进\n\n- 环境检测期间显示局部加载蒙层，让设置页和压制页的检测状态更清晰；\n- 拖入 VP9 视频且 64 位 LAV 解码器仍在检测时，AVS 压制开关会暂时锁定并提示「检测中」；\n- 压制 VP9 视频时，复制源视频到临时路径的准备阶段可随时取消，并实时显示复制进度。",
+  "pub_date": "2026-06-04T14:31:16Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.7/CSubtitleWorkstation_0.1.7_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.8/CSubtitleWorkstation_0.1.8_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.7/CSubtitleWorkstation_0.1.7_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.8/CSubtitleWorkstation_0.1.8_universal.dmg"
     }
   }
 }
