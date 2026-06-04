@@ -159,18 +159,16 @@ async function analyzeSubtitleForEffects() {
 // 监听字幕路径变化
 watch(() => job.value.subtitlePath, analyzeSubtitleForEffects, { immediate: false })
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener('mousedown', closePresetMenuOnOutside)
 
   // 加载支持的编码器列表
-  try {
-    await loadEncoderOptions()
-  } catch (err) {
+  void loadEncoderOptions().catch((err) => {
     console.error('Failed to get supported encoders:', err)
-  }
+  })
 
   if (isWindows.value) {
-    await initAvsStatus()
+    void initAvsStatus().finally(syncAvsAvailability)
   }
   syncAvsAvailability()
 })

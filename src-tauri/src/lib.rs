@@ -44,9 +44,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
-            if let Err(err) = services::temp_cleanup::cleanup_transient_dirs(app.handle()) {
-                eprintln!("Failed to cleanup transient cache dirs on startup: {err}");
-            }
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                if let Err(err) = services::temp_cleanup::cleanup_transient_dirs(&app_handle) {
+                    eprintln!("Failed to cleanup transient cache dirs on startup: {err}");
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

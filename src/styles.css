@@ -448,6 +448,68 @@ nav button.active .nav-icon {
   z-index: 10;
 }
 
+.panel-check-scope {
+  position: relative;
+}
+
+.panel-check-overlay {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: absolute;
+  z-index: 5;
+}
+
+.panel-check-dialog {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e2e8;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(15, 23, 32, 0.16);
+  color: #24313c;
+  display: flex;
+  gap: 14px;
+  max-width: min(380px, 100%);
+  padding: 16px 18px;
+}
+
+.panel-check-dialog strong,
+.panel-check-dialog span {
+  display: block;
+}
+
+.panel-check-dialog strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.panel-check-dialog span {
+  color: #667582;
+  font-size: 13px;
+  line-height: 1.55;
+  margin-top: 3px;
+}
+
+.panel-check-spinner {
+  border: 3px solid #d8e8ee;
+  border-top-color: #176b87;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 30px;
+  width: 30px;
+  animation: panel-check-spin 0.8s linear infinite;
+}
+
+@keyframes panel-check-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .panel {
   background: #fff;
   border: 1px solid #dce3e8;
@@ -1047,6 +1109,16 @@ select option {
 .ffmpeg-missing span {
   flex: 1;
   font-size: 13px;
+}
+
+.ffmpeg-checking {
+  background: #eef7fa;
+  border-color: #cfe3eb;
+  color: #164e63;
+}
+
+.ffmpeg-checking strong {
+  color: #0f5268;
 }
 
 .video-meta-card {

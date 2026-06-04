@@ -4,6 +4,7 @@ import { detectFfmpeg } from '../api/ffmpeg'
 
 // 真实检测结果（仅 store 内部 + 设置面板的 setFfmpegStatus 写入）
 const realStatus = ref<FfmpegStatus | null>(null)
+export const ffmpegChecking = ref(false)
 
 // === 调试 mock 层 ===
 // 仅用于 UI 测试：两个独立开关，模拟 ffmpeg / ffprobe 缺失场景。
@@ -121,11 +122,13 @@ export async function initFfmpegStatus(): Promise<void> {
   if (realStatus.value) return
   if (initPromise) return initPromise
   initPromise = (async () => {
+    ffmpegChecking.value = true
     try {
       realStatus.value = await detectFfmpeg()
     } catch {
       // 错误吞掉，UI 上仍可点"重新检测"
     } finally {
+      ffmpegChecking.value = false
       initPromise = null
     }
   })()
@@ -134,12 +137,15 @@ export async function initFfmpegStatus(): Promise<void> {
 
 // 用户主动刷新 / 改路径后调用，强制重新跑一次 detect。
 export async function refreshFfmpegStatus(): Promise<FfmpegStatus | null> {
+  ffmpegChecking.value = true
   try {
     const next = await detectFfmpeg()
     realStatus.value = next
     return next
   } catch {
     return realStatus.value
+  } finally {
+    ffmpegChecking.value = false
   }
 }
 

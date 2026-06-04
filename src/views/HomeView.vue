@@ -7,7 +7,7 @@ import { inspectVideoMeta, clearFrameCache } from '../api/video'
 import { pendingDrop, pushDiag } from '../stores/dropStore'
 import { currentVideoPath } from '../stores/currentJobStore'
 import { configRevision } from '../stores/configStore'
-import { ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
+import { ffmpegChecking, ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
 import type {
   AppConfig,
   CompressJob,
@@ -556,7 +556,7 @@ onMounted(async () => {
   } catch (err) {
     pushDiag(`loadConfig failed: ${formatError(err)}`)
   }
-  await initFfmpegStatus()
+  void initFfmpegStatus()
 
   unlisteners.push(
     await listen<string>('compress-log', (event) => {
@@ -625,7 +625,11 @@ onUnmounted(() => {
 
 <template>
   <main class="workspace">
-    <div v-if="!loading && ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
+    <div v-if="ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
+      <strong>正在检测 ffmpeg 环境</strong>
+      <span>正在检测 ffmpeg / ffprobe / subtitles/libass，请稍候。</span>
+    </div>
+    <div v-else-if="!loading && ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
       <strong>{{ ffmpegStatus.ffmpegPath ? 'ffmpeg 功能不完整' : '未检测到 ffmpeg' }}</strong>
       <span>{{ ffmpegStatus.message ?? '请前往左侧「设置」面板配置 ffmpeg 路径，或安装后将其加入系统 PATH。' }}</span>
       <button class="secondary" @click="refreshFfmpeg">重新检测</button>

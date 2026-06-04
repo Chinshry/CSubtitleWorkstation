@@ -3,6 +3,7 @@ import type { AvsStatus } from '../types'
 import { detectAvs } from '../api/avs'
 
 const realStatus = ref<AvsStatus | null>(null)
+export const avsChecking = ref(false)
 let initPromise: Promise<void> | null = null
 
 const MOCK_AVISYNTH_KEY = 'csubtitle-workstation:debug-mock-no-avisynth'
@@ -91,11 +92,13 @@ export async function initAvsStatus(): Promise<void> {
   if (realStatus.value) return
   if (initPromise) return initPromise
   initPromise = (async () => {
+    avsChecking.value = true
     try {
       realStatus.value = await detectAvs()
     } catch {
       // UI can still retry.
     } finally {
+      avsChecking.value = false
       initPromise = null
     }
   })()
@@ -103,11 +106,14 @@ export async function initAvsStatus(): Promise<void> {
 }
 
 export async function refreshAvsStatus(): Promise<AvsStatus | null> {
+  avsChecking.value = true
   try {
     const next = await detectAvs()
     realStatus.value = next
     return next
   } catch {
     return realStatus.value
+  } finally {
+    avsChecking.value = false
   }
 }

@@ -16,7 +16,8 @@ import {
   setFfmpegMissingMock,
   setFfprobeMissingMock,
   setSubtitleFilterMissingMock,
-  setFfmpegStatus
+  setFfmpegStatus,
+  ffmpegChecking
 } from '../stores/ffmpegStore'
 import {
   isWindows,
@@ -48,6 +49,8 @@ const guideOpen = ref(false)
 const avsGuideOpen = ref(false)
 const lavGuideOpen = ref(false)
 const debugPanelOpen = ref(false)
+const avsPanelChecking = ref(false)
+const lavPanelChecking = ref(false)
 
 // 作者头像：用 vite 打包的本地静态资源，离线 / 网络受限场景始终可用
 // 仍保留 onError fallback，对极端情况（资源构建丢失）兜底
@@ -160,6 +163,24 @@ async function checkUpdate() {
   await refreshAppUpdate()
 }
 
+async function refreshAvsPanel() {
+  avsPanelChecking.value = true
+  try {
+    return await refreshAvsStatus()
+  } finally {
+    avsPanelChecking.value = false
+  }
+}
+
+async function refreshLavPanel() {
+  lavPanelChecking.value = true
+  try {
+    return await refreshAvsStatus()
+  } finally {
+    lavPanelChecking.value = false
+  }
+}
+
 const updateNotesTitle = computed(() => '更新日志')
 
 const formattedUpdatePubDate = computed(() => formatUpdatePubDate(updateInfo.value?.pubDate))
@@ -264,7 +285,12 @@ onMounted(async () => {
   // 切到设置页不再重复检测，仅在首次进入时跑一次
   await initFfmpegStatus()
   if (isWindows.value) {
-    await initAvsStatus()
+    avsPanelChecking.value = true
+    try {
+      await initAvsStatus()
+    } finally {
+      avsPanelChecking.value = false
+    }
   }
 })
 </script>
@@ -291,7 +317,7 @@ onMounted(async () => {
       <button class="secondary" @click="clearAllFfmpegMocks">恢复真实检测</button>
     </div>
 
-    <section class="panel">
+    <section class="panel panel-check-scope">
       <div class="panel-heading">
         <div>
           <h2>ffmpeg 设置</h2>
@@ -452,10 +478,19 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
         </ul>
         <p class="muted">提示：发行版仓库里的 ffmpeg 版本可能偏旧，缺编码器时优先用静态构建。</p>
       </div>
+      <div v-if="ffmpegChecking" class="panel-check-overlay" role="status" aria-live="polite">
+        <div class="panel-check-dialog">
+          <span class="panel-check-spinner" aria-hidden="true"></span>
+          <div>
+            <strong>正在检测 ffmpeg 环境</strong>
+            <span>正在检测 ffmpeg / ffprobe / subtitles/libass，请稍候。</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- AVS 设置：仅 Windows 展示，仿 ffmpeg 设置面板风格 -->
-    <section v-if="isWindows" class="panel">
+    <section v-if="isWindows" class="panel panel-check-scope">
       <div v-if="isAvsMocked" class="debug-banner">
         <strong>⚠ AVS 调试 mock 中</strong>
         <span>当前正在模拟：<code>{{ avsMockSummary }}</code>。</span>
@@ -502,7 +537,7 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
         <button
           class="secondary"
           :class="{ 'is-busy': isBusy('avsRefresh') }"
-          @click="withBusy('avsRefresh', refreshAvsStatus)"
+          @click="withBusy('avsRefresh', refreshAvsPanel)"
         >重新检测</button>
         <button class="secondary" @click="avsGuideOpen = !avsGuideOpen">
           {{ avsGuideOpen ? '收起安装手册' : '没有 AviSynth+？查看安装手册' }}
@@ -556,9 +591,18 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           <code>avisynth: Could not initialize ...</code>。
         </p>
       </div>
+      <div v-if="avsPanelChecking" class="panel-check-overlay" role="status" aria-live="polite">
+        <div class="panel-check-dialog">
+          <span class="panel-check-spinner" aria-hidden="true"></span>
+          <div>
+            <strong>正在检测 AVS 环境</strong>
+            <span>正在检测 ffmpeg avisynth demuxer 与 AviSynth+，请稍候。</span>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section v-if="isWindows" class="panel">
+    <section v-if="isWindows" class="panel panel-check-scope">
       <div class="panel-heading">
         <div>
           <h2>VP9 DirectShow 解码器</h2>
@@ -583,8 +627,8 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
       <div class="actions left">
         <button
           class="secondary"
-          :class="{ 'is-busy': isBusy('avsRefresh') }"
-          @click="withBusy('avsRefresh', refreshAvsStatus)"
+          :class="{ 'is-busy': isBusy('lavRefresh') }"
+          @click="withBusy('lavRefresh', refreshLavPanel)"
         >重新检测</button>
         <button class="secondary" @click="lavGuideOpen = !lavGuideOpen">
           {{ lavGuideOpen ? '收起安装手册' : '没有 LAV Filters？查看安装手册' }}
@@ -608,6 +652,15 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
             安装时确认包含 <strong>64 位 Splitter</strong> 和 <strong>64 位 Video Decoder</strong>。安装完成后重启本应用，再点击 <strong>「重新检测」</strong>。
           </li>
         </ol>
+      </div>
+      <div v-if="lavPanelChecking" class="panel-check-overlay" role="status" aria-live="polite">
+        <div class="panel-check-dialog">
+          <span class="panel-check-spinner" aria-hidden="true"></span>
+          <div>
+            <strong>正在检测 VP9 解码环境</strong>
+            <span>正在检测 64 位 LAV Filters 与 DirectShow 注册状态，请稍候。</span>
+          </div>
+        </div>
       </div>
     </section>
 
