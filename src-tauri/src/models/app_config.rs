@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub default_encode_preset_id: String,
     pub check_update_on_startup: bool,
     pub default_use_avs: bool,
+    #[serde(default)]
+    pub text_conversion_custom_dictionary: String,
     /// 最近使用过的 LOGO 图片，按 last_used_at 倒序，最多保留 10 项
     pub recent_logos: Vec<RecentLogo>,
     /// 按 (分辨率桶, LOGO 图路径) 区分的布局记忆。
@@ -185,6 +187,7 @@ impl Default for AppConfig {
             default_encode_preset_id: "balanced-x264".to_string(),
             check_update_on_startup: true,
             default_use_avs: false,
+            text_conversion_custom_dictionary: String::new(),
             recent_logos: Vec::new(),
             logo_layouts: Vec::new(),
         }

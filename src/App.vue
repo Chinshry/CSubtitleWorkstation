@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import HomeView from './views/HomeView.vue'
 import PresetsView from './views/PresetsView.vue'
+import ToolsView from './views/ToolsView.vue'
 import SettingsView from './views/SettingsView.vue'
 import TitleBar from './components/TitleBar.vue'
 import AppToast from './components/AppToast.vue'
@@ -15,12 +16,12 @@ import {
 } from './stores/dropStore'
 import { hasAvailableUpdate, refreshAppUpdate } from './stores/updateStore'
 
-const active = ref<'home' | 'presets' | 'settings'>('home')
+const active = ref<'home' | 'presets' | 'tools' | 'settings'>('home')
 const sidebarCollapsed = ref(true)
 const unlisteners: UnlistenFn[] = []
 
 function classifyPaths(paths: string[]) {
-  const out: { videoPath?: string; subtitlePath?: string } = {}
+  const out: { videoPath?: string; subtitlePath?: string; textPath?: string } = {}
   for (const p of paths) {
     const lower = p.toLowerCase()
     if (
@@ -32,6 +33,8 @@ function classifyPaths(paths: string[]) {
       out.videoPath = p
     } else if (/\.(ass|ssa|srt|vtt|sub)$/.test(lower) && !out.subtitlePath) {
       out.subtitlePath = p
+    } else if (/\.txt$/.test(lower) && !out.textPath) {
+      out.textPath = p
     }
   }
   return out
@@ -79,8 +82,12 @@ onMounted(async () => {
           raw: paths,
           receivedAt: Date.now()
         }
-        // 自动切回压制页，避免用户在设置页拖入后看不到效果
-        if (active.value !== 'home') active.value = 'home'
+        // 自动切到对应工具页，避免用户拖入后看不到处理结果。
+        if (classified.textPath) {
+          active.value = 'tools'
+        } else if (active.value !== 'home') {
+          active.value = 'home'
+        }
       })
     )
     pushDiag('drag-drop listeners installed.')
@@ -128,6 +135,17 @@ onUnmounted(() => {
           </span>
           <span>预设</span>
         </button>
+        <button :class="{ active: active === 'tools' }" @click="active = 'tools'" v-tooltip="'工具'">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="8" width="18" height="12" rx="2" />
+              <path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path d="M3 13h18" />
+              <path d="M12 13v2" />
+            </svg>
+          </span>
+          <span>工具</span>
+        </button>
         <button :class="{ active: active === 'settings' }" @click="active = 'settings'" v-tooltip="'设置'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -148,6 +166,7 @@ onUnmounted(() => {
     <KeepAlive>
       <HomeView v-if="active === 'home'" />
       <PresetsView v-else-if="active === 'presets'" />
+      <ToolsView v-else-if="active === 'tools'" />
       <SettingsView v-else />
     </KeepAlive>
     <AppToast />

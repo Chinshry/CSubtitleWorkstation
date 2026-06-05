@@ -3,6 +3,7 @@ import { ref } from 'vue'
 export type PendingDrop = {
   videoPath?: string
   subtitlePath?: string
+  textPath?: string
   raw: string[]
   receivedAt: number
 }
