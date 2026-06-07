@@ -288,6 +288,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Push tag
         if: github.event_name == 'workflow_dispatch'
@@ -360,6 +361,13 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BASE_SHA="$(git rev-parse HEAD)"
+          if ! git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "Refusing to finalize release from a root commit. Check checkout history before pushing."
+            exit 1
+          fi
+          BASE_PARENT="$(git rev-parse HEAD^)"
+          BRANCH="${{ github.ref_name }}"
           git add docs/updates/latest.json
 
           if git diff --cached --quiet; then
@@ -373,8 +381,17 @@ jobs:
           fi
 
           FINAL_SHA="$(git rev-parse HEAD)"
+          if ! git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "Refusing to push a root release commit to $BRANCH."
+            exit 1
+          fi
+          FINAL_PARENT="$(git rev-parse HEAD^)"
+          if [ "$FINAL_SHA" != "$BASE_SHA" ] && [ "$FINAL_PARENT" != "$BASE_PARENT" ] && [ "$FINAL_PARENT" != "$BASE_SHA" ]; then
+            echo "Unexpected release commit parent. Refusing to force-push $BRANCH."
+            exit 1
+          fi
           git tag -f "$TAG" "$FINAL_SHA"
-          git fetch origin ${{ github.ref_name }}:refs/remotes/origin/${{ github.ref_name }} --tags --force
-          git push --force-with-lease origin HEAD:refs/heads/${{ github.ref_name }}
+          git fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" --tags --force
+          git push --force-with-lease=refs/heads/$BRANCH:$BASE_SHA origin "HEAD:refs/heads/$BRANCH"
           git push --force-with-lease=refs/tags/$TAG origin refs/tags/$TAG
           gh release edit "$TAG" --target "$FINAL_SHA"
