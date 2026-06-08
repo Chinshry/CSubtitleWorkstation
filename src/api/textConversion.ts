@@ -31,3 +31,7 @@ export function saveConvertedTextFile(
 ) {
   return invoke<SavedTextConversion>('save_converted_text_file', { path, text, suffix, overwrite })
 }
+
+export function saveConvertedTextToPath(path: string, text: string) {
+  return invoke<SavedTextConversion>('save_converted_text_to_path', { path, text })
+}

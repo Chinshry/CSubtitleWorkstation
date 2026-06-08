@@ -62,6 +62,19 @@ pub fn save_converted_text_file(
     })
 }
 
+#[tauri::command]
+pub fn save_converted_text_to_path(
+    path: String,
+    text: String,
+) -> Result<SavedTextConversion, String> {
+    let output_path = PathBuf::from(path);
+    fs::write(&output_path, text)
+        .map_err(|err| format!("Failed to write converted text: {err}"))?;
+    Ok(SavedTextConversion {
+        output_path: output_path.to_string_lossy().to_string(),
+    })
+}
+
 fn normalize_custom_rules(mut rules: Vec<CustomConversionRule>) -> Vec<CustomConversionRule> {
     rules.retain(|rule| !rule.from.is_empty());
     rules.sort_by(|a, b| b.from.chars().count().cmp(&a.from.chars().count()));

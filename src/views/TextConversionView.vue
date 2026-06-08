@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { save } from '@tauri-apps/plugin-dialog'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { loadConfig, saveConfig } from '../api/config'
+import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
 import type { AppConfig } from '../types'
 import {
   convertChineseText,
   readPlainTextFile,
   saveConvertedTextFile,
+  saveConvertedTextToPath,
   type ChineseConversionMode,
   type CustomConversionRule
 } from '../api/textConversion'
@@ -23,15 +26,17 @@ const customDictionary = ref('')
 const fileStatus = ref('')
 const fileBusy = ref(false)
 const textBusy = ref(false)
+const dictionaryOpen = ref(false)
 const appConfig = ref<AppConfig | null>(null)
 const sourceTextarea = ref<HTMLTextAreaElement | null>(null)
 const resultPreview = ref<HTMLDivElement | null>(null)
-const conversionTextHeight = ref(320)
+const sourceLineNumbers = ref<HTMLDivElement | null>(null)
+const resultLineNumbers = ref<HTMLDivElement | null>(null)
 const pendingTextFilePath = ref('')
+const toast = useToast()
 
 let convertTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
-let sourceResizeObserver: ResizeObserver | null = null
 let convertSeq = 0
 let scrollSyncing = false
 let customDictionaryLoaded = false
@@ -45,6 +50,13 @@ const sourceCount = computed(() => Array.from(sourceText.value).length)
 const resultCount = computed(() => Array.from(resultText.value).length)
 const customRules = computed(() => parseCustomDictionary(customDictionary.value))
 const resultDiffSegments = computed(() => diffResult(sourceText.value, resultText.value))
+const sourceLines = computed(() => buildLineNumbers(sourceText.value))
+const resultLines = computed(() => buildLineNumbers(resultText.value))
+
+function buildLineNumbers(text: string) {
+  const count = text ? text.split(/\r\n|\r|\n/).length : 1
+  return Array.from({ length: count }, (_, index) => index + 1)
+}
 
 function parseCustomDictionary(text: string): CustomConversionRule[] {
   return text
@@ -145,8 +157,14 @@ function setMode(nextMode: ChineseConversionMode) {
 
 async function copyResult() {
   if (!resultText.value) return
-  await navigator.clipboard.writeText(resultText.value)
-  fileStatus.value = '转换结果已复制'
+  try {
+    await navigator.clipboard.writeText(resultText.value)
+    fileStatus.value = '转换结果已复制'
+    toast.success('已复制', 1800)
+  } catch (err) {
+    fileStatus.value = String(err)
+    toast.error('复制失败', 2200)
+  }
 }
 
 function clearText() {
@@ -154,11 +172,6 @@ function clearText() {
   resultText.value = ''
   fileStatus.value = ''
   pendingTextFilePath.value = ''
-}
-
-function syncSourceTextareaHeight() {
-  if (!sourceTextarea.value) return
-  conversionTextHeight.value = Math.round(sourceTextarea.value.getBoundingClientRect().height)
 }
 
 function syncScroll(source: HTMLElement | null, target: HTMLElement | null) {
@@ -176,15 +189,38 @@ function syncScroll(source: HTMLElement | null, target: HTMLElement | null) {
 
 function syncResultScrollToSource() {
   syncScroll(sourceTextarea.value, resultPreview.value)
+  if (sourceTextarea.value && sourceLineNumbers.value) {
+    sourceLineNumbers.value.scrollTop = sourceTextarea.value.scrollTop
+  }
+  if (resultPreview.value && resultLineNumbers.value) {
+    resultLineNumbers.value.scrollTop = resultPreview.value.scrollTop
+  }
 }
 
 function syncSourceScrollToResult() {
   syncScroll(resultPreview.value, sourceTextarea.value)
+  if (resultPreview.value && resultLineNumbers.value) {
+    resultLineNumbers.value.scrollTop = resultPreview.value.scrollTop
+  }
+  if (sourceTextarea.value && sourceLineNumbers.value) {
+    sourceLineNumbers.value.scrollTop = sourceTextarea.value.scrollTop
+  }
+}
+
+function buildDefaultExportPath(sourcePath: string, suffix: string, fallbackName: string) {
+  if (!sourcePath) return fallbackName
+  const separatorIndex = Math.max(sourcePath.lastIndexOf('/'), sourcePath.lastIndexOf('\\'))
+  const directory = separatorIndex >= 0 ? sourcePath.slice(0, separatorIndex + 1) : ''
+  const fileName = separatorIndex >= 0 ? sourcePath.slice(separatorIndex + 1) : sourcePath
+  const dotIndex = fileName.lastIndexOf('.')
+  const stem = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName
+  const extension = dotIndex > 0 ? fileName.slice(dotIndex) : ''
+  return `${directory}${stem}${suffix}${extension || '.txt'}`
 }
 
 async function convertDroppedTextFile(path: string) {
   fileBusy.value = true
-  fileStatus.value = '正在读取 TXT 文件...'
+  fileStatus.value = '正在读取文本文件...'
   try {
     await customDictionaryLoadPromise
     const text = await readPlainTextFile(path)
@@ -192,7 +228,7 @@ async function convertDroppedTextFile(path: string) {
     pendingTextFilePath.value = path
     sourceText.value = text
     resultText.value = converted
-    fileStatus.value = '已读取 TXT 文件。可先补充自定义词库，确认结果后再导出。'
+    fileStatus.value = '已读取文本文件。可先补充自定义词库，确认结果后再导出。'
     pushDiag(`text conversion loaded: ${path}`)
   } catch (err) {
     fileStatus.value = String(err)
@@ -242,6 +278,34 @@ async function exportPendingTextFile() {
     resultText.value = text
     fileStatus.value = `已覆盖：${saved.outputPath}`
     pushDiag(`text conversion overwritten: ${saved.outputPath}`)
+  } finally {
+    fileBusy.value = false
+  }
+}
+
+async function exportTextFileAs() {
+  if ((!sourceText.value && !resultText.value) || fileBusy.value) return
+  fileBusy.value = true
+  fileStatus.value = '正在导出转换结果...'
+  try {
+    const text = textBusy.value || !resultText.value ? await convertTextNow(sourceText.value) : resultText.value
+    const outputPath = await save({
+      title: '导出转换结果',
+      defaultPath: buildDefaultExportPath(pendingTextFilePath.value, outputSuffix.value, 'converted-text.txt'),
+      filters: [
+        { name: 'Text and subtitles', extensions: ['txt', 'ass', 'ssa', 'srt', 'vtt', 'sub'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (!outputPath) return
+    const saved = await saveConvertedTextToPath(outputPath, text)
+    resultText.value = text
+    fileStatus.value = `已导出：${saved.outputPath}`
+    pushDiag(`text conversion saved: ${saved.outputPath}`)
+  } catch (err) {
+    const message = String(err)
+    fileStatus.value = message
+    pushDiag(`text conversion export failed: ${message}`)
   } finally {
     fileBusy.value = false
   }
@@ -300,138 +364,156 @@ watch(resultText, () => {
 })
 
 watch(pendingDrop, (drop) => {
+  if (drop?.target !== 'tools') return
+  if (drop.tool !== 'text-conversion') return
   const path = drop?.textPath
   if (!path) return
+  pendingDrop.value = null
   void convertDroppedTextFile(path)
 }, { immediate: true })
-
-onMounted(() => {
-  syncSourceTextareaHeight()
-  if (!sourceTextarea.value || typeof ResizeObserver === 'undefined') return
-  sourceResizeObserver = new ResizeObserver(syncSourceTextareaHeight)
-  sourceResizeObserver.observe(sourceTextarea.value)
-})
 
 onUnmounted(() => {
   if (convertTimer) clearTimeout(convertTimer)
   if (dictionarySaveTimer) clearTimeout(dictionarySaveTimer)
-  sourceResizeObserver?.disconnect()
 })
 </script>
 
 <template>
   <section class="text-conversion-workspace">
-    <div v-if="globalDragActive" class="drop-overlay">松开以转换 TXT 文件</div>
+    <div v-if="globalDragActive" class="drop-overlay">松开以转换文本或字幕文件</div>
 
     <section class="panel text-conversion-panel">
       <div class="panel-heading text-conversion-heading">
         <div>
           <h2>繁简字转换</h2>
-          <p>粘贴文本后自动转换，或拖入 TXT 文件后在同目录输出结果。</p>
+          <p>使用 zhconv 转换繁简文本，自定义词库会优先保护和替换指定词条。</p>
         </div>
-        <div class="conversion-mode" role="group" aria-label="转换方向">
-          <button :class="{ active: mode === 't2s' }" @click="setMode('t2s')">繁体 → 简体</button>
-          <button :class="{ active: mode === 's2t' }" @click="setMode('s2t')">简体 → 繁体</button>
+        <div class="heading-tools">
+          <button type="button" class="dictionary-button" @click="dictionaryOpen = true">自定义词库</button>
+          <div class="conversion-mode" role="group" aria-label="转换方向">
+            <button :class="{ active: mode === 't2s' }" @click="setMode('t2s')">繁体 → 简体</button>
+            <button :class="{ active: mode === 's2t' }" @click="setMode('s2t')">简体 → 繁体</button>
+          </div>
         </div>
       </div>
 
-      <div
-        class="conversion-grid"
-        :style="{ '--conversion-text-height': `${conversionTextHeight}px` }"
-      >
-        <label class="conversion-field">
+      <div class="conversion-grid">
+        <div class="conversion-field">
           <span class="field-head">
             <strong>输入</strong>
-            <button class="field-tool" type="button" :disabled="!sourceText" @click="clearText">清空</button>
+            <span class="field-tools">
+              <small>{{ sourceCount }} 字</small>
+              <button class="field-tool" type="button" :disabled="!sourceText" @click="clearText">清空</button>
+            </span>
           </span>
-          <textarea
-            ref="sourceTextarea"
-            v-model="sourceText"
-            spellcheck="false"
-            @scroll="syncResultScrollToSource"
-            placeholder="在这里粘贴要转换的文本"
-          ></textarea>
-          <small>{{ sourceCount }} 字</small>
-        </label>
+          <div class="text-editor-shell">
+            <div ref="sourceLineNumbers" class="line-numbers" aria-hidden="true">
+              <span v-for="line in sourceLines" :key="line">{{ line }}</span>
+            </div>
+            <textarea
+              ref="sourceTextarea"
+              v-model="sourceText"
+              spellcheck="false"
+              @scroll="syncResultScrollToSource"
+              placeholder="粘贴要处理的文本&#10;可拖入 TXT / ASS / SSA / SRT / VTT / SUB 文件"
+            ></textarea>
+          </div>
+        </div>
 
         <div class="conversion-field">
           <span class="field-head">
             <strong>结果</strong>
-            <button class="field-tool" type="button" :disabled="!resultText" @click="copyResult">复制</button>
+            <span class="result-tools">
+              <small>{{ resultCount }} 字</small>
+              <button class="field-tool" type="button" :disabled="!resultText" @click="copyResult">复制</button>
+              <button
+                class="field-tool primary"
+                type="button"
+                :disabled="(!sourceText && !resultText) || fileBusy"
+                @click="exportTextFileAs"
+              >导出</button>
+            </span>
           </span>
-          <div
-            ref="resultPreview"
-            class="result-preview"
-            :class="{ empty: !resultText }"
-            aria-live="polite"
-            @scroll="syncSourceScrollToResult"
-          >
-            <template v-if="resultText">
-              <span
-                v-for="(segment, index) in resultDiffSegments"
-                :key="index"
-                :class="{ changed: segment.changed }"
-              >{{ segment.text }}</span>
-            </template>
-            <span v-else class="placeholder">{{ textBusy ? '正在转换...' : '转换结果会显示在这里' }}</span>
+          <div class="text-editor-shell">
+            <div ref="resultLineNumbers" class="line-numbers" aria-hidden="true">
+              <span v-for="line in resultLines" :key="line">{{ line }}</span>
+            </div>
+            <div
+              ref="resultPreview"
+              class="result-preview"
+              :class="{ empty: !resultText }"
+              aria-live="polite"
+              @scroll="syncSourceScrollToResult"
+            >
+              <template v-if="resultText">
+                <span
+                  v-for="(segment, index) in resultDiffSegments"
+                  :key="index"
+                  :class="{ changed: segment.changed }"
+                >{{ segment.text }}</span>
+              </template>
+              <span v-else class="placeholder">{{ textBusy ? '正在转换...' : '转换结果会显示在这里' }}</span>
+            </div>
           </div>
-          <small>{{ resultCount }} 字</small>
         </div>
       </div>
 
-      <div class="custom-dictionary">
-        <div class="custom-dictionary-head">
-          <div>
-            <strong>自定义词库</strong>
-            <span>每行一条：原词 = 目标词，也支持 原词 -&gt; 目标词。</span>
-          </div>
-          <small>{{ customRules.length }} 条规则</small>
+      <Teleport to="body">
+        <div
+          v-if="dictionaryOpen"
+          class="dictionary-modal app-modal-active"
+          role="presentation"
+          @click.self="dictionaryOpen = false"
+        >
+          <section class="dictionary-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-title">
+            <div class="dictionary-dialog-head">
+              <div>
+                <h2 id="dictionary-title">自定义词库</h2>
+                <p>每行一条：原词 = 目标词，也支持 原词 -&gt; 目标词。</p>
+              </div>
+              <button type="button" class="field-tool" @click="dictionaryOpen = false">关闭</button>
+            </div>
+            <textarea
+              v-model="customDictionary"
+              spellcheck="false"
+              placeholder="俐落 = 利落&#10;急遽 = 急剧"
+            ></textarea>
+            <div class="dictionary-dialog-foot">
+              <span>{{ customRules.length }} 条规则，修改后会自动记忆并重新转换。</span>
+              <button type="button" class="field-tool primary" @click="dictionaryOpen = false">完成</button>
+            </div>
+          </section>
         </div>
-        <textarea
-          v-model="customDictionary"
-          spellcheck="false"
-          placeholder="俐落 = 利落&#10;急遽 = 急剧"
-        ></textarea>
-      </div>
-
-      <div class="text-drop-box" :class="{ active: globalDragActive, busy: fileBusy || textBusy }">
-        <div class="text-drop-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
-            <path d="M14 2v5h5" />
-            <path d="M9 13h6" />
-            <path d="M9 17h4" />
-          </svg>
-        </div>
-        <div>
-          <strong>{{ fileBusy ? '正在处理文件' : textBusy ? '正在转换文本' : '拖入 TXT 文件' }}</strong>
-          <span>{{ fileStatus || '拖入 TXT 后先预览转换结果；补充自定义词库后再导出到原文件同目录。' }}</span>
-        </div>
-        <button
-          class="export-file-button"
-          type="button"
-          :disabled="!pendingTextFilePath || fileBusy || !resultText"
-          @click="exportPendingTextFile"
-        >导出结果</button>
-      </div>
+      </Teleport>
     </section>
   </section>
 </template>
 
 <style scoped>
 .text-conversion-workspace {
-  grid-auto-rows: minmax(0, 1fr);
+  display: grid;
+  min-height: 0;
   position: relative;
 }
 
 .text-conversion-panel {
   display: grid;
-  gap: 16px;
-  min-height: calc(100vh - 158px);
+  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .text-conversion-heading {
   align-items: center;
+  margin-bottom: 0;
+}
+
+.heading-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .conversion-mode {
@@ -456,23 +538,30 @@ onUnmounted(() => {
   color: #fff;
 }
 
+.dictionary-button {
+  background: #e5eaee;
+  color: #24313c;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
 .conversion-grid {
-  --conversion-text-height: 320px;
-  align-items: start;
+  align-items: stretch;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
 }
 
 .conversion-field {
   display: grid;
   gap: 8px;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
+  min-height: 0;
   min-width: 0;
 }
 
-.field-head,
-.custom-dictionary-head {
+.field-head {
   align-items: center;
   color: #24313c;
   display: flex;
@@ -480,8 +569,13 @@ onUnmounted(() => {
   gap: 10px;
 }
 
-.field-head strong,
-.custom-dictionary-head strong {
+.field-tools {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.field-head strong {
   font-size: 13px;
   font-weight: 700;
 }
@@ -494,12 +588,53 @@ onUnmounted(() => {
   padding: 0 10px;
 }
 
-.conversion-field textarea,
-.custom-dictionary textarea,
-.result-preview {
+.field-tool.primary {
+  background: #176b87;
+  color: #fff;
+}
+
+.field-tool:disabled {
+  background: #dce4e9;
+  color: #7a8790;
+}
+
+.result-tools {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.text-editor-shell {
   background: #fbfcfd;
   border: 1px solid #d8e2e8;
   border-radius: 8px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  height: max(360px, calc(100vh - 252px));
+  min-height: 320px;
+  overflow: hidden;
+}
+
+.line-numbers {
+  background: #f2f5f7;
+  border-right: 1px solid #d8e2e8;
+  color: #8a98a3;
+  font: 12px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
+  overflow: hidden;
+  padding: 12px 8px;
+  text-align: right;
+  user-select: none;
+}
+
+.line-numbers span {
+  display: block;
+  height: 23.8px;
+}
+
+.conversion-field textarea,
+.result-preview {
+  background: transparent;
+  border: 0;
   color: #18202a;
   font: 14px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
   outline: none;
@@ -510,16 +645,19 @@ onUnmounted(() => {
 .conversion-field textarea,
 .result-preview {
   box-sizing: border-box;
-  height: var(--conversion-text-height);
-  min-height: 120px;
+  height: 100%;
+  min-height: 0;
 }
 
 .conversion-field textarea {
-  resize: vertical;
+  resize: none;
 }
 
-.conversion-field textarea:focus,
-.custom-dictionary textarea:focus {
+.conversion-field textarea:focus {
+  box-shadow: none;
+}
+
+.text-editor-shell:focus-within {
   border-color: #176b87;
   box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.12);
 }
@@ -541,94 +679,11 @@ onUnmounted(() => {
   color: #8996a1;
 }
 
-.conversion-field small,
-.custom-dictionary-head small {
+.field-tools small,
+.result-tools small,
+.dictionary-dialog-foot span {
   color: #667582;
   font-size: 12px;
-  text-align: right;
-}
-
-.custom-dictionary {
-  display: grid;
-  gap: 8px;
-}
-
-.custom-dictionary-head span {
-  color: #667582;
-  display: block;
-  font-size: 12px;
-  font-weight: 400;
-  margin-top: 3px;
-}
-
-.custom-dictionary textarea {
-  min-height: 86px;
-  resize: vertical;
-}
-
-.text-drop-box {
-  align-items: center;
-  background: #f8fafb;
-  border: 1px dashed #b7c8d4;
-  border-radius: 8px;
-  color: #43515c;
-  display: flex;
-  gap: 12px;
-  min-height: 78px;
-  padding: 14px;
-}
-
-.text-drop-box > div:nth-child(2) {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.text-drop-box.active {
-  background: #edf8fb;
-  border-color: #176b87;
-  color: #0f5268;
-}
-
-.text-drop-box.busy {
-  opacity: 0.78;
-}
-
-.text-drop-icon {
-  align-items: center;
-  background: #e7eef3;
-  border-radius: 8px;
-  color: #176b87;
-  display: flex;
-  flex: 0 0 auto;
-  height: 44px;
-  justify-content: center;
-  width: 44px;
-}
-
-.export-file-button {
-  background: #176b87;
-  color: #fff;
-  flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 14px;
-}
-
-.export-file-button:disabled {
-  background: #dce4e9;
-  color: #7a8790;
-}
-
-.text-drop-box strong,
-.text-drop-box span {
-  display: block;
-}
-
-.text-drop-box span {
-  color: #667582;
-  font-size: 13px;
-  line-height: 1.5;
-  margin-top: 4px;
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 920px) {
@@ -640,13 +695,101 @@ onUnmounted(() => {
     align-items: flex-start;
   }
 
-  .text-drop-box {
-    align-items: stretch;
-    flex-wrap: wrap;
+  .heading-tools {
+    justify-content: flex-start;
   }
 
-  .export-file-button {
+  .result-tools {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+</style>
+
+<style>
+.dictionary-modal {
+  align-items: center;
+  background: rgba(15, 23, 32, 0.38);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 28px;
+  position: fixed;
+  z-index: 120;
+}
+
+.dictionary-dialog {
+  background: #fff;
+  border: 1px solid #d8e2e8;
+  border-radius: 8px;
+  box-shadow: 0 22px 64px rgba(15, 23, 32, 0.22);
+  color: #24313c;
+  display: grid;
+  gap: 14px;
+  max-width: min(720px, 100%);
+  padding: 18px;
+  width: 720px;
+}
+
+.dictionary-dialog-head,
+.dictionary-dialog-foot {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.dictionary-dialog-head h2 {
+  color: #102030;
+  font-size: 17px;
+  margin: 0;
+}
+
+.dictionary-dialog-head p {
+  color: #667582;
+  font-size: 13px;
+  margin: 5px 0 0;
+}
+
+.dictionary-dialog textarea {
+  background: #fbfcfd;
+  border: 1px solid #d8e2e8;
+  border-radius: 8px;
+  color: #18202a;
+  font: 14px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
+  min-height: 300px;
+  outline: none;
+  padding: 12px;
+  resize: none;
+  width: 100%;
+}
+
+.dictionary-dialog textarea:focus {
+  border-color: #176b87;
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.12);
+}
+
+.dictionary-dialog-foot span {
+  color: #667582;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .dictionary-modal {
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .dictionary-dialog {
+    align-content: start;
     width: 100%;
+  }
+
+  .dictionary-dialog-head,
+  .dictionary-dialog-foot {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

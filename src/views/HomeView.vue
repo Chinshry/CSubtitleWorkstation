@@ -437,9 +437,11 @@ watch(configRevision, () => {
 // 消费 App.vue 全局拖拽事件
 watch(pendingDrop, (drop) => {
   if (!drop) return
+  if (drop.target !== 'home') return
   pushDiag(`HomeView consumed drop: video=${drop.videoPath ?? '-'} subtitle=${drop.subtitlePath ?? '-'}`)
   if (drop.videoPath) job.value.videoPath = drop.videoPath
   if (drop.subtitlePath) job.value.subtitlePath = drop.subtitlePath
+  pendingDrop.value = null
 })
 
 // videoPath 改动 → 防抖 350ms 调用 inspect_video_meta 刷新视频信息卡片
@@ -606,8 +608,11 @@ onMounted(async () => {
   // 如果在挂载前已经有拖入文件，立刻消费一次
   if (pendingDrop.value) {
     const drop = pendingDrop.value
-    if (drop.videoPath) job.value.videoPath = drop.videoPath
-    if (drop.subtitlePath) job.value.subtitlePath = drop.subtitlePath
+    if (drop.target === 'home') {
+      if (drop.videoPath) job.value.videoPath = drop.videoPath
+      if (drop.subtitlePath) job.value.subtitlePath = drop.subtitlePath
+      pendingDrop.value = null
+    }
   }
   homeReady = true
 })

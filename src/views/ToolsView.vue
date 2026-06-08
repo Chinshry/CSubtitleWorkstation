@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
-
-type ToolId = 'text-conversion'
-
-const activeTool = ref<ToolId>('text-conversion')
+import { computed, defineAsyncComponent } from 'vue'
+import { activeTool, type ToolId } from '../stores/toolStore'
 const TextConversionView = defineAsyncComponent(() => import('./TextConversionView.vue'))
+const ProofreadView = defineAsyncComponent(() => import('./ProofreadView.vue'))
 
-const tools: Array<{ id: ToolId; name: string; description: string }> = [
+const tools: Array<{ id: ToolId; name: string }> = [
+  {
+    id: 'proofread',
+    name: '字幕校对'
+  },
   {
     id: 'text-conversion',
-    name: '繁简转换',
-    description: '繁体与简体互转'
+    name: '繁简转换'
   }
 ]
+
+const activeToolComponent = computed(() => (
+  activeTool.value === 'text-conversion' ? TextConversionView : ProofreadView
+))
 </script>
 
 <template>
@@ -32,18 +37,25 @@ const tools: Array<{ id: ToolId; name: string; description: string }> = [
           @click="activeTool = tool.id"
         >
           <strong>{{ tool.name }}</strong>
-          <span>{{ tool.description }}</span>
         </button>
       </div>
     </section>
 
-    <TextConversionView v-if="activeTool === 'text-conversion'" />
+    <KeepAlive>
+      <component :is="activeToolComponent" />
+    </KeepAlive>
   </main>
 </template>
 
 <style scoped>
 .tools-workspace {
   gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.tools-workspace > :deep(.text-conversion-workspace),
+.tools-workspace > :deep(.proofread-workspace) {
+  min-height: 0;
 }
 
 .tools-bar {
@@ -61,12 +73,6 @@ const tools: Array<{ id: ToolId; name: string; description: string }> = [
   margin: 0;
 }
 
-.tools-bar p {
-  color: #667582;
-  font-size: 13px;
-  margin: 4px 0 0;
-}
-
 .tool-tabs {
   align-items: center;
   display: flex;
@@ -80,12 +86,10 @@ const tools: Array<{ id: ToolId; name: string; description: string }> = [
   background: #eef3f6;
   border: 1px solid #d6e0e7;
   color: #344552;
-  display: grid;
-  gap: 2px;
-  min-height: 48px;
+  min-height: 40px;
   min-width: 138px;
   padding: 8px 12px;
-  text-align: left;
+  text-align: center;
 }
 
 .tool-tabs button.active {
@@ -96,11 +100,6 @@ const tools: Array<{ id: ToolId; name: string; description: string }> = [
 
 .tool-tabs strong {
   font-size: 13px;
-}
-
-.tool-tabs span {
-  font-size: 11px;
-  opacity: 0.82;
 }
 
 @media (max-width: 920px) {

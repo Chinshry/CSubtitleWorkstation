@@ -1,6 +1,9 @@
 import { ref } from 'vue'
+import type { ToolId } from './toolStore'
 
 export type PendingDrop = {
+  target: 'home' | 'tools'
+  tool?: ToolId
   videoPath?: string
   subtitlePath?: string
   textPath?: string

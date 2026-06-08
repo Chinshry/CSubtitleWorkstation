@@ -14,6 +14,7 @@ import {
   pendingDrop,
   pushDiag
 } from './stores/dropStore'
+import { activeTool, type ToolId } from './stores/toolStore'
 import { hasAvailableUpdate, refreshAppUpdate } from './stores/updateStore'
 
 const active = ref<'home' | 'presets' | 'tools' | 'settings'>('home')
@@ -33,11 +34,26 @@ function classifyPaths(paths: string[]) {
       out.videoPath = p
     } else if (/\.(ass|ssa|srt|vtt|sub)$/.test(lower) && !out.subtitlePath) {
       out.subtitlePath = p
+      if (!out.textPath) out.textPath = p
     } else if (/\.txt$/.test(lower) && !out.textPath) {
       out.textPath = p
     }
   }
   return out
+}
+
+function resolveDropRoute(classified: { videoPath?: string; subtitlePath?: string; textPath?: string }) {
+  const route: { target: 'home' | 'tools'; tool?: ToolId } = { target: 'home' }
+  if (active.value === 'tools' && classified.textPath) {
+    route.target = 'tools'
+    route.tool = activeTool.value
+    return route
+  }
+  if (classified.textPath && !classified.videoPath && !classified.subtitlePath) {
+    route.target = 'tools'
+    route.tool = activeTool.value
+  }
+  return route
 }
 
 onMounted(async () => {
@@ -77,15 +93,18 @@ onMounted(async () => {
           return
         }
         const classified = classifyPaths(paths)
+        const route = resolveDropRoute(classified)
+        if (route.tool) activeTool.value = route.tool
         pendingDrop.value = {
+          ...route,
           ...classified,
           raw: paths,
           receivedAt: Date.now()
         }
         // 自动切到对应工具页，避免用户拖入后看不到处理结果。
-        if (classified.textPath) {
+        if (route.target === 'tools') {
           active.value = 'tools'
-        } else if (active.value !== 'home') {
+        } else if (route.target === 'home' && active.value !== 'home') {
           active.value = 'home'
         }
       })
