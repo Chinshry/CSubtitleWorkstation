@@ -1,5 +1,5 @@
 use crate::models::avs_status::{AvsStatus, LavFiltersStatus};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(windows)]
@@ -193,6 +193,17 @@ fn detect_lav_filters() -> DetectedLavFilters {
         out.x64_available = Path::new(path).join("x64").exists();
     }
 
+    if out.install_path.is_none() {
+        for path in common_lav_install_paths() {
+            if path.exists() {
+                out.installed = true;
+                out.install_path = Some(path.to_string_lossy().to_string());
+                out.x64_available = path.join("x64").exists();
+                break;
+            }
+        }
+    }
+
     let has_splitter = registry_text_contains(r"HKCR\CLSID", "LAV Splitter");
     let has_video = registry_text_contains(r"HKCR\CLSID", "LAV Video Decoder");
     out.directshow_registered = has_splitter && has_video;
@@ -210,7 +221,7 @@ fn detect_lav_filters() -> DetectedLavFilters {
 
 #[cfg(windows)]
 fn query_lav_uninstall_entry(root: &str) -> Option<(Option<String>, Option<String>)> {
-    let mut list_cmd = Command::new("reg");
+    let mut list_cmd = Command::new(system_tool_path("reg.exe"));
     list_cmd.args(["query", root]);
     no_window(&mut list_cmd);
     let list_output = list_cmd.output().ok()?;
@@ -224,7 +235,7 @@ fn query_lav_uninstall_entry(root: &str) -> Option<(Option<String>, Option<Strin
         .map(str::trim)
         .filter(|line| !line.is_empty())
     {
-        let mut cmd = Command::new("reg");
+        let mut cmd = Command::new(system_tool_path("reg.exe"));
         cmd.args(["query", key]);
         no_window(&mut cmd);
         let Ok(output) = cmd.output() else { continue };
@@ -262,7 +273,7 @@ fn registry_value_from_text(text: &str, value_name: &str) -> Option<String> {
 
 #[cfg(windows)]
 fn registry_text_contains(root: &str, needle: &str) -> bool {
-    let mut cmd = Command::new("reg");
+    let mut cmd = Command::new(system_tool_path("reg.exe"));
     cmd.args(["query", root, "/f", needle, "/s"]);
     no_window(&mut cmd);
     let Ok(output) = cmd.output() else {
@@ -285,7 +296,7 @@ fn read_registry_install_path() -> Option<String> {
         "HKLM\\SOFTWARE\\AviSynth",
         "HKLM\\SOFTWARE\\WOW6432Node\\AviSynth",
     ] {
-        let mut cmd = Command::new("reg");
+        let mut cmd = Command::new(system_tool_path("reg.exe"));
         cmd.args(["query", key, "/ve"]);
         no_window(&mut cmd);
         let Ok(output) = cmd.output() else { continue };
@@ -313,7 +324,7 @@ fn read_dll_file_version(dll: &Path) -> Option<String> {
         "(Get-Item -LiteralPath '{}').VersionInfo.ProductVersion",
         dll.display().to_string().replace('\'', "''")
     );
-    let mut cmd = Command::new("powershell");
+    let mut cmd = Command::new(powershell_path());
     cmd.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
     no_window(&mut cmd);
     let output = cmd.output().ok()?;
@@ -325,6 +336,47 @@ fn read_dll_file_version(dll: &Path) -> Option<String> {
         None
     } else {
         Some(text)
+    }
+}
+
+#[cfg(windows)]
+fn common_lav_install_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(program_files) = std::env::var_os("ProgramFiles") {
+        paths.push(PathBuf::from(program_files).join("LAV Filters"));
+    }
+    if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
+        paths.push(PathBuf::from(program_files_x86).join("LAV Filters"));
+    }
+    paths.push(PathBuf::from(r"C:\Program Files\LAV Filters"));
+    paths.push(PathBuf::from(r"C:\Program Files (x86)\LAV Filters"));
+    paths
+}
+
+#[cfg(windows)]
+fn system_tool_path(name: &str) -> PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
+        .join("System32")
+        .join(name)
+}
+
+#[cfg(windows)]
+fn powershell_path() -> PathBuf {
+    let system32 = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
+        .join("System32");
+
+    let powershell = system32
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
+    if powershell.exists() {
+        powershell
+    } else {
+        system32.join("powershell.exe")
     }
 }
 

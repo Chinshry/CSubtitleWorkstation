@@ -1,5 +1,6 @@
 use crate::models::app_config::{AppConfig, FfmpegMode};
 use crate::models::ffmpeg_status::{FfmpegSource, FfmpegStatus};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -22,57 +23,22 @@ pub fn detect(config: &AppConfig) -> FfmpegStatus {
         FfmpegMode::System => {}
     }
 
-    // 1) 先按裸命令名走进程 PATH。Finder/Dock 启动的 App 在 macOS 上可能拿不到 shell PATH，
-    //    `open` 启动虽然继承 shell 环境，但实测仍有偶发"检测到但压制时找不到"的情况——
-    //    任何依赖动态 PATH 查找的方案本质都不够稳定。
     let path_result = inspect_path(Path::new(system_ffmpeg_name()), FfmpegSource::SystemPath);
     if path_result.available {
         return path_result;
     }
 
-    // 2) PATH 失败时，扫描平台常见安装目录作为兜底，命中即返回绝对路径，
-    //    后续执行不再依赖 PATH，从源头消除"检测✓但执行✗"的不一致。
-    for candidate in well_known_ffmpeg_paths() {
-        let path = Path::new(candidate);
-        if !path.exists() {
+    for candidate in fallback_ffmpeg_candidates() {
+        if !candidate.exists() {
             continue;
         }
-        let status = inspect_path(path, FfmpegSource::SystemPath);
+        let status = inspect_path(&candidate, FfmpegSource::SystemPath);
         if status.available {
             return status;
         }
     }
 
-    // 全部失败：保留 PATH 查找阶段的失败信息，便于排查
     path_result
-}
-
-/// 平台常见的 ffmpeg 安装路径，按"出现频次 / 优先级"排序。
-/// 仅在用户未手动指定路径、且系统 PATH 中找不到 ffmpeg 时使用。
-fn well_known_ffmpeg_paths() -> &'static [&'static str] {
-    #[cfg(target_os = "macos")]
-    {
-        &[
-            "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg", // Apple Silicon Homebrew full 版，包含 libass/subtitles
-            "/usr/local/opt/ffmpeg-full/bin/ffmpeg",    // Intel Mac Homebrew full 版
-            "/opt/homebrew/bin/ffmpeg",                 // Apple Silicon (M 系列) Homebrew 默认前缀
-            "/usr/local/bin/ffmpeg",                    // Intel Mac Homebrew 默认前缀
-            "/opt/local/bin/ffmpeg",                    // MacPorts 默认前缀
-        ]
-    }
-    #[cfg(target_os = "linux")]
-    {
-        &[
-            "/usr/bin/ffmpeg",
-            "/usr/local/bin/ffmpeg",
-            "/snap/bin/ffmpeg",
-        ]
-    }
-    #[cfg(target_os = "windows")]
-    {
-        // Windows 没有公认的统一安装位置，仍依赖 PATH 或用户手动选择
-        &[]
-    }
 }
 
 pub fn inspect_path(path: &Path, source: FfmpegSource) -> FfmpegStatus {
@@ -84,7 +50,6 @@ pub fn inspect_path(path: &Path, source: FfmpegSource) -> FfmpegStatus {
             let text = String::from_utf8_lossy(&output.stdout);
             let version = text.lines().next().map(|line| line.trim().to_string());
 
-            // 同目录或 PATH 中探测 ffprobe
             let (ffprobe_path, ffprobe_version) = detect_ffprobe(path);
             let (subtitle_filter_available, ass_filter_available) = detect_subtitle_filters(path);
             let available = cfg!(target_os = "windows") || subtitle_filter_available;
@@ -166,11 +131,9 @@ fn subtitle_filter_missing_message() -> String {
     }
 }
 
-// 找 ffprobe：优先 ffmpeg 同目录，否则尝试 PATH 中的 ffprobe
 fn detect_ffprobe(ffmpeg_path: &Path) -> (Option<String>, Option<String>) {
     let probe_name = system_ffprobe_name();
 
-    // 1) ffmpeg 同目录
     if let Some(dir) = ffmpeg_path.parent() {
         let candidate = dir.join(probe_name);
         if candidate.exists() {
@@ -180,10 +143,19 @@ fn detect_ffprobe(ffmpeg_path: &Path) -> (Option<String>, Option<String>) {
         }
     }
 
-    // 2) PATH 上的 ffprobe（适用于 system_path 模式或散装安装）
     let bare = Path::new(probe_name);
     if let Some(version) = run_version(bare) {
         return (Some(probe_name.to_string()), Some(version));
+    }
+
+    for dir in system_path_dirs() {
+        let candidate = dir.join(probe_name);
+        if !candidate.exists() {
+            continue;
+        }
+        if let Some(version) = run_version(&candidate) {
+            return (Some(path_to_string(&candidate)), Some(version));
+        }
     }
 
     (None, None)
@@ -228,6 +200,164 @@ pub fn system_ffprobe_name() -> &'static str {
     }
 }
 
+fn fallback_ffmpeg_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let mut seen = HashSet::new();
+
+    for dir in system_path_dirs() {
+        push_path(&mut candidates, &mut seen, dir.join(system_ffmpeg_name()));
+    }
+
+    for path in well_known_ffmpeg_paths() {
+        push_path(&mut candidates, &mut seen, PathBuf::from(path));
+    }
+
+    candidates
+}
+
+fn well_known_ffmpeg_paths() -> &'static [&'static str] {
+    #[cfg(target_os = "macos")]
+    {
+        &[
+            "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+            "/usr/local/opt/ffmpeg-full/bin/ffmpeg",
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/opt/local/bin/ffmpeg",
+        ]
+    }
+    #[cfg(target_os = "linux")]
+    {
+        &[
+            "/usr/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/snap/bin/ffmpeg",
+        ]
+    }
+    #[cfg(target_os = "windows")]
+    {
+        &[
+            r"C:\ffmpeg\bin\ffmpeg.exe",
+            r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+            r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
+            r"D:\ffmpeg\bin\ffmpeg.exe",
+        ]
+    }
+}
+
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
+}
+
+fn system_path_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            push_dir(&mut dirs, &mut seen, dir);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        for raw in windows_registry_path_values() {
+            for item in raw.split(';').map(str::trim).filter(|item| !item.is_empty()) {
+                push_dir(
+                    &mut dirs,
+                    &mut seen,
+                    PathBuf::from(expand_windows_env_vars(item)),
+                );
+            }
+        }
+    }
+
+    dirs
+}
+
+fn push_path(paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>, path: PathBuf) {
+    let key = path.to_string_lossy().to_ascii_lowercase();
+    if seen.insert(key) {
+        paths.push(path);
+    }
+}
+
+fn push_dir(dirs: &mut Vec<PathBuf>, seen: &mut HashSet<String>, dir: PathBuf) {
+    let key = dir.to_string_lossy().trim_end_matches('\\').to_ascii_lowercase();
+    if !key.is_empty() && seen.insert(key) {
+        dirs.push(dir);
+    }
+}
+
+#[cfg(windows)]
+fn windows_registry_path_values() -> Vec<String> {
+    [
+        (
+            r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+            "Path",
+        ),
+        (r"HKCU\Environment", "Path"),
+    ]
+    .into_iter()
+    .filter_map(|(key, name)| query_registry_value(key, name))
+    .collect()
+}
+
+#[cfg(windows)]
+fn query_registry_value(key: &str, value_name: &str) -> Option<String> {
+    let mut cmd = Command::new(system_tool_path("reg.exe"));
+    cmd.args(["query", key, "/v", value_name]);
+    no_window(&mut cmd);
+    let output = cmd.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    registry_value_from_query_text(&text, value_name)
+}
+
+#[cfg(windows)]
+fn registry_value_from_query_text(text: &str, value_name: &str) -> Option<String> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with(value_name) {
+            continue;
+        }
+        for marker in ["REG_EXPAND_SZ", "REG_SZ"] {
+            if let Some(idx) = trimmed.find(marker) {
+                let value = trimmed[idx + marker.len()..].trim();
+                if !value.is_empty() {
+                    return Some(value.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn system_tool_path(name: &str) -> PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
+        .join("System32")
+        .join(name)
+}
+
+#[cfg(windows)]
+fn expand_windows_env_vars(input: &str) -> String {
+    let mut out = input.to_string();
+    for name in [
+        "SystemRoot",
+        "WINDIR",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "USERPROFILE",
+    ] {
+        let pattern = format!("%{name}%");
+        if let Ok(value) = std::env::var(name) {
+            out = out.replace(&pattern, &value);
+        }
+    }
+    out
 }
