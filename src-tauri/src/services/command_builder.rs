@@ -322,7 +322,7 @@ fn build_logo_overlay_for_platform(
     let x = (layout.x_pct * vw).round() as i32;
     let y = (layout.y_pct * vh).round() as i32;
     Some(format!(
-        "movie={},scale={}:{}[wm];[in][wm]overlay={}:{}",
+        "movie={},format=rgba,scale={}:{}:flags=lanczos,format=rgba[wm];[in][wm]overlay={}:{}",
         movie_filter_arg_for_platform(trimmed_path, windows),
         w,
         h,
@@ -708,7 +708,7 @@ mod tests {
 
         assert_eq!(
             build_logo_overlay_for_platform(&job, Some(1920), Some(1080), true).as_deref(),
-            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',scale=384:108[wm];[in][wm]overlay=38:22")
+            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',format=rgba,scale=384:108:flags=lanczos,format=rgba[wm];[in][wm]overlay=38:22")
         );
     }
 
@@ -741,7 +741,7 @@ mod tests {
 
         assert_eq!(
             build_logo_overlay_for_platform(&job, Some(1920), Some(1080), false).as_deref(),
-            Some("movie=filename=/Users/tester/Pictures/Sample\\ Folder.bundle/logo.jpeg,scale=384:108[wm];[in][wm]overlay=38:22")
+            Some("movie=filename=/Users/tester/Pictures/Sample\\ Folder.bundle/logo.jpeg,format=rgba,scale=384:108:flags=lanczos,format=rgba[wm];[in][wm]overlay=38:22")
         );
     }
 
@@ -779,7 +779,7 @@ mod tests {
 
         assert_eq!(
             command.get(vf_index + 1).map(String::as_str),
-            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',scale=384:108[wm];[in][wm]overlay=38:22,subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'")
+            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',format=rgba,scale=384:108:flags=lanczos,format=rgba[wm];[in][wm]overlay=38:22,subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'")
         );
     }
 
