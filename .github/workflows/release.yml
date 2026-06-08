@@ -32,6 +32,7 @@ jobs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
       sha: ${{ steps.meta.outputs.sha }}
+      branch_base_sha: ${{ steps.meta.outputs.branch_base_sha }}
       app_notes: ${{ steps.meta.outputs.app_notes }}
       release_id: ${{ steps.draft.outputs.release_id }}
 
@@ -119,6 +120,7 @@ jobs:
             cp RELEASE_CHANGELOG.md RELEASE_NOTES.md
           fi
           APP_NOTES="$(cat RELEASE_NOTES.md)"
+          BRANCH_BASE_SHA="$(git rev-parse HEAD)"
 
           if [ "$EVENT_NAME" != "push" ]; then
             export VERSION
@@ -148,7 +150,7 @@ jobs:
               echo "Version files already contain $VERSION"
             else
               git commit -m "chore: 发布 $TAG"
-              git push origin HEAD:refs/heads/${{ github.ref_name }}
+              git push --force origin HEAD:refs/heads/release-build/$TAG-${{ github.run_id }}
             fi
           fi
 
@@ -156,6 +158,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "branch_base_sha=$BRANCH_BASE_SHA" >> "$GITHUB_OUTPUT"
           {
             echo 'release_notes<<RELEASE_NOTES_EOF'
             cat RELEASE_NOTES.md
@@ -321,6 +324,7 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
           APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
+          BRANCH_BASE_SHA: ${{ needs.prepare.outputs.branch_base_sha }}
         run: |
           set -euo pipefail
 
@@ -392,6 +396,7 @@ jobs:
           fi
           git tag -f "$TAG" "$FINAL_SHA"
           git fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" --tags --force
-          git push --force-with-lease=refs/heads/$BRANCH:$BASE_SHA origin "HEAD:refs/heads/$BRANCH"
+          git push --force-with-lease=refs/heads/$BRANCH:$BRANCH_BASE_SHA origin "HEAD:refs/heads/$BRANCH"
           git push --force-with-lease=refs/tags/$TAG origin refs/tags/$TAG
           gh release edit "$TAG" --target "$FINAL_SHA"
+          git push origin ":refs/heads/release-build/$TAG-${{ github.run_id }}" || true

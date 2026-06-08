@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
 import { activeTool, type ToolId } from '../stores/toolStore'
+
 const TextConversionView = defineAsyncComponent(() => import('./TextConversionView.vue'))
 const ProofreadView = defineAsyncComponent(() => import('./ProofreadView.vue'))
 
