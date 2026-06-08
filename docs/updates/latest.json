@@ -1,13 +1,13 @@
 {
-  "version": "0.1.8",
-  "notes": "## ⚡ 性能优化\n\n- 优化启动阶段的 ffmpeg、AVS 与 VP9 解码环境检测流程，改为后台执行，减少启动等待和界面卡顿。\n\n## 🎨 体验改进\n\n- 环境检测期间显示局部加载蒙层，让设置页和压制页的检测状态更清晰；\n- 拖入 VP9 视频且 64 位 LAV 解码器仍在检测时，AVS 压制开关会暂时锁定并提示「检测中」；\n- 压制 VP9 视频时，复制源视频到临时路径的准备阶段可随时取消，并实时显示复制进度。",
-  "pub_date": "2026-06-04T14:31:16Z",
+  "version": "0.1.10",
+  "notes": "## ✅ 新增功能\n\n- 新增工具页，集中放置字幕校对与繁简转换等文本辅助工具。\n- 新增字幕校对工具，支持粘贴文本或拖入 TXT、ASS、SSA、SRT、VTT、SUB 文件进行校对。\n- 字幕校对可提示“的、地、得”疑似误用，并支持点击问题定位、手动采纳或忽略。\n- 新增校对自定义词库，可统一人名、团名、节目名和专有名词写法。\n- 校对词库支持正则匹配、捕获组替换、本地记忆，并提供“试匹配”输入框即时查看命中结果。\n- 新增繁简转换工具，支持简体、繁体、台湾正体等模式切换。\n- 繁简转换支持实时预览、差异高亮、左右同步滚动和结果导出。\n- 繁简转换自定义词库会优先保护或替换指定词条，并保存到本地配置。\n\n## 🐞 问题修复\n\n- 修复安装包环境检测失效的问题。\n- 修复 LOGO 透明通道在压制时出现蒙层的问题。",
+  "pub_date": "2026-06-08T13:05:03Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.8/CSubtitleWorkstation_0.1.8_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.10/CSubtitleWorkstation_0.1.10_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.8/CSubtitleWorkstation_0.1.8_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.10/CSubtitleWorkstation_0.1.10_universal.dmg"
     }
   }
 }
