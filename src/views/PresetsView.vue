@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { exportEncodePresets, importEncodePresets, loadConfig, saveConfig } from '../api/config'
+import {
+  exportEncodePresets,
+  exportOutputTemplates,
+  importEncodePresets,
+  importOutputTemplates,
+  loadConfig,
+  saveConfig,
+} from '../api/config'
 import type { AppConfig, OutputNameTemplate, VideoEncodePreset } from '../types'
 import { DEFAULT_ENCODE_PRESETS, normalizeEncodePresets } from '../utils/encodePresets'
 import { useEncoderOptions } from '../composables/useEncoderOptions'
@@ -310,6 +317,39 @@ function cancelTemplateDrag() {
   hoveredTemplateId.value = null
 }
 
+async function exportOutputTemplateFile() {
+  const path = await save({
+    title: '导出输出命名模板',
+    defaultPath: 'output-templates.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (!path) return
+  await exportOutputTemplates(path, outputTemplates.value)
+  toast.success('输出命名模板已导出')
+}
+
+async function importOutputTemplateFile() {
+  const selected = await open({
+    title: '导入输出命名模板',
+    multiple: false,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  const path = Array.isArray(selected) ? selected[0] : selected
+  if (!path) return
+  const imported = sanitizeImportedOutputTemplates(await importOutputTemplates(path))
+  if (!imported.length) {
+    toast.warning('未找到可导入的输出命名模板')
+    return
+  }
+  const importedById = new Map(imported.map((item) => [item.id, item]))
+  outputTemplates.value = [
+    ...outputTemplates.value.map((item) => importedById.get(item.id) ?? item),
+    ...imported.filter((item) => !outputTemplates.value.some((current) => current.id === item.id)),
+  ]
+  selectedTemplateId.value = imported[0].id
+  void persistOutputTemplates(`已导入 ${imported.length} 个输出命名模板`)
+}
+
 async function exportEncodePresetFile() {
   const path = await save({
     title: '导出压制预设',
@@ -448,6 +488,38 @@ function findRowIdAtPoint(event: PointerEvent, type: 'encode' | 'template') {
   const element = document.elementFromPoint(event.clientX, event.clientY)
   const row = element?.closest<HTMLElement>(`[data-${type}-id]`)
   return row?.dataset[type === 'encode' ? 'encodeId' : 'templateId'] ?? null
+}
+
+function sanitizeImportedOutputTemplates(items: OutputNameTemplate[]): OutputNameTemplate[] {
+  const seen = new Set<string>()
+  return items
+    .filter((item) =>
+      item &&
+      typeof item.id === 'string' &&
+      item.id.trim() &&
+      typeof item.name === 'string' &&
+      typeof item.pattern === 'string'
+    )
+    .filter((item) => {
+      if (seen.has(item.id)) return false
+      seen.add(item.id)
+      return true
+    })
+    .map((item) => {
+      const fixedOutputDir = typeof item.fixedOutputDir === 'string' && item.fixedOutputDir.trim()
+        ? item.fixedOutputDir
+        : undefined
+      const outputDirMode: OutputNameTemplate['outputDirMode'] =
+        item.outputDirMode === 'fixed' && fixedOutputDir ? 'fixed' : 'sameAsVideo'
+      return {
+        id: item.id,
+        name: item.name.trim() || '未命名模板',
+        pattern: item.pattern.trim() || DEFAULT_OUTPUT_TEMPLATE.pattern,
+        outputDirMode,
+        fixedOutputDir,
+        isDefault: false,
+      }
+    })
 }
 
 function sanitizeImportedEncodePresets(items: VideoEncodePreset[]): VideoEncodePreset[] {
@@ -622,6 +694,10 @@ onBeforeUnmount(() => {
         <div>
           <h2>输出命名模板</h2>
           <p>建立常用命名规则，在压制页选择模板后可一键套用到输出路径。</p>
+        </div>
+        <div class="panel-heading-actions">
+          <button class="secondary" @click="importOutputTemplateFile">批量导入</button>
+          <button class="secondary" @click="exportOutputTemplateFile">批量导出</button>
         </div>
       </div>
 

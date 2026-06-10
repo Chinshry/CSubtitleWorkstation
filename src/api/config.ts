@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AppConfig, VideoEncodePreset } from '../types'
+import type { AppConfig, OutputNameTemplate, VideoEncodePreset } from '../types'
 import { notifyConfigChanged } from '../stores/configStore'
 
 export function loadConfig() {
@@ -17,4 +17,12 @@ export function exportEncodePresets(path: string, presets: VideoEncodePreset[]) 
 
 export function importEncodePresets(path: string) {
   return invoke<VideoEncodePreset[]>('import_encode_presets', { path })
+}
+
+export function exportOutputTemplates(path: string, templates: OutputNameTemplate[]) {
+  return invoke<void>('export_output_templates', { path, templates })
+}
+
+export function importOutputTemplates(path: string) {
+  return invoke<OutputNameTemplate[]>('import_output_templates', { path })
 }

@@ -359,6 +359,4 @@ Issues 和建议欢迎！提交 PR 前请确保代码通过 linter 和测试。
 ## 📚 文档
 
 - [需求与技术方案](docs/REQUIREMENTS.md) — 项目设计文档
-- [应用更新与发布流程](docs/UPDATE_RELEASE.md) — GitHub Actions 发版、更新清单与验证步骤
 - [用户数据与缓存](docs/CACHE_AND_DATA.md) — 本地配置、缓存和临时文件位置
-- [待办事项](docs/TODO.md) — 功能路线图与已知问题

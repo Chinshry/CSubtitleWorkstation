@@ -58,6 +58,8 @@ pub fn run() {
             commands::config::save_config,
             commands::config::export_encode_presets,
             commands::config::import_encode_presets,
+            commands::config::export_output_templates,
+            commands::config::import_output_templates,
             commands::encoder::get_supported_encoders,
             commands::ffmpeg::detect_ffmpeg,
             commands::ffmpeg::set_ffmpeg_path,
