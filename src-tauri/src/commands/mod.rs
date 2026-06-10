@@ -1,4 +1,5 @@
 pub mod avs;
+pub mod cc_subtitle;
 pub mod compress;
 pub mod config;
 pub mod encoder;

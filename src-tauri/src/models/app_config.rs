@@ -20,6 +20,8 @@ pub struct AppConfig {
     pub text_conversion_custom_dictionary: String,
         #[serde(default)]
     pub proofread_term_dictionary: String,
+    #[serde(default)]
+    pub cc_subtitle_replacement_dictionary: String,
 /// 最近使用过的 LOGO 图片，按 last_used_at 倒序，最多保留 10 项
     pub recent_logos: Vec<RecentLogo>,
     /// 按 (分辨率桶, LOGO 图路径) 区分的布局记忆。
@@ -191,6 +193,7 @@ impl Default for AppConfig {
             default_use_avs: false,
             text_conversion_custom_dictionary: String::new(),
                         proofread_term_dictionary: String::new(),
+            cc_subtitle_replacement_dictionary: String::new(),
 recent_logos: Vec::new(),
             logo_layouts: Vec::new(),
         }

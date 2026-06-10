@@ -2,9 +2,11 @@
 import { save } from '@tauri-apps/plugin-dialog'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { loadConfig, saveConfig } from '../api/config'
+import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
 import type { AppConfig } from '../types'
+import { parseRuleDictionary } from '../utils/ruleDictionary'
 import {
   convertChineseText,
   readPlainTextFile,
@@ -48,7 +50,10 @@ const modeLabel = computed(() => (mode.value === 's2t' ? '简体转繁体' : '�
 const outputSuffix = computed(() => (mode.value === 's2t' ? '_繁体' : '_简体'))
 const sourceCount = computed(() => Array.from(sourceText.value).length)
 const resultCount = computed(() => Array.from(resultText.value).length)
-const customRules = computed(() => parseCustomDictionary(customDictionary.value))
+const customRules = computed<CustomConversionRule[]>(() => {
+  return parseRuleDictionary(customDictionary.value)
+    .map((rule) => ({ from: rule.pattern, to: rule.target }))
+})
 const resultDiffSegments = computed(() => diffResult(sourceText.value, resultText.value))
 const sourceLines = computed(() => buildLineNumbers(sourceText.value))
 const resultLines = computed(() => buildLineNumbers(resultText.value))
@@ -56,28 +61,6 @@ const resultLines = computed(() => buildLineNumbers(resultText.value))
 function buildLineNumbers(text: string) {
   const count = text ? text.split(/\r\n|\r|\n/).length : 1
   return Array.from({ length: count }, (_, index) => index + 1)
-}
-
-function parseCustomDictionary(text: string): CustomConversionRule[] {
-  return text
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('#'))
-    .map(parseDictionaryLine)
-    .filter((rule): rule is CustomConversionRule => Boolean(rule))
-}
-
-function parseDictionaryLine(line: string): CustomConversionRule | null {
-  const separators = ['->', '=>', '=', '\t']
-  for (const separator of separators) {
-    const index = line.indexOf(separator)
-    if (index <= 0) continue
-    const from = line.slice(0, index).trim()
-    const to = line.slice(index + separator.length).trim()
-    if (from && to) return { from, to }
-  }
-  return null
 }
 
 function scheduleConvert() {
@@ -458,33 +441,20 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <Teleport to="body">
-        <div
-          v-if="dictionaryOpen"
-          class="dictionary-modal app-modal-active"
-          role="presentation"
-          @click.self="dictionaryOpen = false"
-        >
-          <section class="dictionary-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-title">
-            <div class="dictionary-dialog-head">
-              <div>
-                <h2 id="dictionary-title">自定义词库</h2>
-                <p>每行一条：原词 = 目标词，也支持 原词 -&gt; 目标词。</p>
-              </div>
-              <button type="button" class="field-tool" @click="dictionaryOpen = false">关闭</button>
-            </div>
-            <textarea
-              v-model="customDictionary"
-              spellcheck="false"
-              placeholder="俐落 = 利落&#10;急遽 = 急剧"
-            ></textarea>
-            <div class="dictionary-dialog-foot">
-              <span>{{ customRules.length }} 条规则，修改后会自动记忆并重新转换。</span>
-              <button type="button" class="field-tool primary" @click="dictionaryOpen = false">完成</button>
-            </div>
-          </section>
-        </div>
-      </Teleport>
+      <RuleDictionaryModal
+        v-model:open="dictionaryOpen"
+        v-model="customDictionary"
+        title="自定义词库"
+        description="维护繁简转换后仍需固定的词条，转换时会先匹配规则再输出标准写法。"
+        target-label="标准写法"
+        pattern-label="匹配规则"
+        target-placeholder="例如 利落"
+        pattern-placeholder="例如 俐落"
+        raw-placeholder="[&quot;利落&quot;] = &quot;俐落&quot;"
+        ariaLabel="繁简转换自定义词库"
+        :validate-pattern="false"
+        :supports-capture="false"
+      />
     </section>
   </section>
 </template>

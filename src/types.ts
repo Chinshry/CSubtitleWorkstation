@@ -48,8 +48,9 @@ export type AppConfig = {
   checkUpdateOnStartup: boolean
   defaultUseAvs: boolean
   textConversionCustomDictionary: string
-    proofreadTermDictionary: string
-recentLogos: RecentLogo[]
+  proofreadTermDictionary: string
+  ccSubtitleReplacementDictionary: string
+  recentLogos: RecentLogo[]
   /** 按 (分辨率桶, LOGO 路径) 区分的布局记忆 */
   logoLayouts: LogoLayoutEntry[]
 }
