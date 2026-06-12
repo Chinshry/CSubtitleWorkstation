@@ -2,11 +2,12 @@
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { loadConfig, saveConfig } from '../api/config'
+import AppSelect from '../components/AppSelect.vue'
+import InfoHint from '../components/InfoHint.vue'
 import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import {
   organizeCcSubtitleText,
   readCcSubtitleFile,
-  saveCcSubtitleFile,
   saveCcSubtitleToPath,
   type CcReplacementRule,
   type CcSubtitleResult
@@ -14,41 +15,83 @@ import {
 import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
 import type { AppConfig } from '../types'
-import { parseRuleDictionary } from '../utils/ruleDictionary'
+import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
+
+const INPUT_PREVIEW_LIMIT = 200_000
+const RESULT_PREVIEW_LIMIT = 200_000
 
 const sourceText = ref('')
 const result = ref<CcSubtitleResult | null>(null)
 const pendingFilePath = ref('')
 const replacementEnabled = ref(true)
 const replacementDictionary = ref('')
+const importedStyleNames = ref<string[]>([])
+const assHeaderTemplate = ref('')
+const screenStyleName = ref('')
+const speakStyleName = ref('')
+const stylesImported = ref(false)
 const dictionaryOpen = ref(false)
 const busy = ref(false)
+const organizing = ref(false)
 const statusText = ref('')
 const appConfig = ref<AppConfig | null>(null)
 const toast = useToast()
 let organizeTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
 let organizeSeq = 0
+let organizeInFlight = false
+let organizeAgain = false
 let dictionaryLoaded = false
 const dictionaryLoadPromise = loadReplacementDictionary()
 
 void dictionaryLoadPromise
 
 const resultText = computed(() => result.value?.text ?? '')
-const sourceCount = computed(() => Array.from(sourceText.value).length)
-const resultCount = computed(() => Array.from(resultText.value).length)
+const sourceCount = computed(() => sourceText.value.length)
+const resultCount = computed(() => resultText.value.length)
+const sourcePreviewTruncated = computed(() => sourceText.value.length > INPUT_PREVIEW_LIMIT)
+const resultPreviewTruncated = computed(() => resultText.value.length > RESULT_PREVIEW_LIMIT)
+const sourceEditorText = computed({
+  get: () => previewText(sourceText.value, INPUT_PREVIEW_LIMIT),
+  set: (value: string) => {
+    sourceText.value = value
+  }
+})
+const resultPreviewText = computed(() => previewText(resultText.value, RESULT_PREVIEW_LIMIT))
 const hasResult = computed(() => Boolean(resultText.value))
+const styleOptions = computed(() => importedStyleNames.value.map((style) => ({ value: style, label: style })))
+const styleReady = computed(() => {
+  return stylesImported.value &&
+    importedStyleNames.value.includes(screenStyleName.value) &&
+    importedStyleNames.value.includes(speakStyleName.value)
+})
 const replacementRules = computed<CcReplacementRule[]>(() => {
-  return parseRuleDictionary(replacementDictionary.value)
+  return parseRuleDictionary(replacementDictionary.value, { validatePattern: true })
     .map((rule) => ({ replacement: rule.target, pattern: rule.pattern }))
 })
 const activeReplacementRules = computed(() => replacementEnabled.value ? replacementRules.value : [])
+const ruleHintItems = [
+  '先读取样式参考 ASS，解析 [V4+ Styles]；必须手动选择听轴样式和花字样式。',
+  'SRT 输入会转换为 ASS 输出；ASS / SSA 输入会处理已有 Dialogue 行。',
+  '遇到 [方括号标签]：括号内文本去掉 []，使用花字样式。',
+  '方括号标签后面的台词会另起一条，使用听轴样式。',
+  '没有方括号标签的普通台词整条使用听轴样式。',
+  '台词只处理 \\N 换行和多余空格；',
+  '启用自定义词库时，会按词库规则替换名称或固定写法。'
+]
 
 async function loadReplacementDictionary() {
   try {
     const config = await loadConfig()
     appConfig.value = config
     replacementDictionary.value = config.ccSubtitleReplacementDictionary ?? ''
+    importedStyleNames.value = uniqueStyleNames(config.ccSubtitleStyleNames ?? [])
+    assHeaderTemplate.value = config.ccSubtitleAssHeader ?? ''
+    stylesImported.value = importedStyleNames.value.length > 0
+    const savedScreenStyle = config.ccSubtitleScreenStyleName ?? ''
+    const savedSpeakStyle = config.ccSubtitleSpeakStyleName ?? ''
+    screenStyleName.value = importedStyleNames.value.includes(savedScreenStyle) ? savedScreenStyle : ''
+    speakStyleName.value = importedStyleNames.value.includes(savedSpeakStyle) ? savedSpeakStyle : ''
   } catch (err) {
     statusText.value = String(err)
   } finally {
@@ -67,10 +110,21 @@ function scheduleSaveReplacementDictionary() {
 async function saveReplacementDictionary() {
   try {
     const base = appConfig.value ?? await loadConfig()
-    if (base.ccSubtitleReplacementDictionary === replacementDictionary.value) return
+    const validDictionary = serializeValidRuleDictionary(replacementDictionary.value, { validatePattern: true })
+    if (
+      base.ccSubtitleReplacementDictionary === validDictionary &&
+      arraysEqual(base.ccSubtitleStyleNames ?? [], importedStyleNames.value) &&
+      (base.ccSubtitleAssHeader ?? '') === assHeaderTemplate.value &&
+      (base.ccSubtitleScreenStyleName ?? '') === screenStyleName.value &&
+      (base.ccSubtitleSpeakStyleName ?? '') === speakStyleName.value
+    ) return
     const next: AppConfig = {
       ...base,
-      ccSubtitleReplacementDictionary: replacementDictionary.value
+      ccSubtitleReplacementDictionary: validDictionary,
+      ccSubtitleStyleNames: importedStyleNames.value,
+      ccSubtitleAssHeader: assHeaderTemplate.value,
+      ccSubtitleScreenStyleName: screenStyleName.value,
+      ccSubtitleSpeakStyleName: speakStyleName.value
     }
     appConfig.value = next
     await saveConfig(next)
@@ -86,45 +140,100 @@ function scheduleOrganize() {
     statusText.value = ''
     return
   }
+  if (!styleReady.value) {
+    result.value = null
+    statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式。'
+    return
+  }
   organizeTimer = setTimeout(() => {
     void organizeCurrentText()
-  }, 180)
+  }, 500)
 }
 
 async function organizeCurrentText() {
+  if (organizeInFlight) {
+    organizeAgain = true
+    return
+  }
   const seq = ++organizeSeq
-  busy.value = true
+  organizeInFlight = true
+  organizing.value = true
   try {
     await dictionaryLoadPromise
-    const next = await organizeCcSubtitleText(sourceText.value, activeReplacementRules.value)
+    if (!styleReady.value) {
+      result.value = null
+      statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式。'
+      return
+    }
+    const next = await organizeCcSubtitleText(
+      sourceText.value,
+      activeReplacementRules.value,
+      screenStyleName.value,
+      speakStyleName.value,
+      assHeaderTemplate.value
+    )
     if (seq !== organizeSeq) return
     result.value = next
-    statusText.value = `已整理：改动 ${next.changedLines} 行，新增 ${next.insertedLines} 行，自定义词库命中 ${next.replacementCount} 处`
+    statusText.value = ''
   } catch (err) {
     if (seq !== organizeSeq) return
     statusText.value = String(err)
     toast.error('CC 字幕整理失败', 2200)
   } finally {
-    if (seq === organizeSeq) busy.value = false
+    organizing.value = false
+    organizeInFlight = false
+    if (organizeAgain) {
+      organizeAgain = false
+      scheduleOrganize()
+    }
   }
 }
 
-async function chooseFile() {
+async function importReferenceAssStyles() {
   if (busy.value) return
   const selected = await open({
     multiple: false,
     filters: [
       { name: 'ASS subtitles', extensions: ['ass', 'ssa'] },
-      { name: 'Text files', extensions: ['txt'] },
       { name: 'All files', extensions: ['*'] }
     ]
   })
-  if (typeof selected === 'string') {
-    await loadFile(selected)
+  if (typeof selected !== 'string') return
+
+  busy.value = true
+  try {
+    const text = await readCcSubtitleFile(selected)
+    const styles = parseAssStyleNames(text)
+    if (!styles.length) {
+      statusText.value = '没有在样式参考 ASS 的 [V4+ Styles] 中解析到样式。'
+      toast.error('未解析到样式', 2200)
+      return
+    }
+
+    importedStyleNames.value = styles
+    assHeaderTemplate.value = extractReusableAssHeader(text)
+    stylesImported.value = true
+    screenStyleName.value = ''
+    speakStyleName.value = ''
+    result.value = null
+    statusText.value = `已导入 ${styles.length} 个样式，请选择听轴样式和花字样式。`
+    toast.success('已导入样式', 1600)
+    scheduleSaveReplacementDictionary()
+    scheduleOrganize()
+  } catch (err) {
+    statusText.value = String(err)
+    toast.error('读取样式失败', 2200)
+  } finally {
+    busy.value = false
   }
 }
 
 async function loadFile(path: string) {
+  if (!styleReady.value) {
+    statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式，再导入需要整理的 SRT。'
+    toast.error('请先读取样式', 2200)
+    return
+  }
   busy.value = true
   statusText.value = '正在读取字幕文件...'
   try {
@@ -142,6 +251,75 @@ async function loadFile(path: string) {
   }
 }
 
+function parseAssStyleNames(text: string) {
+  const names: string[] = []
+  let inStyles = false
+  let nameIndex = 0
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    if (line.startsWith('[') && line.endsWith(']')) {
+      inStyles = line.toLowerCase() === '[v4+ styles]'
+      continue
+    }
+    if (!inStyles) continue
+    if (line.toLowerCase().startsWith('format:')) {
+      const fields = line.slice(line.indexOf(':') + 1).split(',').map((field) => field.trim().toLowerCase())
+      const nextNameIndex = fields.indexOf('name')
+      nameIndex = nextNameIndex >= 0 ? nextNameIndex : 0
+      continue
+    }
+    if (!line.toLowerCase().startsWith('style:')) continue
+
+    const value = line.slice(line.indexOf(':') + 1).trim()
+    const fields = value.split(',')
+    const name = fields[nameIndex]?.trim()
+    if (name) names.push(name)
+  }
+
+  return uniqueStyleNames(names)
+}
+
+function extractReusableAssHeader(text: string) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  const kept: string[] = []
+  let skipSection = false
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      const section = trimmed.toLowerCase()
+      if (section === '[events]') break
+      skipSection = section === '[aegisub project garbage]'
+    }
+    if (!skipSection) kept.push(line)
+  }
+
+  while (kept.length && !kept[kept.length - 1].trim()) {
+    kept.pop()
+  }
+  return kept.join('\n')
+}
+
+function uniqueStyleNames(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+}
+
+function arraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) return false
+  return left.every((value, index) => value === right[index])
+}
+
+function previewText(text: string, limit: number) {
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit)}\n\n... 已省略预览 ${formatCount(text.length - limit)} 字，复制和导出仍使用完整内容。`
+}
+
+function formatCount(count: number) {
+  return count.toLocaleString('zh-CN')
+}
+
 async function copyResult() {
   if (!resultText.value) return
   try {
@@ -153,40 +331,12 @@ async function copyResult() {
 }
 
 function clearText() {
+  organizeSeq += 1
+  organizeAgain = false
   sourceText.value = ''
   result.value = null
   pendingFilePath.value = ''
   statusText.value = ''
-}
-
-async function exportPendingFile() {
-  if (!pendingFilePath.value || !resultText.value || busy.value) return
-  busy.value = true
-  try {
-    const saved = await saveCcSubtitleFile(pendingFilePath.value, resultText.value, '_cc整理', false)
-    statusText.value = `已导出：${saved.outputPath}`
-    toast.success('已导出', 1800)
-  } catch (err) {
-    const message = String(err)
-    if (!message.startsWith('OUTPUT_EXISTS:')) {
-      statusText.value = message
-      toast.error('导出失败', 2200)
-      return
-    }
-
-    const outputPath = message.slice('OUTPUT_EXISTS:'.length)
-    const shouldOverwrite = window.confirm(`输出文件已存在：\n${outputPath}\n\n是否覆盖？`)
-    if (!shouldOverwrite) {
-      statusText.value = '已取消导出，未覆盖现有文件。'
-      return
-    }
-
-    const saved = await saveCcSubtitleFile(pendingFilePath.value, resultText.value, '_cc整理', true)
-    statusText.value = `已覆盖：${saved.outputPath}`
-    toast.success('已覆盖导出', 1800)
-  } finally {
-    busy.value = false
-  }
 }
 
 async function exportAs() {
@@ -196,7 +346,6 @@ async function exportAs() {
     defaultPath: buildDefaultExportPath(pendingFilePath.value),
     filters: [
       { name: 'ASS subtitles', extensions: ['ass', 'ssa'] },
-      { name: 'Text files', extensions: ['txt'] },
       { name: 'All files', extensions: ['*'] }
     ]
   })
@@ -222,15 +371,18 @@ function buildDefaultExportPath(sourcePath: string) {
   const fileName = separatorIndex >= 0 ? sourcePath.slice(separatorIndex + 1) : sourcePath
   const dotIndex = fileName.lastIndexOf('.')
   const stem = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName
-  const extension = dotIndex > 0 ? fileName.slice(dotIndex) : '.ass'
-  return `${directory}${stem}_cc整理${extension}`
+  return `${directory}${stem}_cc整理.ass`
 }
 
-watch([sourceText, replacementEnabled], scheduleOrganize)
+watch([sourceText, replacementEnabled, screenStyleName, speakStyleName], scheduleOrganize)
 
 watch(replacementDictionary, () => {
   scheduleSaveReplacementDictionary()
   scheduleOrganize()
+})
+
+watch([screenStyleName, speakStyleName], () => {
+  scheduleSaveReplacementDictionary()
 })
 
 watch(pendingDrop, (drop) => {
@@ -250,38 +402,72 @@ onUnmounted(() => {
 
 <template>
   <section class="cc-subtitle-workspace">
-    <div v-if="globalDragActive" class="drop-overlay">松开以读取 ASS / SSA 字幕</div>
+    <div v-if="globalDragActive" class="drop-overlay">松开以读取 ASS / SSA / SRT 字幕</div>
 
     <section class="panel cc-panel">
       <div class="panel-heading cc-heading">
         <div>
           <h2>CC 字幕整理</h2>
-          <p>把 Web CC 的说话人标签拆成花字行，并将台词整理为听轴行。</p>
+          <p class="cc-description">
+            <span>把 Web CC 的说话人标签拆成花字行，并将台词整理为听轴行。</span>
+            <span class="cc-rule-summary">整理规则</span>
+            <span class="cc-rule-help">
+              <InfoHint
+                title="CC 字幕整理规则"
+                command="读取样式 → 选择听轴/花字 → 导入待整理字幕"
+                body="用于把 Web CC 字幕整理成适合 Aegisub 后续精修的 ASS 结构。"
+                :items="ruleHintItems"
+                placement="right"
+              />
+            </span>
+          </p>
+          <p v-if="statusText" class="cc-status-summary">{{ statusText }}</p>
         </div>
         <div class="cc-actions">
+          <button type="button" class="secondary" :disabled="busy" @click="importReferenceAssStyles">读取样式</button>
+          <label class="style-select style-select-control">
+            <span>听轴样式</span>
+            <AppSelect
+              v-model="speakStyleName"
+              :options="styleOptions"
+              placeholder="未选择"
+              :disabled="!importedStyleNames.length || busy"
+            />
+          </label>
+          <label class="style-select style-select-control">
+            <span>花字样式</span>
+            <AppSelect
+              v-model="screenStyleName"
+              :options="styleOptions"
+              placeholder="未选择"
+              :disabled="!importedStyleNames.length || busy"
+            />
+          </label>
           <label class="switch-row">
             <input v-model="replacementEnabled" type="checkbox" />
             <span class="switch"></span>
             <span>启用自定义词库</span>
           </label>
           <button type="button" class="secondary" @click="dictionaryOpen = true">自定义词库</button>
-          <button type="button" class="secondary" :disabled="busy" @click="chooseFile">选择字幕</button>
         </div>
       </div>
 
-      <div class="cc-grid">
+      <div class="cc-grid" :class="{ disabled: !styleReady }">
         <div class="cc-field">
           <span class="field-head">
             <strong>输入</strong>
             <span class="field-tools">
-              <small>{{ sourceCount }} 字</small>
-              <button class="field-tool" type="button" :disabled="!sourceText || busy" @click="clearText">清空</button>
+              <small>{{ formatCount(sourceCount) }} 字</small>
+              <small v-if="sourcePreviewTruncated">仅预览前 {{ formatCount(INPUT_PREVIEW_LIMIT) }} 字</small>
+              <button class="field-tool" type="button" :disabled="!styleReady || !sourceText || busy" @click="clearText">清空</button>
             </span>
           </span>
           <textarea
-            v-model="sourceText"
+            v-model="sourceEditorText"
             spellcheck="false"
-            placeholder="粘贴 ASS / SSA 内容，或拖入字幕文件"
+            :disabled="!styleReady || busy"
+            :readonly="sourcePreviewTruncated"
+            :placeholder="styleReady ? '粘贴 ASS / SSA / SRT 内容，或拖入字幕文件' : '先读取样式参考 ASS 并选择听轴/花字样式，再粘贴或拖入需要整理的 SRT'"
           ></textarea>
         </div>
 
@@ -289,21 +475,17 @@ onUnmounted(() => {
           <span class="field-head">
             <strong>结果</strong>
             <span class="field-tools">
-              <small>{{ resultCount }} 字</small>
-              <button class="field-tool" type="button" :disabled="!hasResult" @click="copyResult">复制</button>
+              <small v-if="organizing">整理中...</small>
+              <small>{{ formatCount(resultCount) }} 字</small>
+              <small v-if="resultPreviewTruncated">仅预览前 {{ formatCount(RESULT_PREVIEW_LIMIT) }} 字</small>
+              <button class="field-tool" type="button" :disabled="!styleReady || !hasResult" @click="copyResult">复制</button>
+              <button class="field-tool primary" type="button" :disabled="!styleReady || !hasResult || busy || organizing" @click="exportAs">导出</button>
             </span>
           </span>
-          <pre class="cc-result">{{ resultText }}</pre>
+          <pre class="cc-result">{{ resultPreviewText }}</pre>
         </div>
       </div>
 
-      <div class="cc-footer">
-        <span>{{ statusText || '整理规则：说话人标签转花字，台词转听轴，清理省略号、换行和多余空格。' }}</span>
-        <div class="actions">
-          <button type="button" class="secondary" :disabled="!hasResult || busy" @click="exportAs">另存为</button>
-          <button type="button" :disabled="!pendingFilePath || !hasResult || busy" @click="exportPendingFile">导出到原目录</button>
-        </div>
-      </div>
     </section>
 
     <RuleDictionaryModal
@@ -312,10 +494,10 @@ onUnmounted(() => {
       title="自定义词库"
       description="维护 CC 说话人和台词里的名称规则，整理字幕时会把命中的文本替换为标准写法。"
       target-label="标准写法"
-      pattern-label="匹配规则"
+      pattern-label="匹配规则(支持正则)"
       target-placeholder="例如 章昊"
       pattern-placeholder="例如 (?i)ZHANG\\s*HAO"
-      raw-placeholder="[&quot;章昊&quot;] = &quot;(?i)ZHANG\\s*HAO&quot;"
+      raw-placeholder="&quot;章昊&quot; = &quot;(?i)ZHANG\\s*HAO&quot;"
       ariaLabel="CC 字幕自定义词库"
     />
   </section>
@@ -323,13 +505,19 @@ onUnmounted(() => {
 
 <style scoped>
 .cc-subtitle-workspace {
+  display: grid;
+  height: 100%;
   min-height: 0;
   position: relative;
 }
 
 .cc-panel {
+  box-sizing: border-box;
   display: grid;
   gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
 }
 
 .cc-heading {
@@ -341,15 +529,55 @@ onUnmounted(() => {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
+}
+
+.style-select {
+  align-items: center;
+  color: #667582;
+  display: inline-flex;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.style-select-control {
+  min-width: 190px;
+}
+
+.style-select-control > span {
+  flex: 0 0 auto;
+  line-height: 1.2;
+}
+
+.style-select-control :deep(.app-select) {
+  width: 132px;
+}
+
+.style-select-control :deep(.app-select-trigger) {
+  background: #eef2f6;
+  border-color: #dce5ec;
+  border-radius: 8px;
+  font-size: 13px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.cc-field textarea:disabled {
+  color: #8a97a3;
+  cursor: not-allowed;
 }
 
 .cc-grid {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  min-height: 480px;
+  height: 100%;
+  min-height: 0;
+}
+
+.cc-grid.disabled {
+  opacity: 0.62;
 }
 
 .cc-field {
@@ -411,23 +639,66 @@ onUnmounted(() => {
   width: 100%;
 }
 
+.cc-field textarea:disabled {
+  background: #f1f5f8;
+}
+
+.cc-field textarea:read-only {
+  background: #f6f9fb;
+  cursor: default;
+}
+
+.cc-field textarea,
+.cc-result {
+  box-sizing: border-box;
+  height: 100%;
+}
+
 .cc-result {
   user-select: text;
 }
 
-.cc-footer {
-  align-items: center;
-  border-top: 1px solid #e4ebf0;
+.cc-description,
+.cc-status-summary {
   color: #667582;
-  display: flex;
-  gap: 14px;
-  justify-content: space-between;
-  padding-top: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
 }
 
-.cc-footer > span {
-  font-size: 13px;
-  overflow-wrap: anywhere;
+.cc-description {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cc-rule-summary {
+  flex: 0 0 auto;
+}
+
+.cc-rule-help {
+  display: inline-flex;
+}
+
+.cc-rule-help :deep(.rich-hint-card) {
+  max-width: min(620px, calc(100vw - 56px));
+  min-width: min(520px, calc(100vw - 56px));
+  padding: 14px 16px;
+}
+
+.cc-rule-help :deep(.rich-hint-list) {
+  gap: 7px;
+}
+
+.cc-rule-help :deep(.rich-hint-list span) {
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.cc-status-summary {
+  margin-top: 2px;
 }
 
 .cc-dictionary-modal {
@@ -554,7 +825,6 @@ onUnmounted(() => {
   }
 
   .cc-heading,
-  .cc-footer,
   .cc-dictionary-dialog-head,
   .cc-dictionary-toolbar,
   .cc-dictionary-dialog-foot {
@@ -562,8 +832,7 @@ onUnmounted(() => {
     flex-direction: column;
   }
 
-  .cc-actions,
-  .cc-footer .actions {
+  .cc-actions {
     justify-content: flex-start;
   }
 

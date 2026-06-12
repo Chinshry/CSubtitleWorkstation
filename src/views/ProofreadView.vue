@@ -14,13 +14,14 @@ import {
   type ProofreadTermRule
 } from '../api/proofread'
 import type { AppConfig } from '../types'
-import { parseRuleDictionary } from '../utils/ruleDictionary'
+import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
 
 const sourceText = ref('')
 const issues = ref<ProofreadIssue[]>([])
 const selectedIssueId = ref('')
 const statusText = ref('')
 const busy = ref(false)
+const checking = ref(false)
 const pendingFilePath = ref('')
 const termDictionary = ref('')
 const dictionaryOpen = ref(false)
@@ -34,6 +35,8 @@ const toast = useToast()
 let proofreadTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
 let proofreadSeq = 0
+let proofreadInFlight = false
+let proofreadAgain = false
 let termDictionaryLoaded = false
 const termDictionaryLoadPromise = loadTermDictionary()
 
@@ -43,7 +46,7 @@ const issueCount = computed(() => issues.value.length)
 const sourceCount = computed(() => Array.from(sourceText.value).length)
 const sourceLines = computed(() => buildLineNumbers(sourceText.value))
 const termRules = computed<ProofreadTermRule[]>(() => {
-  return parseRuleDictionary(termDictionary.value)
+  return parseRuleDictionary(termDictionary.value, { validatePattern: true })
     .map((rule) => ({ canonical: rule.target, pattern: rule.pattern }))
 })
 const proofreadGridStyle = computed(() => ({
@@ -92,10 +95,11 @@ function scheduleSaveTermDictionary() {
 async function saveTermDictionary() {
   try {
     const base = appConfig.value ?? await loadConfig()
-    if (base.proofreadTermDictionary === termDictionary.value) return
+    const validDictionary = serializeValidRuleDictionary(termDictionary.value, { validatePattern: true })
+    if (base.proofreadTermDictionary === validDictionary) return
     const next: AppConfig = {
       ...base,
-      proofreadTermDictionary: termDictionary.value
+      proofreadTermDictionary: validDictionary
     }
     appConfig.value = next
     await saveConfig(next)
@@ -325,12 +329,17 @@ function scheduleProofread() {
   }
   proofreadTimer = setTimeout(() => {
     void runProofread()
-  }, 180)
+  }, 500)
 }
 
 async function runProofread() {
+  if (proofreadInFlight) {
+    proofreadAgain = true
+    return
+  }
   const seq = ++proofreadSeq
-  busy.value = true
+  proofreadInFlight = true
+  checking.value = true
   try {
     await termDictionaryLoadPromise
     const nextIssues = await proofreadText(sourceText.value, termRules.value)
@@ -342,11 +351,18 @@ async function runProofread() {
     if (seq !== proofreadSeq) return
     statusText.value = String(err)
   } finally {
-    if (seq === proofreadSeq) busy.value = false
+    checking.value = false
+    proofreadInFlight = false
+    if (proofreadAgain) {
+      proofreadAgain = false
+      scheduleProofread()
+    }
   }
 }
 
 function clearText() {
+  proofreadSeq += 1
+  proofreadAgain = false
   sourceText.value = ''
   issues.value = []
   selectedIssueId.value = ''
@@ -386,7 +402,7 @@ function applyIssue(issue: ProofreadIssue) {
   const range = resolveIssueRange(issue)
   sourceText.value = `${sourceText.value.slice(0, range.start)}${issue.suggestion}${sourceText.value.slice(range.end)}`
   statusText.value = `已应用：${issue.original} → ${issue.suggestion}`
-  void runProofread()
+  scheduleProofread()
 }
 
 function ignoreIssue(issue: ProofreadIssue) {
@@ -414,7 +430,7 @@ async function loadDroppedFile(path: string) {
     const text = await readProofreadFile(path)
     pendingFilePath.value = path
     sourceText.value = text
-    await runProofread()
+    scheduleProofread()
     pushDiag(`proofread loaded: ${path}`)
   } catch (err) {
     statusText.value = String(err)
@@ -527,6 +543,7 @@ onUnmounted(() => {
               <small>{{ sourceCount }} 字</small>
               <button type="button" class="field-tool" :disabled="!sourceText" @click="copyText">复制</button>
               <button type="button" class="field-tool" :disabled="!sourceText" @click="clearText">清空</button>
+              <button type="button" class="field-tool primary" :disabled="!sourceText || busy" @click="exportFileAs">导出</button>
             </span>
           </span>
           <div class="text-editor-shell">
@@ -558,8 +575,7 @@ onUnmounted(() => {
               <strong>疑似问题</strong>
             </div>
             <div class="issue-toolbar">
-              <small>{{ busy ? '检查中...' : `${issueCount} 项` }}</small>
-              <button type="button" :disabled="!sourceText || busy" @click="exportFileAs">导出</button>
+              <small>{{ checking ? '检查中...' : `${issueCount} 项` }}</small>
             </div>
           </div>
           <div v-if="issues.length" class="issue-items">
@@ -605,10 +621,10 @@ onUnmounted(() => {
         title="自定义词库"
         description="维护专有名词、艺人名和固定译名，校对时会按匹配规则提示统一写法。"
         target-label="标准写法"
-        pattern-label="匹配规则"
+        pattern-label="匹配规则(支持正则)"
         target-placeholder="例如 ZEROBASEONE"
         pattern-placeholder="例如 (?i)ZE[EROBASN]{7,12}"
-        raw-placeholder="[&quot;ZEROBASEONE&quot;] = &quot;(?i)ZE[EROBASN]{7,12}&quot;"
+        raw-placeholder="&quot;ZEROBASEONE&quot; = &quot;(?i)ZE[EROBASN]{7,12}&quot;"
         ariaLabel="字幕校对自定义词库"
       />
 
@@ -619,14 +635,17 @@ onUnmounted(() => {
 <style scoped>
 .proofread-workspace {
   display: grid;
+  height: 100%;
   min-height: 0;
   position: relative;
 }
 
 .proofread-panel {
+  box-sizing: border-box;
   display: grid;
   gap: 10px;
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
 }
 
@@ -649,6 +668,7 @@ onUnmounted(() => {
     minmax(280px, calc(var(--source-pane-percent, 58%) - 6px))
     12px
     minmax(300px, calc(var(--issue-pane-percent, 42%) - 6px));
+  height: 100%;
   min-height: 0;
 }
 
@@ -694,7 +714,7 @@ onUnmounted(() => {
 .issue-list {
   display: grid;
   gap: 8px;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
@@ -745,13 +765,13 @@ onUnmounted(() => {
   border-radius: 8px;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
-  height: max(360px, calc(100vh - 252px));
+  height: 100%;
   min-height: 320px;
   overflow: hidden;
 }
 
 .line-numbers {
-  background: #f2f5f7;
+  background: linear-gradient(#f2f5f7, #f2f5f7) 0 0 / 100% calc(100% - 1px) no-repeat;
   border-right: 1px solid #d8e2e8;
   color: #8a98a3;
   font: 12px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
@@ -769,6 +789,7 @@ onUnmounted(() => {
 .proofread-source textarea {
   background: transparent;
   border: 0;
+  box-sizing: border-box;
   color: #18202a;
   font: 14px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
   height: 100%;
@@ -807,25 +828,13 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.issue-toolbar button {
-  background: #e5eaee;
-  color: #24313c;
-  font-size: 13px;
-  min-height: 28px;
-  padding: 0 10px;
-}
-
-.issue-toolbar button:disabled {
-  background: #dce4e9;
-  color: #7a8790;
-}
-
 .issue-items,
 .empty-issues {
   background: #f6f8fa;
   border: 1px solid #d8e2e8;
   border-radius: 8px;
-  height: max(360px, calc(100vh - 252px));
+  box-sizing: border-box;
+  height: 100%;
   min-height: 320px;
   overflow: auto;
   padding: 8px;

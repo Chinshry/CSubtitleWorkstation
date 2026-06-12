@@ -9,20 +9,43 @@ export type EditableRuleDictionaryEntry = RuleDictionaryEntry & {
   patternValid: boolean
 }
 
-export function parseRuleDictionary(text: string): RuleDictionaryEntry[] {
-  return text
-    .replace(/\r\n/g, '\n')
-    .split('\n')
+type RuleDictionaryOptions = {
+  validatePattern?: boolean
+}
+
+export function parseRuleDictionary(
+  text: string,
+  options: RuleDictionaryOptions = {}
+): RuleDictionaryEntry[] {
+  return getValidRuleDictionaryEntries(text, options)
+}
+
+export function getValidRuleDictionaryEntries(
+  text: string,
+  options: RuleDictionaryOptions = {}
+) {
+  return getRuleDictionaryLines(text)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('#'))
     .map(parseRuleDictionaryLine)
     .filter((rule): rule is RuleDictionaryEntry => Boolean(rule))
+    .filter((rule) => rule.target.trim() && rule.pattern.trim())
+    .filter((rule) => !options.validatePattern || isValidRegexPattern(rule.pattern))
+}
+
+export function serializeValidRuleDictionary(
+  text: string,
+  options: RuleDictionaryOptions = {}
+) {
+  return getValidRuleDictionaryEntries(text, options)
+    .map((rule) => serializeRuleDictionaryEntry(rule.target, rule.pattern))
+    .join('\n')
 }
 
 export function parseRuleDictionaryLine(line: string): RuleDictionaryEntry | null {
-  const tableMatch = line.match(/^\["(.*?)"\]\s*=\s*"(.*?)"\s*,?$/)
-  if (tableMatch) {
-    return { target: tableMatch[1].trim(), pattern: tableMatch[2].trim() }
+  const quotedMatch = line.match(/^"(.*?)"\s*=\s*"(.*?)"\s*,?$/)
+  if (quotedMatch) {
+    return { target: quotedMatch[1].trim(), pattern: quotedMatch[2].trim() }
   }
 
   const separators = ['->', '=>', '=', '\t']
@@ -37,7 +60,7 @@ export function parseRuleDictionaryLine(line: string): RuleDictionaryEntry | nul
 }
 
 export function serializeRuleDictionaryEntry(target: string, pattern: string) {
-  return `[${JSON.stringify(target.trim())}] = ${JSON.stringify(pattern.trim())}`
+  return `${JSON.stringify(target.trim())} = ${JSON.stringify(pattern.trim())}`
 }
 
 export function buildEditableRuleDictionaryEntries(
@@ -126,8 +149,6 @@ export function applyCapturePlaceholders(target: string, captures: RegExpMatchAr
 }
 
 function stripOptionalQuotes(value: string) {
-  const bracketMatch = value.match(/^\["(.+)"\]$/)
-  if (bracketMatch) return bracketMatch[1]
   if (
     (value.startsWith('"') && value.endsWith('"')) ||
     (value.startsWith("'") && value.endsWith("'"))

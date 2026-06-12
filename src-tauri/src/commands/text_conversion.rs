@@ -17,7 +17,19 @@ pub struct SavedTextConversion {
 }
 
 #[tauri::command]
-pub fn convert_chinese_text(
+pub async fn convert_chinese_text(
+    text: String,
+    mode: String,
+    custom_rules: Option<Vec<CustomConversionRule>>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        convert_chinese_text_inner(text, mode, custom_rules)
+    })
+    .await
+    .map_err(|err| format!("Failed to run Chinese conversion: {err}"))?
+}
+
+fn convert_chinese_text_inner(
     text: String,
     mode: String,
     custom_rules: Option<Vec<CustomConversionRule>>,
@@ -149,7 +161,7 @@ fn output_path_with_suffix(input_path: &Path, suffix: &str) -> Result<PathBuf, S
 
 #[cfg(test)]
 mod tests {
-    use super::{convert_chinese_text, CustomConversionRule};
+    use super::{convert_chinese_text_inner as convert_chinese_text, CustomConversionRule};
 
     #[test]
     fn converts_taiwan_phrases_to_mainland_simplified() {

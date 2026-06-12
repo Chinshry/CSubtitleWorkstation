@@ -34,7 +34,16 @@ pub struct SavedProofreadFile {
 }
 
 #[tauri::command]
-pub fn proofread_text(
+pub async fn proofread_text(
+    text: String,
+    term_rules: Option<Vec<ProofreadTermRule>>,
+) -> Result<Vec<ProofreadIssue>, String> {
+    tauri::async_runtime::spawn_blocking(move || proofread_text_inner(text, term_rules))
+        .await
+        .map_err(|err| format!("Failed to run proofread: {err}"))?
+}
+
+fn proofread_text_inner(
     text: String,
     term_rules: Option<Vec<ProofreadTermRule>>,
 ) -> Result<Vec<ProofreadIssue>, String> {
@@ -357,7 +366,7 @@ fn is_verb_or_adjective(tag: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{proofread_text as proofread_text_command, ProofreadIssue, ProofreadTermRule};
+    use super::{proofread_text_inner as proofread_text_command, ProofreadIssue, ProofreadTermRule};
 
     fn proofread_text(text: String) -> Result<Vec<ProofreadIssue>, String> {
         proofread_text_command(text, None)

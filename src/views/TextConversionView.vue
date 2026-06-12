@@ -6,7 +6,7 @@ import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
 import type { AppConfig } from '../types'
-import { parseRuleDictionary } from '../utils/ruleDictionary'
+import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
 import {
   convertChineseText,
   readPlainTextFile,
@@ -20,6 +20,8 @@ type DiffSegment = {
   text: string
   changed: boolean
 }
+
+const DIFF_HIGHLIGHT_CHAR_LIMIT = 12000
 
 const mode = ref<ChineseConversionMode>('t2s')
 const sourceText = ref('')
@@ -40,6 +42,8 @@ const toast = useToast()
 let convertTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
 let convertSeq = 0
+let convertInFlight = false
+let convertAgain = false
 let scrollSyncing = false
 let customDictionaryLoaded = false
 const customDictionaryLoadPromise = loadCustomDictionary()
@@ -74,13 +78,19 @@ function scheduleConvert() {
   textBusy.value = true
   convertTimer = setTimeout(() => {
     void convertCurrentText()
-  }, 220)
+  }, 500)
 }
 
 async function convertCurrentText() {
+  if (convertInFlight) {
+    convertAgain = true
+    return
+  }
   const seq = ++convertSeq
   const text = sourceText.value
   const rules = customRules.value
+  convertInFlight = true
+  textBusy.value = true
   try {
     const converted = await convertChineseText(text, mode.value, rules)
     if (seq !== convertSeq) return
@@ -90,7 +100,12 @@ async function convertCurrentText() {
     if (seq !== convertSeq) return
     fileStatus.value = String(err)
   } finally {
-    if (seq === convertSeq) textBusy.value = false
+    textBusy.value = false
+    convertInFlight = false
+    if (convertAgain) {
+      convertAgain = false
+      scheduleConvert()
+    }
   }
 }
 
@@ -121,10 +136,11 @@ function scheduleSaveCustomDictionary() {
 async function saveCustomDictionary() {
   try {
     const base = appConfig.value ?? await loadConfig()
-    if (base.textConversionCustomDictionary === customDictionary.value) return
+    const validDictionary = serializeValidRuleDictionary(customDictionary.value, { validatePattern: false })
+    if (base.textConversionCustomDictionary === validDictionary) return
     const next: AppConfig = {
       ...base,
-      textConversionCustomDictionary: customDictionary.value
+      textConversionCustomDictionary: validDictionary
     }
     appConfig.value = next
     await saveConfig(next)
@@ -151,6 +167,8 @@ async function copyResult() {
 }
 
 function clearText() {
+  convertSeq += 1
+  convertAgain = false
   sourceText.value = ''
   resultText.value = ''
   fileStatus.value = ''
@@ -296,6 +314,9 @@ async function exportTextFileAs() {
 
 function diffResult(source: string, result: string): DiffSegment[] {
   if (!result) return []
+  if (source.length > DIFF_HIGHLIGHT_CHAR_LIMIT || result.length > DIFF_HIGHLIGHT_CHAR_LIMIT) {
+    return [{ text: result, changed: false }]
+  }
   const sourceChars = Array.from(source)
   const resultChars = Array.from(result)
   const sourceLength = sourceChars.length
@@ -406,7 +427,7 @@ onUnmounted(() => {
         <div class="conversion-field">
           <span class="field-head">
             <strong>结果</strong>
-            <span class="result-tools">
+            <span class="field-tools">
               <small>{{ resultCount }} 字</small>
               <button class="field-tool" type="button" :disabled="!resultText" @click="copyResult">复制</button>
               <button
@@ -447,10 +468,10 @@ onUnmounted(() => {
         title="自定义词库"
         description="维护繁简转换后仍需固定的词条，转换时会先匹配规则再输出标准写法。"
         target-label="标准写法"
-        pattern-label="匹配规则"
+        pattern-label="匹配规则(支持正则)"
         target-placeholder="例如 利落"
         pattern-placeholder="例如 俐落"
-        raw-placeholder="[&quot;利落&quot;] = &quot;俐落&quot;"
+        raw-placeholder="&quot;利落&quot; = &quot;俐落&quot;"
         ariaLabel="繁简转换自定义词库"
         :validate-pattern="false"
         :supports-capture="false"
@@ -462,14 +483,17 @@ onUnmounted(() => {
 <style scoped>
 .text-conversion-workspace {
   display: grid;
+  height: 100%;
   min-height: 0;
   position: relative;
 }
 
 .text-conversion-panel {
+  box-sizing: border-box;
   display: grid;
   gap: 10px;
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
 }
 
@@ -520,13 +544,14 @@ onUnmounted(() => {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
 }
 
 .conversion-field {
   display: grid;
   gap: 8px;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
@@ -568,25 +593,19 @@ onUnmounted(() => {
   color: #7a8790;
 }
 
-.result-tools {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
 .text-editor-shell {
   background: #fbfcfd;
   border: 1px solid #d8e2e8;
   border-radius: 8px;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
-  height: max(360px, calc(100vh - 252px));
+  height: 100%;
   min-height: 320px;
   overflow: hidden;
 }
 
 .line-numbers {
-  background: #f2f5f7;
+  background: linear-gradient(#f2f5f7, #f2f5f7) 0 0 / 100% calc(100% - 1px) no-repeat;
   border-right: 1px solid #d8e2e8;
   color: #8a98a3;
   font: 12px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
@@ -650,7 +669,6 @@ onUnmounted(() => {
 }
 
 .field-tools small,
-.result-tools small,
 .dictionary-dialog-foot span {
   color: #667582;
   font-size: 12px;
@@ -669,7 +687,7 @@ onUnmounted(() => {
     justify-content: flex-start;
   }
 
-  .result-tools {
+  .field-tools {
     flex-wrap: wrap;
     justify-content: flex-end;
   }

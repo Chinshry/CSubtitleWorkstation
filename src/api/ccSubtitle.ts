@@ -16,8 +16,20 @@ export type CcReplacementRule = {
   pattern: string
 }
 
-export function organizeCcSubtitleText(text: string, replacementRules: CcReplacementRule[] = []) {
-  return invoke<CcSubtitleResult>('organize_cc_subtitle_text', { text, replacementRules })
+export function organizeCcSubtitleText(
+  text: string,
+  replacementRules: CcReplacementRule[] = [],
+  screenStyleName = '',
+  speakStyleName = '',
+  assHeader = ''
+) {
+  return invoke<CcSubtitleResult>('organize_cc_subtitle_text', {
+    text,
+    replacementRules,
+    screenStyleName,
+    speakStyleName,
+    assHeader
+  })
 }
 
 export function readCcSubtitleFile(path: string) {

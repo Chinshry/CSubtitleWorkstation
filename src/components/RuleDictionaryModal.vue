@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import {
   addRuleDictionaryEntry,
   applyCapturePlaceholders,
@@ -11,6 +11,7 @@ import {
 } from '../utils/ruleDictionary'
 
 type PreviewMatch = {
+  lineIndex: number
   ruleLabel: string
   original: string
   suggestion: string
@@ -43,6 +44,7 @@ const emit = defineEmits<{
 
 const mode = ref<'table' | 'raw'>('table')
 const testText = ref('')
+const entryEditorRef = ref<HTMLElement | null>(null)
 
 const rules = computed(() => parseRuleDictionary(props.modelValue))
 const entries = computed(() => buildEditableRuleDictionaryEntries(props.modelValue, {
@@ -53,7 +55,8 @@ const previewMatches = computed<PreviewMatch[]>(() => {
   if (!testText.value.trim()) return []
 
   const matches: PreviewMatch[] = []
-  for (const rule of rules.value) {
+  for (const rule of entries.value) {
+    if (!rule.valid || !rule.patternValid) continue
     const regex = props.validatePattern
       ? buildRegexFromPattern(rule.pattern)
       : buildRegexFromPattern(escapeRegExp(rule.pattern))
@@ -70,6 +73,7 @@ const previewMatches = computed<PreviewMatch[]>(() => {
 
       const index = match.index ?? 0
       matches.push({
+        lineIndex: rule.lineIndex,
         ruleLabel: rule.target,
         original,
         suggestion,
@@ -95,8 +99,24 @@ function updateEntry(lineIndex: number, field: 'target' | 'pattern', value: stri
   emit('update:modelValue', setRuleDictionaryEntry(props.modelValue, lineIndex, field, value))
 }
 
+function getNextEntryLineIndex() {
+  const lines = props.modelValue.replace(/\r\n/g, '\n').split('\n')
+  return lines.length === 1 && !lines[0] ? 0 : lines.length
+}
+
+async function focusEntryLine(lineIndex: number) {
+  await nextTick()
+  const row = entryEditorRef.value?.querySelector<HTMLElement>(`[data-rule-line-index="${lineIndex}"]`)
+  const input = row?.querySelector<HTMLInputElement>('input')
+  row?.scrollIntoView({ block: 'center', inline: 'nearest' })
+  input?.focus({ preventScroll: true })
+}
+
 function addEntry() {
+  const nextLineIndex = getNextEntryLineIndex()
+  mode.value = 'table'
   emit('update:modelValue', addRuleDictionaryEntry(props.modelValue))
+  void focusEntryLine(nextLineIndex)
 }
 
 function removeEntry(lineIndex: number) {
@@ -133,7 +153,7 @@ function removeEntry(lineIndex: number) {
           <button type="button" class="field-tool primary" @click="addEntry">新增</button>
         </div>
 
-        <div v-if="mode === 'table'" class="rule-entry-editor">
+        <div v-if="mode === 'table'" ref="entryEditorRef" class="rule-entry-editor">
           <div class="rule-entry-head">
             <span>{{ targetLabel }}</span>
             <span>{{ patternLabel }}</span>
@@ -145,6 +165,7 @@ function removeEntry(lineIndex: number) {
               :key="entry.lineIndex"
               class="rule-entry-row"
               :class="{ invalid: !entry.valid || !entry.patternValid }"
+              :data-rule-line-index="entry.lineIndex"
             >
               <label>
                 <span>{{ targetLabel }}</span>
@@ -179,8 +200,17 @@ function removeEntry(lineIndex: number) {
             />
           </label>
           <div v-if="testText" class="rule-preview-result">
-            <div v-if="previewMatches.length" class="rule-preview-list">
-              <div v-for="(match, index) in previewMatches" :key="`${match.ruleLabel}-${index}`" class="rule-preview-item">
+              <div v-if="previewMatches.length" class="rule-preview-list">
+              <div
+                v-for="(match, index) in previewMatches"
+                :key="`${match.ruleLabel}-${index}`"
+                class="rule-preview-item"
+                role="button"
+                tabindex="0"
+                @click="focusEntryLine(match.lineIndex)"
+                @keydown.enter.prevent="focusEntryLine(match.lineIndex)"
+                @keydown.space.prevent="focusEntryLine(match.lineIndex)"
+              >
                 <strong>{{ match.ruleLabel }}</strong>
                 <span class="rule-preview-context">
                   <span>{{ match.before }}</span>
@@ -233,11 +263,11 @@ function removeEntry(lineIndex: number) {
   color: #24313c;
   display: grid;
   gap: 12px;
-  max-height: min(780px, calc(100vh - 56px));
-  max-width: min(900px, 100%);
+  max-height: min(900px, calc(100vh - 40px));
+  max-width: min(980px, 100%);
   overflow: auto;
   padding: 16px;
-  width: 900px;
+  width: min(980px, calc(100vw - 60px));
 }
 
 .rule-dictionary-dialog-head,
@@ -285,13 +315,25 @@ function removeEntry(lineIndex: number) {
   color: #102030;
 }
 
+.rule-dictionary-dialog .field-tool {
+  border-radius: 6px;
+  font-size: 13px;
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.rule-entry-row .field-tool {
+  min-height: 28px;
+  padding: 0 8px;
+}
+
 .rule-entry-editor {
   background: #f7f9fb;
   border: 1px solid #d8e2e8;
   border-radius: 8px;
   display: grid;
   gap: 8px;
-  max-height: min(360px, 44vh);
+  max-height: min(560px, 58vh);
   overflow: auto;
   padding: 10px;
 }
@@ -300,27 +342,33 @@ function removeEntry(lineIndex: number) {
 .rule-entry-row {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.4fr) 68px;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.5fr) 56px;
 }
 
 .rule-entry-head {
   color: #667582;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 0 8px;
+  padding: 8px 6px;
+  position: sticky;
+  top: -10px;
+  z-index: 1;
+  background: #f7f9fb;
 }
 
 .rule-entry-list {
   display: grid;
-  gap: 8px;
+  gap: 0px;
+  padding: 4px 0px;
+  background: #fbfcfd;
+  border: 1px solid #d8e2e8;
+  border-radius: 6px;
 }
 
 .rule-entry-row {
   align-items: center;
   background: #fff;
-  border: 1px solid #e2e8ee;
-  border-radius: 6px;
-  padding: 8px;
+  padding: 4px 6px;
 }
 
 .rule-entry-row.invalid {
@@ -330,7 +378,7 @@ function removeEntry(lineIndex: number) {
 
 .rule-entry-row label {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -346,11 +394,11 @@ function removeEntry(lineIndex: number) {
   border: 1px solid #d8e2e8;
   border-radius: 6px;
   color: #18202a;
-  font: 13px/1.5 "Microsoft YaHei", "Segoe UI", sans-serif;
-  min-height: 34px;
+  font: 13px/1.35 "Microsoft YaHei", "Segoe UI", sans-serif;
+  min-height: 28px;
   min-width: 0;
   outline: none;
-  padding: 0 10px;
+  padding: 0 8px;
   width: 100%;
 }
 
@@ -382,8 +430,8 @@ function removeEntry(lineIndex: number) {
   border: 1px solid #d8e2e8;
   border-radius: 8px;
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
 }
 
 .rule-preview label {
@@ -393,7 +441,7 @@ function removeEntry(lineIndex: number) {
 
 .rule-preview label span {
   color: #667582;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -412,10 +460,19 @@ function removeEntry(lineIndex: number) {
   background: #fff;
   border: 1px solid #e2e8ee;
   border-radius: 6px;
+  cursor: pointer;
   display: grid;
   gap: 6px;
   grid-template-columns: minmax(100px, 0.7fr) minmax(180px, 1.4fr) minmax(120px, 0.9fr);
   padding: 8px;
+  text-align: left;
+}
+
+.rule-preview-item:hover,
+.rule-preview-item:focus-visible {
+  border-color: #176b87;
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.1);
+  outline: none;
 }
 
 .rule-preview-item strong {
