@@ -1,6 +1,6 @@
 [package]
 name = "csubtitle-workstation"
-version = "0.1.10"
+version = "0.1.11"
 description = "CC subtitle hardsub workstation"
 authors = ["CBash"]
 edition = "2021"

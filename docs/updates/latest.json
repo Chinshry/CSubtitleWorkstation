@@ -1,13 +1,13 @@
 {
-  "version": "0.1.10",
-  "notes": "## ✅ 新增功能\n\n- 新增工具页，集中放置字幕校对与繁简转换等文本辅助工具。\n- 新增字幕校对工具，支持粘贴文本或拖入 TXT、ASS、SSA、SRT、VTT、SUB 文件进行校对。\n- 字幕校对可提示“的、地、得”疑似误用，并支持点击问题定位、手动采纳或忽略。\n- 新增校对自定义词库，可统一人名、团名、节目名和专有名词写法。\n- 校对词库支持正则匹配、捕获组替换、本地记忆，并提供“试匹配”输入框即时查看命中结果。\n- 新增繁简转换工具，支持简体、繁体、台湾正体等模式切换。\n- 繁简转换支持实时预览、差异高亮、左右同步滚动和结果导出。\n- 繁简转换自定义词库会优先保护或替换指定词条，并保存到本地配置。\n\n## 🐞 问题修复\n\n- 修复安装包环境检测失效的问题。\n- 修复 LOGO 透明通道在压制时出现蒙层的问题。",
-  "pub_date": "2026-06-08T13:05:03Z",
+  "version": "0.1.11",
+  "notes": "## ✨ 新增功能\n\n- 新增 CC 字幕整理工具，可将 Web CC 说话人标签拆分为花字行，并把台词整理为听轴行。\n- CC 字幕整理支持导入 ASS / SSA 作为样式参考，选择听轴样式和花字样式后再整理 SRT / ASS / SSA 字幕。\n- CC 字幕整理支持将 SRT 输入转换为 ASS 输出，并复用导入的 ASS 头部和样式模板。\n- 新增通用自定义词库弹窗，支持表格编辑、原始文本编辑、正则匹配和试匹配预览。\n- 输出模板支持导入导出，便于在不同项目或设备间复用压制配置。",
+  "pub_date": "2026-06-12T15:45:18Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.10/CSubtitleWorkstation_0.1.10_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.11/CSubtitleWorkstation_0.1.11_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.10/CSubtitleWorkstation_0.1.10_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.11/CSubtitleWorkstation_0.1.11_universal.dmg"
     }
   }
 }
