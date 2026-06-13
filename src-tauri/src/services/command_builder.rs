@@ -1,5 +1,5 @@
 use crate::models::app_config::LogoLayout;
-use crate::models::compress_job::CompressJob;
+use crate::models::compress_job::{CompressJob, QuickProcessSettings};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -31,8 +31,11 @@ pub fn build_with_options(
     let display_width = job.video_width.or(video_info.width);
     let display_height = job.video_height.or(video_info.height);
 
+    let subtitle_path = job.subtitle_path.trim();
+    let use_avs = job.use_avs && !subtitle_path.is_empty();
+
     // AVS 模式：ffmpeg 输入改为 .avs 脚本；字幕由脚本内部 TextSubMod 渲染，不再加 subtitles filter
-    let input_path: String = if job.use_avs {
+    let input_path: String = if use_avs {
         avs_input_override
             .map(|s| s.to_string())
             .unwrap_or_else(|| "<avs script>".to_string())
@@ -46,7 +49,7 @@ pub fn build_with_options(
         "-i".to_string(),
         input_path,
     ];
-    if job.use_avs {
+    if use_avs {
         if let Some(audio_input) = avs_audio_input_override {
             args.extend([
                 "-i".to_string(),
@@ -59,49 +62,29 @@ pub fn build_with_options(
         }
     }
 
-    let mut filters = Vec::new();
-
-    // LOGO 叠加：仅当用户在编辑器中保存了 logo_layout 时启用。
-    // AVS 模式下字幕由 TextSubMod 渲染，filter 链里仍可包含 movie+overlay。
-    let logo_overlay = build_logo_overlay(job, display_width, display_height);
-    let subtitle_path = job.subtitle_path.trim();
-    let has_subtitle = !job.use_avs && !subtitle_path.is_empty();
-
-    match (logo_overlay, has_subtitle) {
-        (Some(overlay), true) => {
-            // LOGO 与字幕同时存在：按 logo_on_top 决定叠加顺序。
-            // - 在下（默认）：overlay 在前，字幕在 chain 末端，字幕覆盖 LOGO
-            //   `movie=...,scale=W:H[wm];[in][wm]overlay=X:Y,subtitles=...`
-            // - 在上：先把字幕渲染到命名链 [sub]，再以 [sub] 为底叠加 LOGO
-            //   `[in]subtitles=...[sub];movie=...,scale=W:H[wm];[sub][wm]overlay=X:Y`
-            //   build_logo_overlay 默认输出含 `[in]` 作为底图标签，这里替换为 `[sub]`
-            //   即可串联到字幕输出之后。
-            let subtitle_arg = subtitle_filter_arg_for_platform(subtitle_path, cfg!(windows));
-            if job.logo_on_top {
-                let overlay_on_sub = overlay.replace("[in]", "[sub]");
-                filters.push(format!(
-                    "[in]subtitles={subtitle_arg}[sub];{overlay_on_sub}",
-                ));
-            } else {
-                filters.push(format!("{overlay},subtitles={subtitle_arg}"));
-            }
-        }
-        (Some(overlay), false) => {
-            filters.push(overlay);
-        }
-        (None, true) => {
-            filters.push(subtitle_filter(subtitle_path));
-        }
-        (None, false) => {}
-    }
+    let has_subtitle = !use_avs && !subtitle_path.is_empty();
+    let mut pre_filters = Vec::new();
 
     if job.need_yadif {
-        filters.push("yadif".to_string());
+        pre_filters.push("yadif".to_string());
     }
 
-    if !filters.is_empty() {
+    if let Some(quick) = quick_process_if_enabled(job) {
+        pre_filters.extend(build_quick_process_filters(quick)?);
+    }
+
+    let filter_graph = build_video_filter_graph(
+        job,
+        &pre_filters,
+        subtitle_path,
+        has_subtitle,
+        display_width,
+        display_height,
+    );
+
+    if let Some(filter_graph) = filter_graph {
         args.push("-vf".to_string());
-        args.push(filters.join(","));
+        args.push(filter_graph);
     }
 
     let custom_video_args = parse_custom_video_args(job.custom_video_args.as_deref())?;
@@ -133,6 +116,10 @@ pub fn build_with_options(
 
     args.extend(custom_video_args);
 
+    if let Some(quick) = quick_process_if_enabled(job) {
+        args.extend(build_quick_process_output_args(quick)?);
+    }
+
     let output_path = normalize_output_path(&job.video_path, &job.output_path);
 
     args.extend([
@@ -143,6 +130,188 @@ pub fn build_with_options(
     ]);
 
     Ok(args)
+}
+
+fn quick_process_if_enabled(job: &CompressJob) -> Option<&QuickProcessSettings> {
+    job.quick_process
+        .as_ref()
+        .filter(|settings| settings.enabled)
+}
+
+fn build_video_filter_graph(
+    job: &CompressJob,
+    pre_filters: &[String],
+    subtitle_path: &str,
+    has_subtitle: bool,
+    logo_width: Option<i32>,
+    logo_height: Option<i32>,
+) -> Option<String> {
+    let has_logo = build_logo_overlay(job, logo_width, logo_height).is_some();
+    if !has_logo {
+        let mut filters = pre_filters.to_vec();
+        if has_subtitle {
+            filters.insert(0, subtitle_filter(subtitle_path));
+        }
+        return (!filters.is_empty()).then(|| filters.join(","));
+    }
+
+    let mut segments = Vec::new();
+    let mut current_label = "[in]".to_string();
+
+    if has_subtitle && job.logo_on_top {
+        let subtitle_arg = subtitle_filter_arg_for_platform(subtitle_path, cfg!(windows));
+        segments.push(format!("{current_label}subtitles={subtitle_arg}[sub]"));
+        current_label = "[sub]".to_string();
+    }
+
+    let logo_output_label = if has_subtitle && !job.logo_on_top || !pre_filters.is_empty() {
+        Some("[logo]")
+    } else {
+        None
+    };
+    let logo_overlay = build_logo_overlay_for_platform_with_labels(
+        job,
+        logo_width,
+        logo_height,
+        cfg!(windows),
+        &current_label,
+        logo_output_label,
+    )?;
+    segments.push(logo_overlay);
+    if logo_output_label.is_some() {
+        current_label = "[logo]".to_string();
+    }
+
+    if has_subtitle && !job.logo_on_top {
+        let subtitle_arg = subtitle_filter_arg_for_platform(subtitle_path, cfg!(windows));
+        if pre_filters.is_empty() {
+            segments.push(format!("{current_label}subtitles={subtitle_arg}"));
+        } else {
+            segments.push(format!("{current_label}subtitles={subtitle_arg}[subbed]"));
+            current_label = "[subbed]".to_string();
+        }
+    }
+
+    if !pre_filters.is_empty() {
+        segments.push(format!("{current_label}{}", pre_filters.join(",")));
+    }
+
+    Some(segments.join(";"))
+}
+
+fn build_quick_process_filters(settings: &QuickProcessSettings) -> Result<Vec<String>, String> {
+    let mut filters = Vec::new();
+
+    let rotation = normalized_choice(&settings.rotation);
+    let mirror = normalized_choice(&settings.mirror);
+    if is_none_choice(&rotation) && is_none_choice(&mirror) {
+        match normalized_choice(&settings.transform).as_str() {
+            "" | "none" => {}
+            "rotate_cw" => filters.push("transpose=1".to_string()),
+            "rotate_ccw" => filters.push("transpose=2".to_string()),
+            "rotate_180" => filters.push("hflip,vflip".to_string()),
+            "rotate_cw_flip" => filters.push("transpose=3".to_string()),
+            "rotate_ccw_flip" => filters.push("transpose=0".to_string()),
+            "hflip" => filters.push("hflip".to_string()),
+            "vflip" => filters.push("vflip".to_string()),
+            other => return Err(format!("未知的视频处理画面变换: {other}")),
+        }
+    } else {
+        match rotation.as_str() {
+            "" | "none" => {}
+            "rotate_cw" => filters.push("transpose=1".to_string()),
+            "rotate_ccw" => filters.push("transpose=2".to_string()),
+            "rotate_180" => filters.push("hflip,vflip".to_string()),
+            other => return Err(format!("未知的视频处理旋转选项: {other}")),
+        }
+        match mirror.as_str() {
+            "" | "none" => {}
+            "hflip" => filters.push("hflip".to_string()),
+            "vflip" => filters.push("vflip".to_string()),
+            other => return Err(format!("未知的视频处理镜像选项: {other}")),
+        }
+    }
+
+    if let Some(scale) = quick_process_scale_filter(settings)? {
+        filters.push(scale);
+    }
+
+    Ok(filters)
+}
+
+fn is_none_choice(value: &str) -> bool {
+    value.is_empty() || value == "none"
+}
+
+fn quick_process_scale_filter(settings: &QuickProcessSettings) -> Result<Option<String>, String> {
+    let filter = match normalized_choice(&settings.scale).as_str() {
+        "" | "none" => return Ok(None),
+        "landscape_4k" => "scale=-1:2160".to_string(),
+        "landscape_1080" => "scale=-1:1080".to_string(),
+        "landscape_720" => "scale=-1:720".to_string(),
+        "portrait_1080" => "scale=1080:-1".to_string(),
+        "portrait_720" => "scale=720:-1".to_string(),
+        "custom" => {
+            let value = settings.custom_scale.trim();
+            if !is_valid_custom_scale(value) {
+                return Err(
+                    "自定义缩放必须填写为 宽:高，例如 1920:1080、-1:1080 或 1080:-1。".to_string(),
+                );
+            }
+            format!("scale={value}")
+        }
+        other => return Err(format!("未知的视频处理缩放预设: {other}")),
+    };
+    Ok(Some(filter))
+}
+
+fn build_quick_process_output_args(settings: &QuickProcessSettings) -> Result<Vec<String>, String> {
+    let mut args = Vec::new();
+    if let Some(fps) = settings.frame_rate {
+        if !(fps > 0.0 && fps <= 240.0) {
+            return Err("视频处理帧率必须大于 0，且不超过 240。".to_string());
+        }
+        args.extend(["-r".to_string(), trim_float(fps)]);
+    }
+    if let Some(kbps) = settings.video_bitrate_kbps {
+        if kbps <= 0 {
+            return Err("视频处理码率必须大于 0。".to_string());
+        }
+        args.extend(["-b:v".to_string(), format!("{kbps}k")]);
+    }
+    Ok(args)
+}
+
+fn normalized_choice(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn is_valid_custom_scale(value: &str) -> bool {
+    let Some((left, right)) = value.split_once(':') else {
+        return false;
+    };
+    is_valid_scale_part(left) && is_valid_scale_part(right)
+}
+
+fn is_valid_scale_part(value: &str) -> bool {
+    if value == "-1" || value == "-2" {
+        return true;
+    }
+    value
+        .parse::<i32>()
+        .is_ok_and(|parsed| (1..=8192).contains(&parsed))
+}
+
+fn trim_float(value: f64) -> String {
+    let rounded = (value * 1000.0).round() / 1000.0;
+    let mut text = format!("{rounded:.3}");
+    while text.contains('.') && text.ends_with('0') {
+        text.pop();
+    }
+    if text.ends_with('.') {
+        text.pop();
+    }
+    text
 }
 
 fn parse_custom_video_args(raw: Option<&str>) -> Result<Vec<String>, String> {
@@ -235,7 +404,10 @@ fn validate_custom_video_args(tokens: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn build_quality_args(encoder: &str, crf: u8, custom_video_args: &[String]) -> Vec<String> {
+fn build_quality_args(encoder: &str, crf: Option<u8>, custom_video_args: &[String]) -> Vec<String> {
+    let Some(crf) = crf else {
+        return Vec::new();
+    };
     match encoder {
         "h264_nvenc" => {
             let mut args = Vec::new();
@@ -303,6 +475,24 @@ fn build_logo_overlay_for_platform(
     video_height: Option<i32>,
     windows: bool,
 ) -> Option<String> {
+    build_logo_overlay_for_platform_with_labels(
+        job,
+        video_width,
+        video_height,
+        windows,
+        "[in]",
+        None,
+    )
+}
+
+fn build_logo_overlay_for_platform_with_labels(
+    job: &CompressJob,
+    video_width: Option<i32>,
+    video_height: Option<i32>,
+    windows: bool,
+    input_label: &str,
+    output_label: Option<&str>,
+) -> Option<String> {
     if !job.need_logo {
         return None;
     }
@@ -322,12 +512,14 @@ fn build_logo_overlay_for_platform(
     let x = (layout.x_pct * vw).round() as i32;
     let y = (layout.y_pct * vh).round() as i32;
     Some(format!(
-        "movie={},format=rgba,scale={}:{}:flags=lanczos,format=rgba[wm];[in][wm]overlay={}:{}",
+        "movie={},format=rgba,scale={}:{}:flags=lanczos,format=rgba[wm];{}[wm]overlay={}:{}{}",
         movie_filter_arg_for_platform(trimmed_path, windows),
         w,
         h,
+        input_label,
         x,
-        y
+        y,
+        output_label.unwrap_or("")
     ))
 }
 
@@ -686,7 +878,7 @@ mod tests {
             video_path: r"E:\video.mp4".to_string(),
             subtitle_path: String::new(),
             output_path: String::new(),
-            crf: 18,
+            crf: Some(18),
             max_bitrate: None,
             need_logo: true,
             need_yadif: false,
@@ -704,6 +896,7 @@ mod tests {
             logo_on_top: false,
             video_width: None,
             video_height: None,
+            quick_process: None,
         };
 
         assert_eq!(
@@ -719,7 +912,7 @@ mod tests {
             video_path: "/tmp/video.mp4".to_string(),
             subtitle_path: String::new(),
             output_path: String::new(),
-            crf: 18,
+            crf: Some(18),
             max_bitrate: None,
             need_logo: true,
             need_yadif: false,
@@ -737,6 +930,7 @@ mod tests {
             logo_on_top: false,
             video_width: None,
             video_height: None,
+            quick_process: None,
         };
 
         assert_eq!(
@@ -754,7 +948,7 @@ mod tests {
             subtitle_path: r"C:\Users\tester\AppData\Local\app\filter-temp\job\subtitle.ass"
                 .to_string(),
             output_path: r"E:\out.mp4".to_string(),
-            crf: 18,
+            crf: Some(18),
             max_bitrate: None,
             need_logo: true,
             need_yadif: false,
@@ -772,6 +966,7 @@ mod tests {
             logo_on_top: false,
             video_width: Some(1920),
             video_height: Some(1080),
+            quick_process: None,
         };
         let command =
             build_with_options("definitely-missing-ffmpeg.exe", &job, None, None).unwrap();
@@ -779,7 +974,7 @@ mod tests {
 
         assert_eq!(
             command.get(vf_index + 1).map(String::as_str),
-            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',format=rgba,scale=384:108:flags=lanczos,format=rgba[wm];[in][wm]overlay=38:22,subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'")
+            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',format=rgba,scale=384:108:flags=lanczos,format=rgba[wm];[in][wm]overlay=38:22[logo];[logo]subtitles='C\\:\\\\Users\\\\tester\\\\AppData\\\\Local\\\\app\\\\filter-temp\\\\job\\\\subtitle.ass'")
         );
     }
 
@@ -790,7 +985,7 @@ mod tests {
             video_path: r"E:\video.mkv".to_string(),
             subtitle_path: r"E:\sub.ass".to_string(),
             output_path: r"E:\out.mp4".to_string(),
-            crf: 18,
+            crf: Some(18),
             max_bitrate: None,
             need_logo: false,
             need_yadif: false,
@@ -802,6 +997,7 @@ mod tests {
             logo_on_top: false,
             video_width: None,
             video_height: None,
+            quick_process: None,
         };
         let command = build_with_options(
             "definitely-missing-ffmpeg.exe",
@@ -834,5 +1030,172 @@ mod tests {
             "Stream #0:0: Video: vp9 (Profile 0), yuv420p(tv), 2160x3840, 29.97 fps, 29.97 tbr";
         assert_eq!(parse_video_codec_name(text).as_deref(), Some("vp9"));
         assert_eq!(parse_video_fps(text), Some(29.97));
+    }
+
+    #[test]
+    fn quick_process_builds_filters_and_output_args() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mp4".to_string(),
+            subtitle_path: String::new(),
+            output_path: r"E:\out.mp4".to_string(),
+            crf: Some(18),
+            max_bitrate: None,
+            need_logo: false,
+            need_yadif: true,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: false,
+            logo_layout: None,
+            logo_on_top: false,
+            video_width: None,
+            video_height: None,
+            quick_process: Some(QuickProcessSettings {
+                enabled: true,
+                transform: String::new(),
+                rotation: "none".to_string(),
+                mirror: "hflip".to_string(),
+                scale: "landscape_1080".to_string(),
+                custom_scale: String::new(),
+                frame_rate: Some(30.0),
+                video_bitrate_kbps: Some(4000),
+            }),
+        };
+        let command =
+            build_with_options("definitely-missing-ffmpeg.exe", &job, None, None).unwrap();
+        let vf_index = command.iter().position(|arg| arg == "-vf").unwrap();
+
+        assert_eq!(
+            command.get(vf_index + 1).map(String::as_str),
+            Some("yadif,hflip,scale=-1:1080")
+        );
+        assert!(command
+            .windows(2)
+            .any(|pair| pair[0] == "-r" && pair[1] == "30"));
+        assert!(command
+            .windows(2)
+            .any(|pair| pair[0] == "-b:v" && pair[1] == "4000k"));
+    }
+
+    #[test]
+    fn quick_process_rotate_180_uses_flip_pair() {
+        let settings = QuickProcessSettings {
+            enabled: true,
+            transform: String::new(),
+            rotation: "rotate_180".to_string(),
+            mirror: "none".to_string(),
+            scale: "none".to_string(),
+            custom_scale: String::new(),
+            frame_rate: None,
+            video_bitrate_kbps: None,
+        };
+
+        assert_eq!(
+            build_quick_process_filters(&settings).unwrap(),
+            vec!["hflip,vflip".to_string()]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn logo_overlay_runs_before_quick_process() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mp4".to_string(),
+            subtitle_path: String::new(),
+            output_path: r"E:\out.mp4".to_string(),
+            crf: Some(18),
+            max_bitrate: None,
+            need_logo: true,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: false,
+            logo_layout: Some(LogoLayout {
+                path: r"E:\sample\project\res\logo\logo.png".to_string(),
+                x_pct: 0.02,
+                y_pct: 0.02,
+                w_pct: 0.2,
+                h_pct: 0.1,
+            }),
+            logo_on_top: false,
+            video_width: Some(1920),
+            video_height: Some(1080),
+            quick_process: Some(QuickProcessSettings {
+                enabled: true,
+                transform: String::new(),
+                rotation: "none".to_string(),
+                mirror: "hflip".to_string(),
+                scale: "landscape_720".to_string(),
+                custom_scale: String::new(),
+                frame_rate: None,
+                video_bitrate_kbps: None,
+            }),
+        };
+        let command =
+            build_with_options("definitely-missing-ffmpeg.exe", &job, None, None).unwrap();
+        let vf_index = command.iter().position(|arg| arg == "-vf").unwrap();
+
+        assert_eq!(
+            command.get(vf_index + 1).map(String::as_str),
+            Some("movie='E\\:\\\\sample\\\\project\\\\res\\\\logo\\\\logo.png',format=rgba,scale=384:108:flags=lanczos,format=rgba[wm];[in][wm]overlay=38:22[logo];[logo]hflip,scale=-1:720")
+        );
+    }
+
+    #[test]
+    fn avs_without_subtitle_falls_back_to_video_input() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mp4".to_string(),
+            subtitle_path: String::new(),
+            output_path: r"E:\out.mp4".to_string(),
+            crf: Some(18),
+            max_bitrate: None,
+            need_logo: false,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: true,
+            logo_layout: None,
+            logo_on_top: false,
+            video_width: None,
+            video_height: None,
+            quick_process: None,
+        };
+        let command =
+            build_with_options("definitely-missing-ffmpeg.exe", &job, None, None).unwrap();
+
+        assert_eq!(command.get(3).map(String::as_str), Some(r"E:\video.mp4"));
+        assert!(!command.iter().any(|arg| arg == "<avs script>"));
+    }
+
+    #[test]
+    fn empty_quality_omits_crf_args() {
+        let job = CompressJob {
+            id: "test".to_string(),
+            video_path: r"E:\video.mp4".to_string(),
+            subtitle_path: String::new(),
+            output_path: r"E:\out.mp4".to_string(),
+            crf: None,
+            max_bitrate: None,
+            need_logo: false,
+            need_yadif: false,
+            encoder: "libx264".to_string(),
+            custom_video_args: None,
+            logo_dir: None,
+            use_avs: false,
+            logo_layout: None,
+            logo_on_top: false,
+            video_width: None,
+            video_height: None,
+            quick_process: None,
+        };
+        let command =
+            build_with_options("definitely-missing-ffmpeg.exe", &job, None, None).unwrap();
+
+        assert!(!command.iter().any(|arg| arg == "-crf"));
     }
 }

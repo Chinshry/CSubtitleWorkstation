@@ -18,7 +18,7 @@ pub struct AppConfig {
     pub default_use_avs: bool,
     #[serde(default)]
     pub text_conversion_custom_dictionary: String,
-        #[serde(default)]
+    #[serde(default)]
     pub proofread_term_dictionary: String,
     #[serde(default)]
     pub cc_subtitle_replacement_dictionary: String,
@@ -30,7 +30,7 @@ pub struct AppConfig {
     pub cc_subtitle_screen_style_name: String,
     #[serde(default)]
     pub cc_subtitle_speak_style_name: String,
-/// 最近使用过的 LOGO 图片，按 last_used_at 倒序，最多保留 10 项
+    /// 最近使用过的 LOGO 图片，按 last_used_at 倒序，最多保留 10 项
     pub recent_logos: Vec<RecentLogo>,
     /// 按 (分辨率桶, LOGO 图路径) 区分的布局记忆。
     /// 桶 key 例如 "1080p-landscape" / "1080p-portrait" / "720p-landscape" / "4k-portrait"。
@@ -206,7 +206,7 @@ impl Default for AppConfig {
             cc_subtitle_ass_header: String::new(),
             cc_subtitle_screen_style_name: String::new(),
             cc_subtitle_speak_style_name: String::new(),
-recent_logos: Vec::new(),
+            recent_logos: Vec::new(),
             logo_layouts: Vec::new(),
         }
     }

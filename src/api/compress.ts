@@ -29,7 +29,7 @@ export interface SubtitleAnalysisResult {
 }
 
 export function previewFfmpegCommand(job: CompressJob) {
-  return invoke<string[]>('preview_ffmpeg_command', { job })
+  return invoke<string[]>('preview_ffmpeg_command', { job: normalizeCompressJob(job) })
 }
 
 export function analyzeSubtitle(subtitlePath: string) {
@@ -49,11 +49,35 @@ export interface AvsStagingPlan {
 }
 
 export function inspectAvsStagingPlan(job: CompressJob) {
-  return invoke<AvsStagingPlan | null>('inspect_avs_staging_plan', { job })
+  return invoke<AvsStagingPlan | null>('inspect_avs_staging_plan', { job: normalizeCompressJob(job) })
 }
 
 export function startCompress(job: CompressJob) {
-  return invoke<void>('start_compress', { job })
+  return invoke<void>('start_compress', { job: normalizeCompressJob(job) })
+}
+
+function normalizeCompressJob(job: CompressJob): CompressJob {
+  const rawCrf = (job as CompressJob & { crf?: unknown }).crf
+  const crf = rawCrf === null || rawCrf === undefined
+    ? null
+    : typeof rawCrf === 'number' && Number.isFinite(rawCrf)
+      ? Math.min(51, Math.max(0, Math.round(rawCrf)))
+      : null
+
+  return {
+    ...job,
+    crf,
+    quickProcess: job.quickProcess
+      ? {
+          ...job.quickProcess,
+          transform: job.quickProcess.transform ?? 'none',
+          rotation: job.quickProcess.rotation ?? 'none',
+          mirror: job.quickProcess.mirror ?? 'none',
+          scale: job.quickProcess.scale ?? 'none',
+          customScale: job.quickProcess.customScale ?? '',
+        }
+      : undefined,
+  }
 }
 
 export function cancelCompress(jobId: string) {

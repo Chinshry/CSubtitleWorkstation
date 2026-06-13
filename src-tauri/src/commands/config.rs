@@ -73,8 +73,8 @@ pub fn export_output_templates(
 
 #[tauri::command]
 pub fn import_output_templates(path: String) -> Result<Vec<OutputNameTemplate>, String> {
-    let text =
-        fs::read_to_string(path).map_err(|err| format!("Failed to read output templates: {err}"))?;
+    let text = fs::read_to_string(path)
+        .map_err(|err| format!("Failed to read output templates: {err}"))?;
     let value: serde_json::Value = serde_json::from_str(&text)
         .map_err(|err| format!("Failed to parse output templates JSON: {err}"))?;
 

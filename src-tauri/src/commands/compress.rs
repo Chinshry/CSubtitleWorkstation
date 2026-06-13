@@ -110,7 +110,7 @@ pub fn inspect_avs_staging_plan(
     app: AppHandle,
     job: CompressJob,
 ) -> Result<Option<AvsStagingPlan>, String> {
-    if !job.use_avs {
+    if !job.use_avs || job.subtitle_path.trim().is_empty() {
         return Ok(None);
     }
 
@@ -212,6 +212,9 @@ fn start_compress_blocking(app: AppHandle, job: CompressJob) -> Result<(), Strin
     // - AVS 模式：VSFilterMod 的 TextSubMod 内部用 Win32 ANSI API 打开文件，含
     //   中文 / `@@` 等非 ASCII 字符的路径会报 "Can't open"，必须先复制到 ASCII 路径
     let mut command_job = job.clone();
+    if command_job.subtitle_path.trim().is_empty() {
+        command_job.use_avs = false;
+    }
     let temp_dir = job_temp_dir(&app, &command_job.id)?;
     let subtitle_temp_path = if !command_job.subtitle_path.trim().is_empty() {
         Some(stage_subtitle_to_ascii(

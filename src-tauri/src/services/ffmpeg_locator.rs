@@ -262,7 +262,11 @@ fn system_path_dirs() -> Vec<PathBuf> {
     #[cfg(windows)]
     {
         for raw in windows_registry_path_values() {
-            for item in raw.split(';').map(str::trim).filter(|item| !item.is_empty()) {
+            for item in raw
+                .split(';')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+            {
                 push_dir(
                     &mut dirs,
                     &mut seen,
@@ -283,7 +287,10 @@ fn push_path(paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>, path: PathBuf
 }
 
 fn push_dir(dirs: &mut Vec<PathBuf>, seen: &mut HashSet<String>, dir: PathBuf) {
-    let key = dir.to_string_lossy().trim_end_matches('\\').to_ascii_lowercase();
+    let key = dir
+        .to_string_lossy()
+        .trim_end_matches('\\')
+        .to_ascii_lowercase();
     if !key.is_empty() && seen.insert(key) {
         dirs.push(dir);
     }

@@ -50,7 +50,12 @@ pub async fn organize_cc_subtitle_text(
     tauri::async_runtime::spawn_blocking(move || {
         let rules = compile_replacement_rules(replacement_rules.unwrap_or_default())?;
         let style_names = CcStyleNames::new(screen_style_name, speak_style_name);
-        Ok(organize_cc_subtitle(&text, &rules, &style_names, ass_header.as_deref()))
+        Ok(organize_cc_subtitle(
+            &text,
+            &rules,
+            &style_names,
+            ass_header.as_deref(),
+        ))
     })
     .await
     .map_err(|err| format!("Failed to run CC subtitle organizer: {err}"))?
@@ -174,7 +179,14 @@ fn process_event_line(
         return None;
     }
 
-    process_event_fields(kind, &mut fields, style_index, text_index, replacement_rules, style_names)
+    process_event_fields(
+        kind,
+        &mut fields,
+        style_index,
+        text_index,
+        replacement_rules,
+        style_names,
+    )
 }
 
 fn process_event_fields(
@@ -245,9 +257,14 @@ fn organize_srt_as_ass(
             cue.text,
         ];
 
-        if let Some((line, inserted, changed, replacements)) =
-            process_event_fields("Dialogue", &mut fields, 3, 9, replacement_rules, style_names)
-        {
+        if let Some((line, inserted, changed, replacements)) = process_event_fields(
+            "Dialogue",
+            &mut fields,
+            3,
+            9,
+            replacement_rules,
+            style_names,
+        ) {
             output.push_str(&line);
             output.push('\n');
             if let Some(inserted_line) = inserted {
@@ -287,10 +304,7 @@ fn format_event_line(kind: &str, fields: &[String]) -> String {
 }
 
 fn clean_dialogue_text(text: &str) -> String {
-    let cleaned = text
-        .replace("\\N", " ")
-        .trim_start()
-        .to_string();
+    let cleaned = text.replace("\\N", " ").trim_start().to_string();
     whitespace_regex().replace_all(&cleaned, " ").to_string()
 }
 
@@ -358,8 +372,7 @@ fn parse_ass_format(value: &str) -> Vec<String> {
 
 fn default_event_format() -> Vec<String> {
     [
-        "Layer", "Start", "End", "Style", "Name", "MarginL", "MarginR", "MarginV", "Effect",
-        "Text",
+        "Layer", "Start", "End", "Style", "Name", "MarginL", "MarginR", "MarginV", "Effect", "Text",
     ]
     .into_iter()
     .map(normalize_ass_field)
@@ -380,14 +393,14 @@ fn looks_like_srt(text: &str) -> bool {
 
 fn parse_srt_cues(text: &str) -> Vec<SrtCue> {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
-    normalized
-        .split("\n\n")
-        .filter_map(parse_srt_cue)
-        .collect()
+    normalized.split("\n\n").filter_map(parse_srt_cue).collect()
 }
 
 fn parse_srt_cue(block: &str) -> Option<SrtCue> {
-    let mut lines = block.lines().map(str::trim_end).filter(|line| !line.trim().is_empty());
+    let mut lines = block
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty());
     let first = lines.next()?;
     let timing_line = if first.trim().chars().all(|value| value.is_ascii_digit()) {
         lines.next()?
@@ -400,11 +413,7 @@ fn parse_srt_cue(block: &str) -> Option<SrtCue> {
         return None;
     }
 
-    Some(SrtCue {
-        start,
-        end,
-        text,
-    })
+    Some(SrtCue { start, end, text })
 }
 
 fn parse_srt_timing(line: &str) -> Option<(String, String)> {
@@ -419,8 +428,7 @@ fn srt_time_to_ass(value: &str) -> Option<String> {
     let minutes = parts.next()?.parse::<u32>().ok()?;
     let seconds = parts.next()?.parse::<u32>().ok()?;
     let millis = parts.next()?.parse::<u32>().ok()?;
-    let total_centis =
-        (((hours * 60 + minutes) * 60 + seconds) * 1000 + millis + 5) / 10;
+    let total_centis = (((hours * 60 + minutes) * 60 + seconds) * 1000 + millis + 5) / 10;
     let centis = total_centis % 100;
     let total_seconds = total_centis / 100;
     let seconds = total_seconds % 60;
@@ -429,10 +437,7 @@ fn srt_time_to_ass(value: &str) -> Option<String> {
     let hours = total_minutes / 60;
     Some(format!(
         "{}:{:02}:{:02}.{:02}",
-        hours,
-        minutes,
-        seconds,
-        centis
+        hours, minutes, seconds, centis
     ))
 }
 
@@ -451,7 +456,9 @@ fn ass_document_header(style_names: &CcStyleNames, ass_header: Option<&str>) -> 
             output.pop();
         }
         output.push_str("\n\n[Events]\n");
-        output.push_str("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\n");
+        output.push_str(
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\n",
+        );
         return output;
     }
 
@@ -579,8 +586,12 @@ mod tests {
     fn splits_cc_tag_into_screen_and_speak_lines() {
         let input = "[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,[ZHANG HAO]Hello...\\Nworld\n";
         let output = organize_cc_subtitle(input, &rules(), &style_names(), None);
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,花字,章昊"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,听轴,Hello... world"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,花字,章昊"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,听轴,Hello... world"));
         assert_eq!(output.inserted_lines, 1);
         assert_eq!(output.replacement_count, 1);
     }
@@ -589,7 +600,9 @@ mod tests {
     fn converts_plain_dialogue_to_speak_style() {
         let input = "[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,Hi...\\N there\n";
         let output = organize_cc_subtitle(input, &[], &style_names(), None);
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,听轴,Hi... there"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,听轴,Hi... there"));
         assert_eq!(output.inserted_lines, 0);
     }
 
@@ -618,10 +631,18 @@ mod tests {
 
         assert!(output.text.contains("[Script Info]"));
         assert!(output.text.contains("[Events]"));
-        assert!(output.text.contains("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.28,花字,,0,0,0,,오늘의 수업 미리보기"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.28,听轴,,0,0,0,,빠바바바바바바밤"));
-        assert!(output.text.contains("Dialogue: 0,0:00:01.28,0:00:02.35,听轴,,0,0,0,,하고 갑자기 없어졌다가"));
+        assert!(output.text.contains(
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+        ));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.28,花字,,0,0,0,,오늘의 수업 미리보기"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.28,听轴,,0,0,0,,빠바바바바바바밤"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:01.28,0:00:02.35,听轴,,0,0,0,,하고 갑자기 없어졌다가"));
         assert_eq!(output.inserted_lines, 1);
     }
 
@@ -633,22 +654,35 @@ mod tests {
 
         assert!(output.text.contains("Style: 上屏,Microsoft YaHei"));
         assert!(output.text.contains("Style: 正文,Microsoft YaHei"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,上屏,,0,0,0,,Speaker"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,正文,,0,0,0,,Hello"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,上屏,,0,0,0,,Speaker"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,正文,,0,0,0,,Hello"));
     }
 
     #[test]
     fn uses_imported_ass_header_for_srt_output() {
-        let styles = super::CcStyleNames::new(Some("屏幕字_65".to_string()), Some("1080_横_听轴".to_string()));
+        let styles = super::CcStyleNames::new(
+            Some("屏幕字_65".to_string()),
+            Some("1080_横_听轴".to_string()),
+        );
         let header = "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour\nStyle: 屏幕字_65,Arial,65,&H00FFFFFF\nStyle: 1080_横_听轴,Arial,70,&H00FFFFFF";
         let input = "1\n00:00:00,000 --> 00:00:01,000\n[Caption]\nLine\n";
         let output = organize_cc_subtitle(input, &[], &styles, Some(header));
 
-        assert!(output.text.starts_with("[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920"));
+        assert!(output
+            .text
+            .starts_with("[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920"));
         assert!(output.text.contains("Style: 屏幕字_65,Arial,65,&H00FFFFFF"));
         assert!(output.text.contains("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,屏幕字_65,,0,0,0,,Caption"));
-        assert!(output.text.contains("Dialogue: 0,0:00:00.00,0:00:01.00,1080_横_听轴,,0,0,0,,Line"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,屏幕字_65,,0,0,0,,Caption"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,1080_横_听轴,,0,0,0,,Line"));
         assert!(!output.text.contains("[Aegisub Project Garbage]"));
     }
 }

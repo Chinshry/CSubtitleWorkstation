@@ -9,7 +9,7 @@ type BitrateMode = 'none' | 'auto' | 'custom'
 
 export type EncodeSettingsModel = {
   encoder: CompressJob['encoder']
-  crf: number
+  crf: number | null
   maxBitrate?: number
 }
 
@@ -36,14 +36,27 @@ const encoderModel = computed({
   },
 })
 
-const qualityModel = computed({
+const qualityModel = computed<number | ''>({
   get() {
-    return settings.value.crf
+    return settings.value.crf ?? ''
   },
-  set(value: number) {
-    settings.value = { ...settings.value, crf: value }
+  set(value: number | string) {
+    if (value === '' || value === null || value === undefined) {
+      settings.value = { ...settings.value, crf: null }
+      return
+    }
+    const parsed = typeof value === 'number' ? value : Number(value)
+    settings.value = {
+      ...settings.value,
+      crf: Number.isFinite(parsed) ? Math.min(51, Math.max(0, Math.round(parsed))) : null
+    }
   },
 })
+
+function onQualityInput(event: Event) {
+  const raw = (event.target as HTMLInputElement).value
+  qualityModel.value = raw === '' ? '' : Number(raw)
+}
 
 const bitrateMode = computed<BitrateMode>({
   get(): BitrateMode {
@@ -83,12 +96,19 @@ const customBitrate = computed<number | undefined>({
         <InfoHint
           placement="right"
           title="质量值"
-          :command="`x264/x265: -crf ${settings.crf}  |  NVENC: -cq ${settings.crf}`"
-          body="数值越小画质越好、文件越大；VideoToolbox 不使用该质量值，建议通过最大码率控制。"
-          :items="['libx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。', 'NVENC / AMF 推荐 18-28：通常 19-23 比较均衡。']"
+          :command="settings.crf === null ? '留空：不生成 -crf / -cq / -qp 参数' : `x264/x265: -crf ${settings.crf}  |  NVENC: -cq ${settings.crf}`"
+          body="数值越小画质越好、文件越大；留空则不携带质量参数，适合只按码率控制。"
+          :items="['libx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。', 'NVENC / AMF 推荐 18-28：通常 19-23 比较均衡。', 'VideoToolbox 不使用该质量值，建议通过最大码率控制。']"
         />
       </span>
-      <input v-model.number="qualityModel" type="number" min="0" max="51" />
+      <input
+        :value="qualityModel"
+        type="number"
+        min="0"
+        max="51"
+        placeholder="留空"
+        @input="onQualityInput"
+      />
     </label>
 
     <label class="bitrate-cell">

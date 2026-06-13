@@ -116,6 +116,7 @@ const displayVideoMeta = computed<VideoMeta | null>(() => {
 })
 
 const job = ref<CompressJob>(createJob())
+const isInitialDropOnly = computed(() => !job.value.videoPath?.trim() && !job.value.subtitlePath?.trim())
 
 watch(
   () => job.value.videoPath,
@@ -245,7 +246,17 @@ function createJob(): CompressJob {
     customVideoArgs: '',
     useAvs: false,
     logoLayout: null,
-    logoOnTop: false
+    logoOnTop: false,
+    quickProcess: {
+      enabled: false,
+      transform: 'none',
+      rotation: 'none',
+      mirror: 'none',
+      scale: 'none',
+      customScale: '',
+      frameRate: undefined,
+      videoBitrateKbps: undefined
+    }
   }
 }
 
@@ -310,8 +321,9 @@ watch(
       }
       try {
         command.value = await previewFfmpegCommand(job.value)
-      } catch {
-        // 预览失败静默——可能是 ffmpeg 未配置，开始压制时会有明确报错
+      } catch (error) {
+        pushDiag(`preview command failed: ${formatError(error)}`)
+        command.value = []
       }
     }, 300)
   },
@@ -629,18 +641,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="workspace">
-    <div v-if="ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
+  <main class="workspace" :class="{ 'initial-drop-workspace': isInitialDropOnly }">
+    <div v-if="!isInitialDropOnly && ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
       <strong>正在检测 ffmpeg 环境</strong>
       <span>正在检测 ffmpeg / ffprobe / subtitles/libass，请稍候。</span>
     </div>
-    <div v-else-if="!loading && ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
+    <div v-else-if="!isInitialDropOnly && !loading && ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
       <strong>{{ ffmpegStatus.ffmpegPath ? 'ffmpeg 功能不完整' : '未检测到 ffmpeg' }}</strong>
       <span>{{ ffmpegStatus.message ?? '请前往左侧「设置」面板配置 ffmpeg 路径，或安装后将其加入系统 PATH。' }}</span>
       <button class="secondary" @click="refreshFfmpeg">重新检测</button>
     </div>
 
     <VideoMetaCard
+      :class="{ 'initial-drop-card': isInitialDropOnly }"
       :meta="displayVideoMeta"
       :loading="videoMetaLoading"
       :error="videoMetaError"
@@ -657,11 +670,13 @@ onUnmounted(() => {
       @pick-subtitle="(p: string) => (job.subtitlePath = p)"
     />
     <SubtitleCheckPanel
+      v-if="!isInitialDropOnly"
       :matrix-check="colorMatrixCheck"
       :analysis="subtitleAnalysis"
       :analyzing="subtitleAnalyzing"
     />
     <CompressForm
+      v-if="!isInitialDropOnly"
       v-model="job"
       :encode-presets="encodePresets"
       :selected-encode-preset-id="selectedEncodePresetId"
@@ -675,9 +690,9 @@ onUnmounted(() => {
       @subtitle-analyzed="onSubtitleAnalyzed"
     />
 
-    <CommandPreviewCard v-if="command.length && showCommandPreview" :command="command" />
+    <CommandPreviewCard v-if="!isInitialDropOnly && command.length && showCommandPreview" :command="command" />
 
-    <section class="actions">
+    <section v-if="!isInitialDropOnly" class="actions">
       <button
         type="button"
         class="secondary command-toggle"
@@ -693,6 +708,7 @@ onUnmounted(() => {
     </section>
 
     <JobLogPanel
+      v-if="!isInitialDropOnly"
       :lines="logs"
       :command="command"
       :percent="percent"

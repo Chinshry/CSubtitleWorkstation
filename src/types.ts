@@ -119,7 +119,7 @@ export type CompressJob = {
   videoPath: string
   subtitlePath: string
   outputPath: string
-  crf: number
+  crf: number | null
   maxBitrate?: number
   needLogo: boolean
   needYadif: boolean
@@ -134,6 +134,19 @@ export type CompressJob = {
   /** 前端 inspectVideoMeta 解析出的"显示尺寸"（已应用 rotation），由后端用于 LOGO overlay 像素换算 */
   videoWidth?: number
   videoHeight?: number
+  quickProcess?: QuickProcessSettings
+}
+
+export type QuickProcessSettings = {
+  enabled: boolean
+  /** 兼容旧版合并字段；新 UI 使用 rotation + mirror。 */
+  transform?: 'none' | 'rotate_cw' | 'rotate_ccw' | 'rotate_180' | 'rotate_cw_flip' | 'rotate_ccw_flip' | 'hflip' | 'vflip'
+  rotation: 'none' | 'rotate_cw' | 'rotate_ccw' | 'rotate_180'
+  mirror: 'none' | 'hflip' | 'vflip'
+  scale: 'none' | 'landscape_4k' | 'landscape_1080' | 'landscape_720' | 'portrait_1080' | 'portrait_720' | 'custom'
+  customScale: string
+  frameRate?: number
+  videoBitrateKbps?: number
 }
 
 export type CompressStatus = {

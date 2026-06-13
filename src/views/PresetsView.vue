@@ -69,7 +69,7 @@ const selectedEncodeSettings = computed<EncodeSettingsModel>({
   set(value) {
     updateSelectedEncodePreset({
       encoder: value.encoder,
-      crf: value.crf,
+      crf: value.crf ?? 18,
       maxBitrate: value.maxBitrate,
     })
   },

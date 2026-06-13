@@ -9,7 +9,7 @@ pub struct CompressJob {
     pub video_path: String,
     pub subtitle_path: String,
     pub output_path: String,
-    pub crf: u8,
+    pub crf: Option<u8>,
     pub max_bitrate: Option<i32>,
     pub need_logo: bool,
     pub need_yadif: bool,
@@ -38,4 +38,27 @@ pub struct CompressJob {
     pub video_width: Option<i32>,
     #[serde(default)]
     pub video_height: Option<i32>,
+    #[serde(default)]
+    pub quick_process: Option<QuickProcessSettings>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickProcessSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub transform: String,
+    #[serde(default)]
+    pub rotation: String,
+    #[serde(default)]
+    pub mirror: String,
+    #[serde(default)]
+    pub scale: String,
+    #[serde(default)]
+    pub custom_scale: String,
+    #[serde(default)]
+    pub frame_rate: Option<f64>,
+    #[serde(default)]
+    pub video_bitrate_kbps: Option<i32>,
 }

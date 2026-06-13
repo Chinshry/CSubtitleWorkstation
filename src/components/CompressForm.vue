@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { CompressJob, VideoEncodePreset } from '../types'
+import type { CompressJob, QuickProcessSettings, VideoEncodePreset } from '../types'
 import { isWindows } from '../stores/platformStore'
 import { avsStatus, initAvsStatus, initLavFiltersStatus, lavChecking, lavStatusLoaded } from '../stores/avsStore'
 import { analyzeSubtitle, type SubtitleAnalysisResult } from '../api/compress'
@@ -39,6 +39,121 @@ const advancedOpen = ref(false)
 const presetMenuOpen = ref(false)
 const toast = useToast()
 let subtitleAnalyzeSeq = 0
+
+const defaultQuickProcess: QuickProcessSettings = {
+  enabled: false,
+  transform: 'none' as const,
+  rotation: 'none' as const,
+  mirror: 'none' as const,
+  scale: 'none' as const,
+  customScale: '',
+  frameRate: undefined,
+  videoBitrateKbps: undefined,
+}
+
+const quickProcess = computed(() => job.value.quickProcess ?? defaultQuickProcess)
+
+const quickEnabled = computed({
+  get() {
+    return quickProcess.value.enabled
+  },
+  set(value: boolean) {
+    updateQuickProcess({ enabled: value })
+  }
+})
+
+const quickRotation = computed({
+  get() {
+    return quickProcess.value.rotation ?? legacyRotationFromTransform(quickProcess.value.transform)
+  },
+  set(value: string | number) {
+    updateQuickProcess({ rotation: String(value) as QuickProcessSettings['rotation'], transform: 'none' })
+  }
+})
+
+const quickMirror = computed({
+  get() {
+    return quickProcess.value.mirror ?? legacyMirrorFromTransform(quickProcess.value.transform)
+  },
+  set(value: string | number) {
+    updateQuickProcess({ mirror: String(value) as QuickProcessSettings['mirror'], transform: 'none' })
+  }
+})
+
+const quickScale = computed({
+  get() {
+    return quickProcess.value.scale
+  },
+  set(value: string | number) {
+    updateQuickProcess({ scale: String(value) as QuickProcessSettings['scale'] })
+  }
+})
+
+const quickCustomScale = computed({
+  get() {
+    return quickProcess.value.customScale
+  },
+  set(value: string) {
+    updateQuickProcess({ customScale: value })
+  }
+})
+
+const quickFrameRate = computed<number | undefined>({
+  get() {
+    return quickProcess.value.frameRate
+  },
+  set(value) {
+    updateQuickProcess({ frameRate: normalizePositiveNumber(value) })
+  }
+})
+
+const quickVideoBitrate = computed<number | undefined>({
+  get() {
+    return quickProcess.value.videoBitrateKbps
+  },
+  set(value) {
+    updateQuickProcess({ videoBitrateKbps: normalizePositiveInteger(value) })
+  }
+})
+
+const quickSummary = computed(() => {
+  if (!quickProcess.value.enabled) return '关闭'
+  const parts: string[] = []
+  const rotation = quickRotationOptions.find((item) => item.value === quickRotation.value)
+  const mirror = quickMirrorOptions.find((item) => item.value === quickMirror.value)
+  const scale = quickScaleOptions.find((item) => item.value === quickProcess.value.scale)
+  if (rotation && rotation.value !== 'none') parts.push(rotation.label)
+  if (mirror && mirror.value !== 'none') parts.push(mirror.label)
+  if (scale && scale.value !== 'none') {
+    parts.push(scale.value === 'custom' ? `缩放 ${quickProcess.value.customScale || '自定义'}` : scale.label)
+  }
+  if (quickProcess.value.frameRate) parts.push(`${quickProcess.value.frameRate} fps`)
+  if (quickProcess.value.videoBitrateKbps) parts.push(`${quickProcess.value.videoBitrateKbps} Kbps`)
+  return parts.length ? parts.join(' · ') : '未选择处理项'
+})
+
+const quickRotationOptions: Array<{ value: QuickProcessSettings['rotation'], label: string }> = [
+  { value: 'none', label: '不旋转' },
+  { value: 'rotate_cw', label: '顺时针 90°' },
+  { value: 'rotate_ccw', label: '逆时针 90°' },
+  { value: 'rotate_180', label: '旋转 180°' },
+]
+
+const quickMirrorOptions: Array<{ value: QuickProcessSettings['mirror'], label: string }> = [
+  { value: 'none', label: '不镜像' },
+  { value: 'hflip', label: '横向镜像' },
+  { value: 'vflip', label: '竖向镜像' },
+]
+
+const quickScaleOptions: Array<{ value: QuickProcessSettings['scale'], label: string }> = [
+  { value: 'none', label: '不调整分辨率' },
+  { value: 'landscape_4k', label: '横屏 4K（高 2160）' },
+  { value: 'landscape_1080', label: '横屏 1080（高 1080）' },
+  { value: 'landscape_720', label: '横屏 720（高 720）' },
+  { value: 'portrait_1080', label: '竖屏 1080（宽 1080）' },
+  { value: 'portrait_720', label: '竖屏 720（宽 720）' },
+  { value: 'custom', label: '自定义' },
+]
 
 const encodePresetOptions = computed(() => {
   return (props.encodePresets ?? []).map((preset) => ({
@@ -136,6 +251,11 @@ function syncAvsAvailability() {
 
 // AVS 状态变化时（含调试 mock 切换）自动同步
 watch(avsToggleDisabled, syncAvsAvailability)
+watch(() => job.value.subtitlePath, (path) => {
+  if (!path?.trim() && job.value.useAvs) {
+    job.value.useAvs = false
+  }
+})
 
 // 字幕分析：检测是否包含特效标签，自动勾选 AVS；同时把结果透传给上层用于色彩矩阵匹配
 async function analyzeSubtitleForEffects() {
@@ -216,11 +336,6 @@ const logoSummary = computed(() => {
 // LOGO 层级：AVS 模式下 VSFilterMod TextSubMod 把字幕烧进 AVS 输出，
 // ffmpeg 滤镜无法再插入到字幕之下，故 AVS 启用时 LOGO 强制在字幕上、禁用切换。
 const logoLayerDisabled = computed(() => !!job.value.useAvs)
-const logoLayerTip = computed(() =>
-  logoLayerDisabled.value
-    ? 'AVS 模式下字幕由 AVS 脚本渲染，LOGO 仅能叠加在字幕之上'
-    : '“字幕在上 LOGO 在下”=LOGO 会被字幕遮挡；“LOGO 在上 字幕在下”=LOGO 完整覆盖字幕'
-)
 // AppSelect 仅接受 string | number，做一层 bool ↔ string 适配。
 // AVS 模式下视觉上锁定为 'top'，不写回 job.logoOnTop（保留用户上次选择）
 const logoLayerValue = computed<'top' | 'bottom'>({
@@ -262,6 +377,19 @@ function logoBasename(p: string): string {
   if (!p) return ''
   const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
   return idx >= 0 ? p.slice(idx + 1) : p
+}
+
+function legacyRotationFromTransform(transform?: QuickProcessSettings['transform']): QuickProcessSettings['rotation'] {
+  if (transform === 'rotate_cw' || transform === 'rotate_cw_flip') return 'rotate_cw'
+  if (transform === 'rotate_ccw' || transform === 'rotate_ccw_flip') return 'rotate_ccw'
+  if (transform === 'rotate_180') return 'rotate_180'
+  return 'none'
+}
+
+function legacyMirrorFromTransform(transform?: QuickProcessSettings['transform']): QuickProcessSettings['mirror'] {
+  if (transform === 'rotate_cw_flip' || transform === 'rotate_ccw_flip' || transform === 'vflip') return 'vflip'
+  if (transform === 'hflip') return 'hflip'
+  return 'none'
 }
 
 function onOpenLogoEditor() {
@@ -322,6 +450,27 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   if (custom) args.push(custom)
   return args.join(' ')
 }
+
+function updateQuickProcess(patch: Partial<QuickProcessSettings>) {
+  job.value = {
+    ...job.value,
+    quickProcess: {
+    ...defaultQuickProcess,
+    ...job.value.quickProcess,
+    ...patch,
+    }
+  }
+}
+
+function normalizePositiveNumber(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
+  return Math.round(value * 1000) / 1000
+}
+
+function normalizePositiveInteger(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
+  return Math.round(value)
+}
 </script>
 
 <template>
@@ -363,6 +512,108 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
 
     <div class="compress-sections">
       <section class="form-section settings-section">
+        <div class="quick-process-panel" :class="{ active: quickEnabled }">
+          <label class="switch-row quick-process-switch">
+            <input v-model="quickEnabled" type="checkbox" />
+            <span class="switch"></span>
+            <span>视频处理</span>
+            <small v-if="quickEnabled">{{ quickSummary }}</small>
+            <InfoHint
+              placement="right"
+              title="视频处理"
+              body="把旋转、镜像、分辨率、帧率和视频码率处理编译进当前压制命令，会重新编码视频并输出新文件。"
+              :items="['适合旋转、镜像、缩放、抽帧或码率调整。', '字幕、LOGO、编码器和质量值仍复用当前压制页设置。']"
+            />
+          </label>
+
+          <div v-if="quickEnabled" class="quick-process-grid">
+            <label class="quick-field-rotate">
+              <span class="quick-field-label">
+                旋转
+                <InfoHint
+                  placement="right"
+                  title="旋转"
+                  command="transpose / hflip,vflip"
+                  body="在压制时旋转输出画面，会写入视频滤镜并重新编码画面。"
+                  :items="['用于手机竖屏、录屏方向错误等场景。', '180° 使用 hflip,vflip，效果等同画面倒转。']"
+                />
+              </span>
+              <AppSelect v-model="quickRotation" :options="quickRotationOptions" />
+            </label>
+            <label class="quick-field-mirror">
+              <span class="quick-field-label">
+                镜像
+                <InfoHint
+                  title="镜像"
+                  command="hflip / vflip"
+                  body="在压制时对画面做横向或竖向镜像翻转，可与旋转同时使用。"
+                  :items="['横向镜像是左右翻转。', '竖向镜像是上下翻转。']"
+                />
+              </span>
+              <AppSelect v-model="quickMirror" :options="quickMirrorOptions" />
+            </label>
+            <label class="quick-field-scale">
+              <span class="quick-field-label">
+                分辨率
+                <InfoHint
+                  title="分辨率"
+                  command="scale"
+                  body="按预设或自定义表达式缩放输出画面，宽高会尽量保持原比例。"
+                  :items="['横屏预设按高度控制，例如 1080 表示输出高 1080。', '竖屏预设按宽度控制，例如 1080 表示输出宽 1080。']"
+                />
+              </span>
+              <AppSelect v-model="quickScale" :options="quickScaleOptions" />
+            </label>
+            <label v-if="quickScale === 'custom'" class="quick-field-custom-scale">
+              <span class="quick-field-label">
+                自定义缩放
+                <InfoHint
+                  title="自定义缩放"
+                  command="scale=宽:高"
+                  body="直接填写 ffmpeg scale 的宽高表达式，用于预设无法覆盖的尺寸。"
+                  :items="['例如 -1:1080 表示高度 1080，宽度按比例自动计算。', '例如 1080:-1 表示宽度 1080，高度按比例自动计算。']"
+                />
+              </span>
+              <input
+                v-model.trim="quickCustomScale"
+                type="text"
+                spellcheck="false"
+                placeholder="如 -1:1080 或 1080:-1"
+              />
+            </label>
+            <label class="quick-field-fps">
+              <span class="quick-field-label">
+                帧率
+                <InfoHint
+                  title="帧率"
+                  command="fps"
+                  body="限制输出视频的帧率，常用于压低体积或统一发布规格。"
+                  :items="['留空表示不调整帧率。', '填写 30 会输出 30 fps；填写 60 会输出 60 fps。']"
+                />
+              </span>
+              <span class="quick-inline-input">
+                <input v-model.number="quickFrameRate" type="number" min="1" max="240" placeholder="不调整" />
+                <em>fps</em>
+              </span>
+            </label>
+            <label class="quick-field-bitrate">
+              <span class="quick-field-label">
+                视频码率
+                <InfoHint
+                  title="视频码率"
+                  command="-b:v"
+                  body="为视频流指定目标码率，主要用于控制输出体积和平台规格。"
+                  :items="['留空表示不额外指定视频码率，仍使用当前编码器和质量值。', '填写 5000 表示目标视频码率约 5000 Kbps。']"
+                />
+              </span>
+              <span class="quick-inline-input">
+                <input v-model.number="quickVideoBitrate" type="number" min="1" placeholder="不调整" />
+                <em>Kbps</em>
+              </span>
+            </label>
+          </div>
+        </div>
+
         <EncodeSettingsFields v-model="job" :encoder-options="encoderOptions">
           <template #encoder-trailing>
             <button type="button" class="secondary advanced-toggle" @click="advancedOpen = !advancedOpen">
@@ -389,7 +640,20 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
       </section>
 
       <section class="form-section options-section">
-        <div class="switch-row-wrap">
+        <div class="compress-option-rows">
+          <div class="compress-option-row">
+            <label class="switch-row">
+              <input v-model="job.needYadif" type="checkbox" />
+              <span class="switch"></span>
+              <span>使用反交错压制</span>
+              <InfoHint
+                title="反交错压制"
+                command="-vf yadif"
+                body="把交错信号合成连续画面，消除横向锯齿或梳状伪影。"
+                :items="['TV 录制、转录、DV、磁带数字化素材常见隔行，建议开启。', '网络发布视频通常已经是逐行扫描，一般不需要开启。']"
+              />
+            </label>
+
           <label class="switch-row">
             <input v-model="job.needLogo" type="checkbox" />
             <span class="switch"></span>
@@ -401,17 +665,24 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
               :items="['点击「配置 LOGO」进入编辑器。', '关闭开关时，已保存的 LOGO 布局会保留，但不会参与压制。']"
             />
           </label>
-          <label class="switch-row">
-            <input v-model="job.needYadif" type="checkbox" />
-            <span class="switch"></span>
-            <span>使用反交错压制</span>
-            <InfoHint
-              title="反交错压制"
-              command="-vf yadif"
-              body="把交错信号合成连续画面，消除横向锯齿或梳状伪影。"
-              :items="['TV 录制、转录、DV、磁带数字化素材常见隔行，建议开启。', '网络发布视频通常已经是逐行扫描，一般不需要开启。']"
-            />
-          </label>
+
+            <div v-if="job.needLogo" class="logo-config-inline">
+              <button
+                type="button"
+                class="secondary logo-config-btn"
+                :class="{ disabled: logoButtonDisabled }"
+                :disabled="logoButtonDisabled"
+                v-tooltip="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
+                @click="onOpenLogoEditor"
+              >
+                {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
+              </button>
+              <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
+              <span v-else class="logo-summary muted">尚未配置 LOGO</span>
+            </div>
+          </div>
+
+          <div v-if="job.subtitlePath?.trim()" class="compress-option-row subtitle-option-row">
           <label class="switch-row" :class="{ 'switch-row-disabled': avsToggleDisabled }">
             <input
               v-model="job.useAvs"
@@ -431,23 +702,21 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
               :items="['仅 Windows 支持，需要本机安装 AviSynth+，且 ffmpeg 启用 --enable-avisynth。', '适合复杂 ASS 特效字幕；不勾选则走 ffmpeg filter 模式。']"
             />
           </label>
-        </div>
 
-        <div v-if="job.needLogo" class="logo-config-row">
-          <button
-            type="button"
-            class="secondary logo-config-btn"
-            :class="{ disabled: logoButtonDisabled }"
-            :disabled="logoButtonDisabled"
-            v-tooltip="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
-            @click="onOpenLogoEditor"
-          >
-            {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
-          </button>
-          <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
-          <span v-else class="logo-summary muted">尚未配置 LOGO</span>
-          <div class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }" v-tooltip="logoLayerTip">
-            <span class="logo-layer-label">LOGO 层级</span>
+            <div v-if="job.needLogo" class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }">
+            <span class="logo-layer-label">
+              LOGO 层级
+              <InfoHint
+                placement="right"
+                title="LOGO 层级"
+                body="控制字幕和 LOGO 的覆盖顺序。"
+                :items="[
+                  '字幕在上 LOGO 在下：LOGO 会被字幕遮挡。',
+                  'LOGO 在上 字幕在下：LOGO 完整覆盖字幕。',
+                  'AVS 模式下字幕由 AVS 渲染，LOGO 层级会锁定为 LOGO 在上。'
+                ]"
+              />
+            </span>
             <AppSelect
               v-model="logoLayerValue"
               class="logo-layer-select"
@@ -457,6 +726,7 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
                 { value: 'top', label: 'LOGO 在上 字幕在下', title: 'LOGO 完整覆盖字幕' }
               ]"
             />
+            </div>
           </div>
         </div>
       </section>
@@ -465,12 +735,28 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
 </template>
 
 <style scoped>
-.logo-config-row {
+.compress-option-rows {
+  display: grid;
+  gap: 12px;
+  padding: 6px 2px;
+}
+
+.compress-option-row,
+.logo-config-inline {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 14px;
+}
+
+.compress-option-row {
+  gap: 28px;
+}
+
+.subtitle-option-row {
+  border-top: 1px solid #e3e9ed;
+  margin-top: 4px;
+  padding-top: 16px;
 }
 
 .compress-sections {
@@ -488,6 +774,12 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   border-bottom: none;
   padding-bottom: 0;
   margin-bottom: 0;
+}
+
+.settings-section {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 12px;
 }
 
 .section-heading {
@@ -608,6 +900,85 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   line-height: 1.5;
   margin: 8px 0 0;
 }
+.quick-process-panel {
+  background: #f8fafb;
+  border: 1px solid #e3e9ed;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+.quick-process-panel.active {
+  background: #f4fafc;
+  border-color: #b7d8e3;
+}
+.quick-process-switch {
+  margin: 0;
+}
+.quick-process-switch small {
+  color: #667582;
+  font-size: 12px;
+  margin-left: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-process-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  margin-top: 12px;
+}
+.quick-process-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.quick-field-rotate,
+.quick-field-mirror,
+.quick-field-fps {
+  grid-column: span 2;
+}
+.quick-field-scale,
+.quick-field-custom-scale {
+  grid-column: span 3;
+}
+.quick-field-bitrate {
+  grid-column: span 2;
+}
+.quick-process-grid label > span:first-child {
+  color: #43515c;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.quick-process-grid .quick-field-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+.quick-process-grid input {
+  background: #fff;
+  border: 1px solid #d6e0e6;
+  border-radius: 6px;
+  color: #18202a;
+  min-height: 36px;
+  min-width: 0;
+  padding: 0 10px;
+}
+.quick-inline-input {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+.quick-inline-input input {
+  flex: 1;
+}
+.quick-inline-input em {
+  color: #667582;
+  font-size: 12px;
+  font-style: normal;
+}
 .logo-config-btn {
   min-height: 34px;
   padding: 0 14px;
@@ -632,7 +1003,6 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   align-items: center;
   display: flex;
   gap: 8px;
-  margin-left: auto;
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -741,6 +1111,24 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   font-size: 11px;
   color: #176b87;
   font-weight: 500;
+}
+
+@media (max-width: 1120px) {
+  .quick-process-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .quick-process-grid label {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .quick-process-grid {
+    grid-template-columns: 1fr;
+  }
+  .quick-process-grid label {
+    grid-column: span 1;
+  }
 }
 
 </style>

@@ -432,6 +432,11 @@ nav button.active .nav-icon {
   transition: margin-left 0.24s ease;
 }
 
+.workspace.initial-drop-workspace {
+  grid-auto-rows: minmax(0, 1fr);
+  padding-bottom: 22px;
+}
+
 .drop-overlay {
   align-items: center;
   background: rgba(23, 107, 135, 0.12);
@@ -1130,6 +1135,12 @@ select option {
   padding: 32px 22px;
 }
 
+.video-meta-card.initial-drop-card {
+  display: flex;
+  min-height: calc(100vh - 58px);
+  padding: 18px;
+}
+
 .video-meta-card.drag-target {
   background: #eef7fa;
   border-color: #176b87;
@@ -1147,6 +1158,21 @@ select option {
   padding: 38px 20px;
   text-align: center;
   transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.video-meta-card.initial-drop-card .dropzone {
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  padding: 48px 24px;
+}
+
+.video-meta-card.initial-drop-card .dropzone-icon {
+  font-size: 44px;
+}
+
+.video-meta-card.initial-drop-card .dropzone-title {
+  font-size: 20px;
 }
 
 .video-meta-card.drag-target .dropzone {
@@ -1174,6 +1200,19 @@ select option {
   color: #687682;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.dropzone-note {
+  background: #eef7fa;
+  border: 1px solid #cfe3eb;
+  border-radius: 999px;
+  color: #176b87;
+  display: inline-flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  padding: 4px 12px;
 }
 
 .dropzone-actions {
@@ -2219,10 +2258,6 @@ select option {
   /* 压制参数标题区 + 套用预设按钮在窄屏不挤在同一行 */
   .preset-picker {
     flex-wrap: wrap;
-  }
-  /* LOGO 配置行：层级选择放回左对齐，避免 margin-left: auto 把它推出可视区 */
-  .logo-config-row .logo-layer-control {
-    margin-left: 0;
   }
   /* 命令预览头部允许 copy 按钮换行 */
   .command-preview .command-head {

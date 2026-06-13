@@ -74,7 +74,8 @@ pub fn save_proofread_file(
     if output_path.exists() && !overwrite {
         return Err(format!("OUTPUT_EXISTS:{}", output_path.to_string_lossy()));
     }
-    fs::write(&output_path, text).map_err(|err| format!("Failed to write proofread text: {err}"))?;
+    fs::write(&output_path, text)
+        .map_err(|err| format!("Failed to write proofread text: {err}"))?;
     Ok(SavedProofreadFile {
         output_path: output_path.to_string_lossy().to_string(),
     })
@@ -83,7 +84,8 @@ pub fn save_proofread_file(
 #[tauri::command]
 pub fn save_proofread_to_path(path: String, text: String) -> Result<SavedProofreadFile, String> {
     let output_path = PathBuf::from(path);
-    fs::write(&output_path, text).map_err(|err| format!("Failed to write proofread text: {err}"))?;
+    fs::write(&output_path, text)
+        .map_err(|err| format!("Failed to write proofread text: {err}"))?;
     Ok(SavedProofreadFile {
         output_path: output_path.to_string_lossy().to_string(),
     })
@@ -240,7 +242,8 @@ fn collect_line_issues(
 
     let tags = jieba().tag(line, true);
     for (index, tag) in tags.iter().enumerate() {
-        let Some((suggestion, message, reason, confidence)) = suggest_with_tags(&tags, index) else {
+        let Some((suggestion, message, reason, confidence)) = suggest_with_tags(&tags, index)
+        else {
             continue;
         };
         let start = line_start + tag.start;
@@ -278,12 +281,22 @@ fn suggest_with_tags<'a>(
             if prev.is_some_and(|(_, tag)| is_verb_or_adjective(tag))
                 && next.is_some_and(|(_, tag)| is_degree_or_adjective(tag))
             {
-                return Some(("得", "疑似应使用“得”", "动词或形容词后接程度、结果补语时通常使用“得”。", "medium"));
+                return Some((
+                    "得",
+                    "疑似应使用“得”",
+                    "动词或形容词后接程度、结果补语时通常使用“得”。",
+                    "medium",
+                ));
             }
             if prev.is_some_and(|(_, tag)| is_adverbial_modifier(tag))
                 && next.is_some_and(|(_, tag)| is_verb(tag))
             {
-                return Some(("地", "疑似应使用“地”", "副词或状态词修饰动作时通常使用“地”。", "medium"));
+                return Some((
+                    "地",
+                    "疑似应使用“地”",
+                    "副词或状态词修饰动作时通常使用“地”。",
+                    "medium",
+                ));
             }
         }
         "地" => {
@@ -293,14 +306,24 @@ fn suggest_with_tags<'a>(
             if prev.is_some_and(|(_, tag)| is_verb_or_adjective(tag))
                 && next.is_some_and(|(_, tag)| is_degree_or_adjective(tag))
             {
-                return Some(("得", "疑似应使用“得”", "后面接程度或结果补语时通常使用“得”。", "medium"));
+                return Some((
+                    "得",
+                    "疑似应使用“得”",
+                    "后面接程度或结果补语时通常使用“得”。",
+                    "medium",
+                ));
             }
         }
         "得" => {
             if prev.is_some_and(|(_, tag)| is_adverbial_modifier(tag))
                 && next.is_some_and(|(_, tag)| is_verb(tag))
             {
-                return Some(("地", "疑似应使用“地”", "副词或状态词修饰动作时通常使用“地”。", "medium"));
+                return Some((
+                    "地",
+                    "疑似应使用“地”",
+                    "副词或状态词修饰动作时通常使用“地”。",
+                    "medium",
+                ));
             }
             if next.is_some_and(|(_, tag)| is_noun(tag))
                 || after_next.is_some_and(|(_, tag)| is_noun(tag))
@@ -366,7 +389,9 @@ fn is_verb_or_adjective(tag: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{proofread_text_inner as proofread_text_command, ProofreadIssue, ProofreadTermRule};
+    use super::{
+        proofread_text_inner as proofread_text_command, ProofreadIssue, ProofreadTermRule,
+    };
 
     fn proofread_text(text: String) -> Result<Vec<ProofreadIssue>, String> {
         proofread_text_command(text, None)
@@ -421,5 +446,4 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].suggestion, "Sense");
     }
-
 }

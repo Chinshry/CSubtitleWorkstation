@@ -49,7 +49,7 @@ export function renderOutputName(
     video_name: video.stem || 'output',
     resolution,
     encoder: job.encoder,
-    crf: String(job.crf),
+    crf: job.crf === null ? '' : String(job.crf),
     date: formatDateTime(date, 'YYYYMMDD'),
   }
   let out = pattern || DEFAULT_OUTPUT_TEMPLATE.pattern

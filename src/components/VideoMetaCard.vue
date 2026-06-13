@@ -341,11 +341,13 @@ onBeforeUnmount(() => {
     <!-- 空状态：dropzone 占位 -->
     <div v-if="isEmptyState" class="dropzone">
       <div class="dropzone-icon">⬇︎</div>
-      <div class="dropzone-title">拖入视频和字幕到此处</div>
+      <div class="dropzone-title">拖入视频开始处理</div>
       <div class="dropzone-sub">
+        <span class="dropzone-note">支持单视频处理；需要字幕压制时可同时拖入字幕</span>
+        <br />
         视频：mp4 / mkv / mov / ts / m4v / flv / avi / webm / wmv / mpg / 3gp / mts
         <br />
-        字幕：ass / ssa / srt / vtt / sub
+        字幕可选：ass / ssa / srt / vtt / sub
       </div>
       <div class="dropzone-actions">
         <button class="secondary" @click="chooseFiles">选择文件</button>

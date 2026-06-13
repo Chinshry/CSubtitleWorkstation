@@ -62,10 +62,7 @@ pub fn save_converted_text_file(
     let input_path = PathBuf::from(path);
     let output_path = output_path_with_suffix(&input_path, &suffix)?;
     if output_path.exists() && !overwrite {
-        return Err(format!(
-            "OUTPUT_EXISTS:{}",
-            output_path.to_string_lossy()
-        ));
+        return Err(format!("OUTPUT_EXISTS:{}", output_path.to_string_lossy()));
     }
     fs::write(&output_path, text)
         .map_err(|err| format!("Failed to write converted text: {err}"))?;
@@ -113,7 +110,9 @@ fn protect_custom_rule_sources(
 fn restore_custom_rule_targets(text: String, placeholders: Vec<(String, String)>) -> String {
     placeholders
         .into_iter()
-        .fold(text, |next, (placeholder, target)| next.replace(&placeholder, &target))
+        .fold(text, |next, (placeholder, target)| {
+            next.replace(&placeholder, &target)
+        })
 }
 
 fn decode_text(bytes: &[u8]) -> Result<String, String> {
@@ -167,7 +166,10 @@ mod tests {
     fn converts_taiwan_phrases_to_mainland_simplified() {
         let input = "俐落\n急遽\n哈囉\n彷彿\n反覆\n回覆\n軟體\n記憶體\n腳踏車";
         let output = convert_chinese_text(input.to_string(), "t2s".to_string(), None).unwrap();
-        assert_eq!(output, "俐落\n急遽\n哈啰\n仿佛\n反复\n回复\n软件\n内存\n自行车");
+        assert_eq!(
+            output,
+            "俐落\n急遽\n哈啰\n仿佛\n反复\n回复\n软件\n内存\n自行车"
+        );
     }
 
     #[test]
