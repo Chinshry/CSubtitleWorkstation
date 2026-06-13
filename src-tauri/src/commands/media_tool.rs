@@ -474,10 +474,10 @@ fn validate_media_job(job: &MediaToolJob) -> Result<(), String> {
             }
             let audio_path = job.audio_path.as_deref().unwrap_or("").trim();
             if audio_path.is_empty() {
-                return Err("请选择音频文件。".to_string());
+                return Err("请选择音频来源文件。".to_string());
             }
-            if !Path::new(audio_path).is_file() || !is_audio_file(Path::new(audio_path)) {
-                return Err("音频文件仅支持 M4A / AAC / MP3 / WAV / FLAC / AC3 / EAC3 / OPUS / OGG。".to_string());
+            if !Path::new(audio_path).is_file() || !is_audio_source_file(Path::new(audio_path)) {
+                return Err("音频来源仅支持常见音频文件，或带音轨的视频文件。".to_string());
             }
         }
     }
@@ -536,6 +536,46 @@ fn is_audio_file(path: &Path) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+fn is_video_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "mp4"
+                    | "mkv"
+                    | "mov"
+                    | "ts"
+                    | "m4v"
+                    | "flv"
+                    | "avi"
+                    | "webm"
+                    | "wmv"
+                    | "mpg"
+                    | "mpeg"
+                    | "3gp"
+                    | "3g2"
+                    | "rm"
+                    | "rmvb"
+                    | "vob"
+                    | "mts"
+                    | "m2ts"
+                    | "ogv"
+                    | "ogg"
+                    | "divx"
+                    | "asf"
+                    | "f4v"
+                    | "hevc"
+                    | "h265"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn is_audio_source_file(path: &Path) -> bool {
+    is_audio_file(path) || is_video_file(path)
 }
 
 fn natural_cmp(a: &str, b: &str) -> Ordering {
@@ -860,5 +900,19 @@ mod tests {
         assert!(command.iter().any(|arg| arg == "-shortest"));
         let _ = fs::remove_file(input);
         let _ = fs::remove_file(audio);
+    }
+
+    #[test]
+    fn merge_audio_video_accepts_video_as_audio_source() {
+        let input = unique_temp_path("in.mp4");
+        let audio_source = unique_temp_path("audio-source.mkv");
+        fs::write(&input, b"fake").unwrap();
+        fs::write(&audio_source, b"fake").unwrap();
+        let command =
+            build_media_tool_command("ffmpeg", &merge_job(&input, &audio_source), "").unwrap();
+        assert!(command.windows(2).any(|pair| pair == ["-map", "0:v:0"]));
+        assert!(command.windows(2).any(|pair| pair == ["-map", "1:a:0"]));
+        let _ = fs::remove_file(input);
+        let _ = fs::remove_file(audio_source);
     }
 }

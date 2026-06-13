@@ -15,7 +15,9 @@ import { globalDragActive, pendingDrop } from '../stores/dropStore'
 import { ffmpegChecking, ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus } from '../stores/ffmpegStore'
 import type { CompressStatus } from '../types'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
+import CommandTaskActions from '../components/CommandTaskActions.vue'
 import JobLogPanel from '../components/JobLogPanel.vue'
+import PathPickerField from '../components/PathPickerField.vue'
 
 const mode = ref<MediaToolMode>('remuxToMp4')
 const inputPath = ref('')
@@ -65,7 +67,7 @@ const dragHint = computed(() => (
   mode.value === 'addCoverToMp4'
     ? '松开以读取视频或封面图片'
     : mode.value === 'mergeAudioVideo'
-      ? '松开以读取视频或音频文件'
+      ? '松开以读取视频或音频来源文件'
     : mode.value === 'concatTsToMp4'
     ? '松开以读取 TS 分片目录或分片文件'
     : '松开以读取视频文件'
@@ -219,22 +221,25 @@ function applyDroppedPaths(paths: string[], videoPath?: string) {
   if (!paths.length && !videoPath) return
   const coverFile = paths.find(isCoverPath)
   const audioFile = paths.find(isAudioPath)
-  const droppedVideo = videoPath || paths.find(isVideoPath)
+  const videoFiles = paths.filter(isVideoPath)
+  const droppedVideo = videoPath || videoFiles[0]
+  const videoAudioSource = videoFiles.find((path) => path !== droppedVideo)
+  const audioSourceFile = audioFile || videoAudioSource
   if (mode.value === 'mergeAudioVideo') {
     if (droppedVideo) {
       inputPath.value = droppedVideo
       applyAutoOutput()
     }
-    if (audioFile) {
-      audioPath.value = audioFile
+    if (audioSourceFile) {
+      audioPath.value = audioSourceFile
     }
     return
   }
 
-  if (audioFile && droppedVideo) {
+  if (audioSourceFile && droppedVideo) {
     setMode('mergeAudioVideo', false)
     inputPath.value = droppedVideo
-    audioPath.value = audioFile
+    audioPath.value = audioSourceFile
     applyAutoOutput()
     return
   }
@@ -340,9 +345,17 @@ async function pickCoverFile() {
 async function pickAudioFile() {
   if (running.value) return
   const selected = await open({
-    title: '选择要合并的音频文件',
+    title: '选择要合并的音频来源文件',
     multiple: false,
-    filters: [{ name: '音频', extensions: ['m4a', 'aac', 'mp3', 'wav', 'flac', 'ac3', 'eac3', 'opus', 'ogg'] }]
+    filters: [
+      {
+        name: '音频或视频',
+        extensions: [
+          'm4a', 'aac', 'mp3', 'wav', 'flac', 'ac3', 'eac3', 'opus', 'ogg',
+          'mp4', 'mkv', 'mov', 'm4v', 'ts', 'm2ts', 'mts', 'flv', 'avi', 'webm', 'wmv', 'mpg', 'mpeg', '3gp'
+        ]
+      }
+    ]
   })
   if (typeof selected === 'string') {
     audioPath.value = selected
@@ -609,45 +622,40 @@ function formatBytes(bytes: number) {
       </div>
 
       <div class="media-tool-grid" :class="{ 'has-extra-input': mode === 'addCoverToMp4' || mode === 'mergeAudioVideo' }">
-        <label class="path-field">
-          <span>{{ mode === 'concatTsToMp4' ? '分片目录' : '输入视频' }}</span>
-          <div class="path-control">
-            <input
-              v-model="inputPath"
-              readonly
-              :placeholder="mode === 'concatTsToMp4' ? '选择包含 .ts / .m2ts / .mts 的文件夹' : mode === 'addCoverToMp4' ? '选择 mp4 / m4v / mov 视频文件' : mode === 'mergeAudioVideo' ? '选择要保留画面的视频文件' : '选择 mkv / mov / ts / flv 等视频文件'"
-            />
-            <button type="button" class="secondary" :disabled="running" @click="mode === 'concatTsToMp4' ? pickSegmentFolder() : pickInputFile()">
-              选择
-            </button>
-          </div>
-        </label>
+        <PathPickerField
+          v-model="inputPath"
+          :label="mode === 'concatTsToMp4' ? '分片目录' : '输入视频'"
+          :placeholder="mode === 'concatTsToMp4' ? '选择包含 .ts / .m2ts / .mts 的文件夹' : mode === 'addCoverToMp4' ? '选择 mp4 / m4v / mov 视频文件' : mode === 'mergeAudioVideo' ? '选择要保留画面的视频文件' : '选择 mkv / mov / ts / flv 等视频文件'"
+          :disabled="running"
+          @pick="mode === 'concatTsToMp4' ? pickSegmentFolder() : pickInputFile()"
+        />
 
-        <label v-if="mode === 'mergeAudioVideo'" class="path-field">
-          <span>输入音频</span>
-          <div class="path-control">
-            <input v-model="audioPath" readonly placeholder="选择 m4a / aac / mp3 等音频文件" />
-            <button type="button" class="secondary" :disabled="running" @click="pickAudioFile">选择</button>
-          </div>
-        </label>
+        <PathPickerField
+          v-if="mode === 'mergeAudioVideo'"
+          v-model="audioPath"
+          label="输入音频"
+          placeholder="选择音频或视频文件"
+          :disabled="running"
+          @pick="pickAudioFile"
+        />
 
-        <label v-if="mode === 'addCoverToMp4'" class="path-field">
-          <span>封面图片</span>
-          <div class="path-control">
-            <input v-model="coverPath" readonly placeholder="选择 jpg / png 封面图片" />
-            <button type="button" class="secondary" :disabled="running" @click="pickCoverFile">选择</button>
-          </div>
-        </label>
+        <PathPickerField
+          v-if="mode === 'addCoverToMp4'"
+          v-model="coverPath"
+          label="封面图片"
+          placeholder="选择 jpg / png 封面图片"
+          :disabled="running"
+          @pick="pickCoverFile"
+        />
 
-        <label class="path-field">
-          <span>输出 MP4</span>
-          <div class="path-control">
-            <input v-model="outputPath" readonly placeholder="选择输出位置" />
-            <button type="button" class="secondary" :disabled="running || !inputPath" @click="pickOutputPath">选择</button>
-          </div>
-        </label>
+        <PathPickerField
+          v-model="outputPath"
+          label="输出 MP4"
+          placeholder="选择输出位置"
+          :disabled="running || !inputPath"
+          @pick="pickOutputPath"
+        />
       </div>
-
       <div v-if="mode === 'remuxToMp4'" class="tool-note">
         <strong>处理说明</strong>
         <span>将视频换成 MP4 容器，视频流和音频流默认原样复制，不重新编码。</span>
@@ -662,7 +670,7 @@ function formatBytes(bytes: number) {
 
       <div v-else-if="mode === 'mergeAudioVideo'" class="tool-note">
         <strong>处理说明</strong>
-        <span>保留输入视频的画面，并把外部音频作为输出文件的主音轨。</span>
+        <span>保留输入视频的画面，并把音频来源文件的第一条音轨作为输出文件的主音轨。</span>
         <span>视频和音频默认原样复制，不重新编码；输出会按较短的一路结束，避免尾部空跑。</span>
       </div>
 
@@ -691,21 +699,17 @@ function formatBytes(bytes: number) {
 
     <CommandPreviewCard v-if="command.length && showCommandPreview" :command="command" />
 
-    <section class="actions">
-      <button
-        type="button"
-        class="secondary command-toggle"
-        :class="{ active: showCommandPreview }"
-        :disabled="!command.length"
-        v-tooltip="command.length ? '' : '选择输入和输出后自动生成命令'"
-        @click="showCommandPreview = !showCommandPreview"
-      >
-        {{ showCommandPreview ? '隐藏命令预览' : '显示命令预览' }}
-      </button>
-      <button v-if="running" class="danger" @click="cancelJob">取消转换</button>
-      <button v-else :disabled="!canRun" @click="runJob">开始转换</button>
-    </section>
-
+    <CommandTaskActions
+      v-model:preview-open="showCommandPreview"
+      :command="command"
+      :running="running"
+      :can-run="canRun"
+      start-label="开始转换"
+      cancel-label="取消转换"
+      preview-disabled-tip="选择输入和输出后自动生成命令"
+      @run="runJob"
+      @cancel="cancelJob"
+    />
     <JobLogPanel
       title="转换进度"
       idle-title="尚未开始转换"
@@ -797,44 +801,6 @@ function formatBytes(bytes: number) {
 
 .media-tool-grid.has-extra-input {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.path-field {
-  display: grid;
-  gap: 6px;
-}
-
-.path-field > span {
-  color: #415260;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.path-control {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.path-control input {
-  background: #fff;
-  border: 1px solid #c8d8e2;
-  border-radius: 8px;
-  color: #102030;
-  font-size: 14px;
-  min-width: 0;
-  padding: 0 12px;
-}
-
-.path-control button {
-  font-size: 13px;
-  font-weight: 750;
-  min-height: 36px;
-  padding: 0 12px;
-}
-
-.path-control input::placeholder {
-  color: #8b99a5;
 }
 
 .tool-note,
