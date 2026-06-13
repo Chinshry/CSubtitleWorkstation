@@ -1,13 +1,13 @@
 {
-  "version": "0.1.11",
-  "notes": "## ✨ 新增功能\n\n- 新增 CC 字幕整理工具，可将 Web CC 说话人标签拆分为花字行，并把台词整理为听轴行。\n- CC 字幕整理支持导入 ASS / SSA 作为样式参考，选择听轴样式和花字样式后再整理 SRT / ASS / SSA 字幕。\n- CC 字幕整理支持将 SRT 输入转换为 ASS 输出，并复用导入的 ASS 头部和样式模板。\n- 新增通用自定义词库弹窗，支持表格编辑、原始文本编辑、正则匹配和试匹配预览。\n- 输出模板支持导入导出，便于在不同项目或设备间复用压制配置。",
-  "pub_date": "2026-06-12T15:45:18Z",
+  "version": "0.1.12",
+  "notes": "## ✨ 新增功能\n\n- 压制页新增「视频处理」，支持在同一个压制流程里处理单视频或字幕压制任务。\n- 视频处理支持旋转、镜像、分辨率、帧率和视频码率调整；旋转与镜像独立配置，并支持 180° 旋转。\n- 支持无字幕单视频处理，初始拖拽入口已明确提示「视频必选、字幕可选」。\n- 质量值支持留空；留空时不生成 `-crf` / `-cq` / `-qp` 参数，便于只按码率控制输出。\n- 优化 LOGO 层级、AVS 无字幕回退、命令预览刷新和视频处理相关帮助说明。\n\n## 🎨 体验改进\n\n- 压制页初始状态改为全屏拖拽入口，导入视频后再显示完整压制控件。\n- 调整视频处理、LOGO 配置、AVS、LOGO 层级等控件布局和提示样式。",
+  "pub_date": "2026-06-13T12:23:50Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.11/CSubtitleWorkstation_0.1.11_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.12/CSubtitleWorkstation_0.1.12_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.11/CSubtitleWorkstation_0.1.11_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.12/CSubtitleWorkstation_0.1.12_universal.dmg"
     }
   }
 }
