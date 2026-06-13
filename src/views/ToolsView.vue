@@ -5,6 +5,7 @@ import { activeTool, type ToolId } from '../stores/toolStore'
 const TextConversionView = defineAsyncComponent(() => import('./TextConversionView.vue'))
 const ProofreadView = defineAsyncComponent(() => import('./ProofreadView.vue'))
 const CcSubtitleView = defineAsyncComponent(() => import('./CcSubtitleView.vue'))
+const MediaRemuxView = defineAsyncComponent(() => import('./MediaRemuxView.vue'))
 
 type ToolItem = {
   id: ToolId
@@ -26,14 +27,21 @@ const textTools: ToolItem[] = [
   }
 ]
 
-const mediaTools: ToolItem[] = []
+const mediaTools: ToolItem[] = [
+  {
+    id: 'media-remux',
+    name: '封装转换'
+  }
+]
 
 const activeToolComponent = computed(() => (
-  activeTool.value === 'text-conversion'
-    ? TextConversionView
-    : activeTool.value === 'cc-subtitle'
-      ? CcSubtitleView
-      : ProofreadView
+  activeTool.value === 'media-remux'
+    ? MediaRemuxView
+    : activeTool.value === 'text-conversion'
+      ? TextConversionView
+      : activeTool.value === 'cc-subtitle'
+        ? CcSubtitleView
+        : ProofreadView
 ))
 </script>
 
@@ -95,7 +103,8 @@ const activeToolComponent = computed(() => (
 
 .tools-workspace > :deep(.text-conversion-workspace),
 .tools-workspace > :deep(.proofread-workspace),
-.tools-workspace > :deep(.cc-subtitle-workspace) {
+.tools-workspace > :deep(.cc-subtitle-workspace),
+.tools-workspace > :deep(.media-remux-workspace) {
   min-height: 0;
 }
 

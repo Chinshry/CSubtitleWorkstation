@@ -17,6 +17,9 @@ const props = defineProps<{
   remainingSeconds?: number
   running?: boolean
   cancelled?: boolean
+  title?: string
+  idleTitle?: string
+  idleTip?: string
 }>()
 
 // 根据日志判断最终状态
@@ -27,7 +30,7 @@ const finalStatus = computed(() => {
   if (!props.lines.length) return 'idle'
   const lastLine = props.lines[props.lines.length - 1]
   if (lastLine.includes('❌')) return 'failed'
-  if (lastLine.includes('Compression completed')) return 'completed'
+  if (/^(Compression|Media tool) completed/.test(lastLine)) return 'completed'
   return 'idle'
 })
 
@@ -109,7 +112,7 @@ const estimatedSizeKb = computed(() => {
   <section class="panel log-panel" :class="{ 'is-idle-empty': isIdleEmpty }">
     <div class="panel-heading">
       <div class="heading-title">
-        <h2>压制进度</h2>
+        <h2>{{ title ?? '压制进度' }}</h2>
         <span :class="['status-badge', statusClass]">{{ statusLabel }}</span>
       </div>
       <button v-if="!isIdleEmpty" class="copy-btn" :class="{ active: copyHint }" @click="copyAll" data-tip="复制全部日志">
@@ -124,8 +127,8 @@ const estimatedSizeKb = computed(() => {
           <polygon points="6 4 20 12 6 20 6 4"></polygon>
         </svg>
       </div>
-      <p class="idle-hero-title">尚未开始压制</p>
-      <p class="idle-hero-tip">配置好参数后点击上方「开始压制」按钮</p>
+      <p class="idle-hero-title">{{ idleTitle ?? '尚未开始压制' }}</p>
+      <p class="idle-hero-tip">{{ idleTip ?? '配置好参数后点击上方「开始压制」按钮' }}</p>
     </div>
 
     <template v-else>

@@ -42,8 +42,30 @@ function classifyPaths(paths: string[]) {
   return out
 }
 
-function resolveDropRoute(classified: { videoPath?: string; subtitlePath?: string; textPath?: string }) {
+function isLikelyMediaToolPath(path: string) {
+  const lower = path.toLowerCase()
+  if (/\.(mp4|mkv|mov|ts|m4v|flv|avi|webm|wmv|mpg|mpeg|3gp|3g2|rm|rmvb|vob|mts|m2ts|ogv|ogg|divx|asf|f4v|hevc|h265)$/.test(lower)) {
+    return true
+  }
+  if (/\.(jpe?g|png)$/.test(lower)) {
+    return true
+  }
+  if (/\.(m4a|aac|mp3|wav|flac|ac3|eac3|opus|ogg)$/.test(lower)) {
+    return true
+  }
+  return !/\.[a-z0-9]{1,8}$/i.test(path)
+}
+
+function resolveDropRoute(
+  classified: { videoPath?: string; subtitlePath?: string; textPath?: string },
+  paths: string[]
+) {
   const route: { target: 'home' | 'tools'; tool?: ToolId } = { target: 'home' }
+  if (active.value === 'tools' && activeTool.value === 'media-remux' && paths.some(isLikelyMediaToolPath)) {
+    route.target = 'tools'
+    route.tool = 'media-remux'
+    return route
+  }
   if (active.value === 'tools' && classified.textPath) {
     route.target = 'tools'
     route.tool = activeTool.value
@@ -93,7 +115,7 @@ onMounted(async () => {
           return
         }
         const classified = classifyPaths(paths)
-        const route = resolveDropRoute(classified)
+        const route = resolveDropRoute(classified, paths)
         if (route.tool) activeTool.value = route.tool
         pendingDrop.value = {
           ...route,
