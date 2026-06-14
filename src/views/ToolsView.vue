@@ -5,6 +5,7 @@ import { activeTool, type ToolId } from '../stores/toolStore'
 const TextConversionView = defineAsyncComponent(() => import('./TextConversionView.vue'))
 const ProofreadView = defineAsyncComponent(() => import('./ProofreadView.vue'))
 const CcSubtitleView = defineAsyncComponent(() => import('./CcSubtitleView.vue'))
+const SubtitleFormatView = defineAsyncComponent(() => import('./SubtitleFormatView.vue'))
 const MediaRemuxView = defineAsyncComponent(() => import('./MediaRemuxView.vue'))
 
 type ToolItem = {
@@ -24,6 +25,10 @@ const textTools: ToolItem[] = [
   {
     id: 'cc-subtitle',
     name: 'CC 字幕整理'
+  },
+  {
+    id: 'subtitle-format',
+    name: '字幕格式转换'
   }
 ]
 
@@ -41,6 +46,8 @@ const activeToolComponent = computed(() => (
       ? TextConversionView
       : activeTool.value === 'cc-subtitle'
         ? CcSubtitleView
+        : activeTool.value === 'subtitle-format'
+          ? SubtitleFormatView
         : ProofreadView
 ))
 </script>
@@ -104,6 +111,7 @@ const activeToolComponent = computed(() => (
 .tools-workspace > :deep(.text-conversion-workspace),
 .tools-workspace > :deep(.proofread-workspace),
 .tools-workspace > :deep(.cc-subtitle-workspace),
+.tools-workspace > :deep(.subtitle-format-workspace),
 .tools-workspace > :deep(.media-remux-workspace) {
   min-height: 0;
 }

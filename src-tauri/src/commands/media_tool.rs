@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fs;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -70,7 +70,10 @@ pub fn list_ts_segments(folder_path: String) -> Result<Vec<TsSegment>, String> {
 }
 
 #[tauri::command]
-pub fn preview_media_tool_command(app: AppHandle, job: MediaToolJob) -> Result<Vec<String>, String> {
+pub fn preview_media_tool_command(
+    app: AppHandle,
+    job: MediaToolJob,
+) -> Result<Vec<String>, String> {
     let config = config_store::load(&app)?;
     let status = ffmpeg_locator::detect(&config);
     let ffmpeg_path = status
@@ -96,7 +99,8 @@ pub async fn start_media_tool(
     let job_id = job.id.clone();
     let app_for_cleanup = app.clone();
     let result =
-        match tauri::async_runtime::spawn_blocking(move || start_media_tool_blocking(app, job)).await
+        match tauri::async_runtime::spawn_blocking(move || start_media_tool_blocking(app, job))
+            .await
         {
             Ok(result) => result,
             Err(err) => Err(format!("Media tool startup task failed: {err}")),
@@ -180,7 +184,9 @@ fn start_media_tool_blocking(app: AppHandle, job: MediaToolJob) -> Result<(), St
         .ok_or_else(|| "ffmpeg is not configured.".to_string())?;
 
     let duration_seconds = match job.mode {
-        MediaToolMode::RemuxToMp4 | MediaToolMode::AddCoverToMp4 | MediaToolMode::MergeAudioVideo => {
+        MediaToolMode::RemuxToMp4
+        | MediaToolMode::AddCoverToMp4
+        | MediaToolMode::MergeAudioVideo => {
             command_builder::inspect_video(&ffmpeg_path, &job.input_path)
                 .ok()
                 .and_then(|info| info.duration_seconds)
@@ -435,6 +441,9 @@ fn validate_media_job(job: &MediaToolJob) -> Result<(), String> {
     if !job.output_path.to_ascii_lowercase().ends_with(".mp4") {
         return Err("封装转换第一版只输出 MP4 文件。".to_string());
     }
+    if output_matches_source(job) {
+        return Err("输出路径不能和输入文件相同。".to_string());
+    }
     match job.mode {
         MediaToolMode::RemuxToMp4 => {
             if !Path::new(&job.input_path).is_file() {
@@ -484,6 +493,47 @@ fn validate_media_job(job: &MediaToolJob) -> Result<(), String> {
     Ok(())
 }
 
+fn output_matches_source(job: &MediaToolJob) -> bool {
+    let output = comparable_path(&job.output_path);
+    if output.is_empty() {
+        return false;
+    }
+    let mut sources = vec![job.input_path.as_str()];
+    if let Some(path) = job.cover_path.as_deref() {
+        sources.push(path);
+    }
+    if let Some(path) = job.audio_path.as_deref() {
+        sources.push(path);
+    }
+    sources
+        .into_iter()
+        .filter(|path| !path.trim().is_empty())
+        .any(|path| comparable_path(path) == output)
+}
+
+fn comparable_path(path: &str) -> String {
+    let raw = Path::new(path.trim());
+    let normalized: PathBuf = fs::canonicalize(raw).unwrap_or_else(|_| {
+        raw.parent()
+            .and_then(|parent| fs::canonicalize(parent).ok())
+            .map(|parent| {
+                raw.file_name()
+                    .map(|name| parent.join(name))
+                    .unwrap_or(parent)
+            })
+            .unwrap_or_else(|| raw.to_path_buf())
+    });
+    let value = normalized.to_string_lossy().replace('/', "\\");
+    #[cfg(windows)]
+    {
+        value.to_ascii_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        value
+    }
+}
+
 fn write_concat_list(path: &Path, segments: &[TsSegment]) -> Result<(), String> {
     let mut content = String::new();
     for segment in segments {
@@ -498,24 +548,14 @@ fn needs_aac_adtstoasc(input_path: &str) -> bool {
     Path::new(input_path)
         .extension()
         .and_then(|value| value.to_str())
-        .map(|ext| {
-            matches!(
-                ext.to_ascii_lowercase().as_str(),
-                "ts" | "m2ts" | "mts"
-            )
-        })
+        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "ts" | "m2ts" | "mts"))
         .unwrap_or(false)
 }
 
 fn is_ts_like(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
-        .map(|ext| {
-            matches!(
-                ext.to_ascii_lowercase().as_str(),
-                "ts" | "m2ts" | "mts"
-            )
-        })
+        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "ts" | "m2ts" | "mts"))
         .unwrap_or(false)
 }
 
@@ -754,7 +794,8 @@ fn kill_process_tree(pid: u32) -> Result<(), String> {
         .map_err(|err| format!("启动 taskkill 失败: {err}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("不存在") {
+        if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("不存在")
+        {
             return Ok(());
         }
         return Err(format!("taskkill 失败: {stderr}"));
@@ -874,8 +915,7 @@ mod tests {
         let cover = unique_temp_path("cover.jpg");
         fs::write(&input, b"fake").unwrap();
         fs::write(&cover, b"fake").unwrap();
-        let command =
-            build_media_tool_command("ffmpeg", &cover_job(&input, &cover), "").unwrap();
+        let command = build_media_tool_command("ffmpeg", &cover_job(&input, &cover), "").unwrap();
         assert!(command.windows(2).any(|pair| pair == ["-map", "0"]));
         assert!(command.windows(2).any(|pair| pair == ["-map", "1:v:0"]));
         assert!(command
@@ -892,8 +932,7 @@ mod tests {
         let audio = unique_temp_path("audio.m4a");
         fs::write(&input, b"fake").unwrap();
         fs::write(&audio, b"fake").unwrap();
-        let command =
-            build_media_tool_command("ffmpeg", &merge_job(&input, &audio), "").unwrap();
+        let command = build_media_tool_command("ffmpeg", &merge_job(&input, &audio), "").unwrap();
         assert!(command.windows(2).any(|pair| pair == ["-map", "0:v:0"]));
         assert!(command.windows(2).any(|pair| pair == ["-map", "1:a:0"]));
         assert!(command.windows(2).any(|pair| pair == ["-c", "copy"]));
@@ -914,5 +953,16 @@ mod tests {
         assert!(command.windows(2).any(|pair| pair == ["-map", "1:a:0"]));
         let _ = fs::remove_file(input);
         let _ = fs::remove_file(audio_source);
+    }
+
+    #[test]
+    fn validate_rejects_output_same_as_input() {
+        let input = unique_temp_path("in.mp4");
+        fs::write(&input, b"fake").unwrap();
+        let mut job = job(MediaToolMode::RemuxToMp4, &input);
+        job.output_path = input.to_string_lossy().to_string();
+        let err = validate_media_job(&job).unwrap_err();
+        assert!(err.contains("输出路径不能和输入文件相同"));
+        let _ = fs::remove_file(input);
     }
 }

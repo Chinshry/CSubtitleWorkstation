@@ -76,6 +76,8 @@ pub fn run() {
             commands::media_tool::preview_media_tool_command,
             commands::media_tool::start_media_tool,
             commands::media_tool::cancel_media_tool,
+            commands::subtitle_tool::preview_subtitle_format_command,
+            commands::subtitle_tool::convert_subtitle_format,
             commands::text_conversion::convert_chinese_text,
             commands::text_conversion::read_plain_text_file,
             commands::text_conversion::save_converted_text_file,

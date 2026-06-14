@@ -66,6 +66,16 @@ function resolveDropRoute(
     route.tool = 'media-remux'
     return route
   }
+  if (
+    active.value !== 'tools' &&
+    classified.subtitlePath &&
+    !classified.videoPath &&
+    paths.every((path) => /\.(ass|ssa|srt|vtt|sub)$/i.test(path))
+  ) {
+    route.target = 'tools'
+    route.tool = 'subtitle-format'
+    return route
+  }
   if (active.value === 'tools' && classified.textPath) {
     route.target = 'tools'
     route.tool = activeTool.value

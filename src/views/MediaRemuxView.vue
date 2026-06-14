@@ -49,20 +49,35 @@ let elapsedTicker: ReturnType<typeof setInterval> | null = null
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let segmentTimer: ReturnType<typeof setTimeout> | null = null
 
-const canRun = computed(() => {
-  if (!ffmpegStatus.value?.available) return false
-  if (!inputPath.value.trim() || !outputPath.value.trim()) return false
-  if (mode.value === 'concatTsToMp4' && !segments.value.length) return false
-  if (mode.value === 'addCoverToMp4' && !coverPath.value.trim()) return false
-  if (mode.value === 'mergeAudioVideo' && !audioPath.value.trim()) return false
-  return true
-})
-
 const segmentTotalBytes = computed(() => (
   segments.value.reduce((sum, item) => sum + item.sizeBytes, 0)
 ))
 
 const visibleSegments = computed(() => segments.value.slice(0, 12))
+const sourcePaths = computed(() => [
+  inputPath.value,
+  mode.value === 'addCoverToMp4' ? coverPath.value : '',
+  mode.value === 'mergeAudioVideo' ? audioPath.value : ''
+].filter((path) => path.trim()))
+const outputConflictsWithSource = computed(() => {
+  const output = normalizePathForCompare(outputPath.value)
+  if (!output) return false
+  return sourcePaths.value.some((path) => normalizePathForCompare(path) === output)
+})
+const runDisabledTip = computed(() => {
+  if (!ffmpegStatus.value?.available) return '请先在设置页配置可用的 ffmpeg'
+  if (!inputPath.value.trim()) return mode.value === 'concatTsToMp4' ? '请选择分片目录' : '请选择输入视频'
+  if (mode.value === 'addCoverToMp4' && !coverPath.value.trim()) return '请选择封面图片'
+  if (mode.value === 'mergeAudioVideo' && !audioPath.value.trim()) return '请选择音频来源'
+  if (!outputPath.value.trim()) return '请选择输出 MP4 路径'
+  if (outputConflictsWithSource.value) return '输出路径不能和输入文件相同'
+  if (mode.value === 'concatTsToMp4') {
+    if (segmentsLoading.value) return '正在读取分片列表'
+    if (!segments.value.length) return '所选目录中没有可合并的 TS / M2TS / MTS 分片'
+  }
+  return '可以开始转换'
+})
+const canRun = computed(() => runDisabledTip.value === '可以开始转换')
 const dragHint = computed(() => (
   mode.value === 'addCoverToMp4'
     ? '松开以读取视频或封面图片'
@@ -196,6 +211,10 @@ function sameParent(paths: string[]) {
   if (!paths.length) return ''
   const first = parentDir(paths[0])
   return paths.every((path) => parentDir(path) === first) ? first : ''
+}
+
+function normalizePathForCompare(path: string) {
+  return path.trim().replace(/[\\/]+/g, '\\').toLowerCase()
 }
 
 function outputForInput(path: string) {
@@ -656,6 +675,9 @@ function formatBytes(bytes: number) {
           @pick="pickOutputPath"
         />
       </div>
+      <p v-if="outputConflictsWithSource" class="form-warning">
+        输出路径不能和输入文件相同，请选择一个新的 MP4 文件。
+      </p>
       <div v-if="mode === 'remuxToMp4'" class="tool-note">
         <strong>处理说明</strong>
         <span>将视频换成 MP4 容器，视频流和音频流默认原样复制，不重新编码。</span>
@@ -707,6 +729,7 @@ function formatBytes(bytes: number) {
       start-label="开始转换"
       cancel-label="取消转换"
       preview-disabled-tip="选择输入和输出后自动生成命令"
+      :run-disabled-tip="runDisabledTip"
       @run="runJob"
       @cancel="cancelJob"
     />
@@ -825,6 +848,16 @@ function formatBytes(bytes: number) {
   border-radius: 4px;
   color: #0f5268;
   padding: 1px 4px;
+}
+
+.form-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  font-size: 13px;
+  margin: -4px 0 0;
+  padding: 10px 12px;
 }
 
 .segments-head {
