@@ -24,9 +24,9 @@ import {
 } from '../utils/outputTemplates'
 
 const appConfig = ref<AppConfig | null>(null)
-const outputTemplates = ref<OutputNameTemplate[]>([])
+const outputTemplates = ref<OutputNameTemplate[]>(normalizeOutputTemplates(null))
 const selectedTemplateId = ref('default')
-const encodePresets = ref<VideoEncodePreset[]>([])
+const encodePresets = ref<VideoEncodePreset[]>(normalizeEncodePresets(null))
 const selectedEncodePresetId = ref('balanced-x264')
 const draggedTemplateId = ref<string | null>(null)
 const draggedEncodePresetId = ref<string | null>(null)

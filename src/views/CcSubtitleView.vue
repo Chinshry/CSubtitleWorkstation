@@ -3,7 +3,6 @@ import { open, save } from '@tauri-apps/plugin-dialog'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { loadConfig, saveConfig } from '../api/config'
 import AppSelect from '../components/AppSelect.vue'
-import InfoHint from '../components/InfoHint.vue'
 import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import {
   organizeCcSubtitleText,
@@ -35,6 +34,9 @@ const busy = ref(false)
 const organizing = ref(false)
 const statusText = ref('')
 const appConfig = ref<AppConfig | null>(null)
+const ccGrid = ref<HTMLDivElement | null>(null)
+const sourcePanePercent = ref(50)
+const resizing = ref(false)
 const toast = useToast()
 let organizeTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -42,9 +44,7 @@ let organizeSeq = 0
 let organizeInFlight = false
 let organizeAgain = false
 let dictionaryLoaded = false
-const dictionaryLoadPromise = loadReplacementDictionary()
-
-void dictionaryLoadPromise
+let dictionaryLoadPromise: Promise<void> | null = null
 
 const resultText = computed(() => result.value?.text ?? '')
 const sourceCount = computed(() => sourceText.value.length)
@@ -70,15 +70,10 @@ const replacementRules = computed<CcReplacementRule[]>(() => {
     .map((rule) => ({ replacement: rule.target, pattern: rule.pattern }))
 })
 const activeReplacementRules = computed(() => replacementEnabled.value ? replacementRules.value : [])
-const ruleHintItems = [
-  '先读取样式参考 ASS，解析 [V4+ Styles]；必须手动选择听轴样式和花字样式。',
-  'SRT 输入会转换为 ASS 输出；ASS / SSA 输入会处理已有 Dialogue 行。',
-  '遇到 [方括号标签]：括号内文本去掉 []，使用花字样式。',
-  '方括号标签后面的台词会另起一条，使用听轴样式。',
-  '没有方括号标签的普通台词整条使用听轴样式。',
-  '台词只处理 \\N 换行和多余空格；',
-  '启用自定义词库时，会按词库规则替换名称或固定写法。'
-]
+const ccGridStyle = computed(() => ({
+  '--source-pane-percent': `${sourcePanePercent.value}%`,
+  '--result-pane-percent': `${100 - sourcePanePercent.value}%`
+}))
 
 async function loadReplacementDictionary() {
   try {
@@ -97,6 +92,18 @@ async function loadReplacementDictionary() {
   } finally {
     dictionaryLoaded = true
   }
+}
+
+function ensureReplacementDictionaryLoaded() {
+  if (!dictionaryLoadPromise) {
+    dictionaryLoadPromise = loadReplacementDictionary()
+  }
+  return dictionaryLoadPromise
+}
+
+function openDictionary() {
+  dictionaryOpen.value = true
+  void ensureReplacementDictionaryLoaded()
 }
 
 function scheduleSaveReplacementDictionary() {
@@ -159,7 +166,7 @@ async function organizeCurrentText() {
   organizeInFlight = true
   organizing.value = true
   try {
-    await dictionaryLoadPromise
+    await ensureReplacementDictionaryLoaded()
     if (!styleReady.value) {
       result.value = null
       statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式。'
@@ -191,6 +198,7 @@ async function organizeCurrentText() {
 
 async function importReferenceAssStyles() {
   if (busy.value) return
+  void ensureReplacementDictionaryLoaded()
   const selected = await open({
     multiple: false,
     filters: [
@@ -237,7 +245,7 @@ async function loadFile(path: string) {
   busy.value = true
   statusText.value = '正在读取字幕文件...'
   try {
-    await dictionaryLoadPromise
+    await ensureReplacementDictionaryLoaded()
     const text = await readCcSubtitleFile(path)
     pendingFilePath.value = path
     sourceText.value = text
@@ -320,6 +328,44 @@ function formatCount(count: number) {
   return count.toLocaleString('zh-CN')
 }
 
+function clampPanePercent(percent: number, width: number) {
+  const leftMin = Math.min(360, width * 0.48)
+  const rightMin = Math.min(320, width * 0.42)
+  const minPercent = (leftMin / width) * 100
+  const maxPercent = ((width - rightMin) / width) * 100
+  return Math.min(maxPercent, Math.max(minPercent, percent))
+}
+
+function updatePaneSplit(clientX: number) {
+  const grid = ccGrid.value
+  if (!grid) return
+  const rect = grid.getBoundingClientRect()
+  const nextPercent = ((clientX - rect.left) / rect.width) * 100
+  sourcePanePercent.value = clampPanePercent(nextPercent, rect.width)
+}
+
+function stopPaneResize() {
+  resizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('pointermove', onPaneResizeMove)
+  window.removeEventListener('pointerup', stopPaneResize)
+}
+
+function onPaneResizeMove(event: PointerEvent) {
+  if (!resizing.value) return
+  updatePaneSplit(event.clientX)
+}
+
+function startPaneResize(event: PointerEvent) {
+  resizing.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  updatePaneSplit(event.clientX)
+  window.addEventListener('pointermove', onPaneResizeMove)
+  window.addEventListener('pointerup', stopPaneResize)
+}
+
 async function copyResult() {
   if (!resultText.value) return
   try {
@@ -397,6 +443,7 @@ watch(pendingDrop, (drop) => {
 onUnmounted(() => {
   if (organizeTimer) clearTimeout(organizeTimer)
   if (dictionarySaveTimer) clearTimeout(dictionarySaveTimer)
+  stopPaneResize()
 })
 </script>
 
@@ -405,22 +452,8 @@ onUnmounted(() => {
     <div v-if="globalDragActive" class="drop-overlay">松开以读取 ASS / SSA / SRT 字幕</div>
 
     <section class="panel cc-panel">
-      <div class="panel-heading cc-heading">
+      <div class="cc-toolbar">
         <div>
-          <h2>CC 字幕整理</h2>
-          <p class="cc-description">
-            <span>把 Web CC 的说话人标签拆成花字行，并将台词整理为听轴行。</span>
-            <span class="cc-rule-summary">整理规则</span>
-            <span class="cc-rule-help">
-              <InfoHint
-                title="CC 字幕整理规则"
-                command="读取样式 → 选择听轴/花字 → 导入待整理字幕"
-                body="用于把 Web CC 字幕整理成适合 Aegisub 后续精修的 ASS 结构。"
-                :items="ruleHintItems"
-                placement="right"
-              />
-            </span>
-          </p>
           <p v-if="statusText" class="cc-status-summary">{{ statusText }}</p>
         </div>
         <div class="cc-actions">
@@ -448,11 +481,16 @@ onUnmounted(() => {
             <span class="switch"></span>
             <span>启用自定义词库</span>
           </label>
-          <button type="button" class="secondary" @click="dictionaryOpen = true">自定义词库</button>
+          <button type="button" class="secondary" @click="openDictionary">自定义词库</button>
         </div>
       </div>
 
-      <div class="cc-grid" :class="{ disabled: !styleReady }">
+      <div
+        ref="ccGrid"
+        class="cc-grid"
+        :class="{ disabled: !styleReady, resizing }"
+        :style="ccGridStyle"
+      >
         <div class="cc-field">
           <span class="field-head">
             <strong>输入</strong>
@@ -465,11 +503,20 @@ onUnmounted(() => {
           <textarea
             v-model="sourceEditorText"
             spellcheck="false"
-            :disabled="!styleReady || busy"
-            :readonly="sourcePreviewTruncated"
-            :placeholder="styleReady ? '粘贴 ASS / SSA / SRT 内容，或拖入字幕文件' : '先读取样式参考 ASS 并选择听轴/花字样式，再粘贴或拖入需要整理的 SRT'"
+            readonly
+            aria-readonly="true"
+            placeholder="拖入 ASS / SSA / SRT 字幕文件后在这里预览内容"
           ></textarea>
         </div>
+
+        <button
+          type="button"
+          class="pane-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整输入和结果宽度"
+          @pointerdown.prevent="startPaneResize"
+        ></button>
 
         <div class="cc-field">
           <span class="field-head">
@@ -520,9 +567,11 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.cc-heading {
+.cc-toolbar {
   align-items: center;
-  margin-bottom: 0;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
 }
 
 .cc-actions {
@@ -563,21 +612,15 @@ onUnmounted(() => {
   padding: 0 10px;
 }
 
-.cc-field textarea:disabled {
-  color: #8a97a3;
-  cursor: not-allowed;
-}
-
 .cc-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+  grid-template-columns:
+    minmax(280px, calc(var(--source-pane-percent, 50%) - 6px))
+    12px
+    minmax(300px, calc(var(--result-pane-percent, 50%) - 6px));
   height: 100%;
   min-height: 0;
-}
-
-.cc-grid.disabled {
-  opacity: 0.62;
 }
 
 .cc-field {
@@ -585,6 +628,45 @@ onUnmounted(() => {
   gap: 8px;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  min-width: 0;
+}
+
+.pane-resizer {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: col-resize;
+  margin: 42px 0 0;
+  min-height: 320px;
+  min-width: 12px;
+  padding: 0;
+  position: relative;
+  touch-action: none;
+}
+
+.pane-resizer::before {
+  background: #cbd8e0;
+  border-radius: 999px;
+  content: "";
+  inset: 0 auto 0 5px;
+  opacity: 0.72;
+  position: absolute;
+  transition: background 0.16s ease, opacity 0.16s ease, width 0.16s ease;
+  width: 2px;
+}
+
+.pane-resizer:hover::before,
+.pane-resizer:focus-visible::before,
+.cc-grid.resizing .pane-resizer::before {
+  background: #176b87;
+  opacity: 1;
+  width: 3px;
+}
+
+.pane-resizer:focus-visible {
+  outline: 2px solid rgba(23, 107, 135, 0.36);
+  outline-offset: 2px;
 }
 
 .field-head {
@@ -592,6 +674,14 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  min-height: 34px;
+}
+
+.field-head strong {
+  color: #102030;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .field-tools {
@@ -632,20 +722,46 @@ onUnmounted(() => {
   line-height: 1.55;
   margin: 0;
   min-height: 0;
+  outline: none;
   overflow: auto;
   padding: 12px;
   resize: none;
-  white-space: pre;
   width: 100%;
 }
 
-.cc-field textarea:disabled {
-  background: #f1f5f8;
+.cc-field textarea,
+.cc-result {
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cc-dictionary-dialog textarea {
+  white-space: pre;
 }
 
 .cc-field textarea:read-only {
-  background: #f6f9fb;
+  background: #f9fbfc;
+  caret-color: transparent;
+  color: #18202a;
   cursor: default;
+}
+
+.cc-field textarea:focus {
+  border-color: #d6dee5;
+  box-shadow: none;
+}
+
+.cc-field textarea::placeholder {
+  color: #667582;
+  opacity: 1;
+}
+
+.cc-field textarea::selection,
+.cc-result::selection {
+  background: #fff0a8;
+  color: #18202a;
 }
 
 .cc-field textarea,
@@ -658,43 +774,12 @@ onUnmounted(() => {
   user-select: text;
 }
 
-.cc-description,
 .cc-status-summary {
   color: #667582;
   font-size: 13px;
   line-height: 1.5;
   margin: 6px 0 0;
   overflow-wrap: anywhere;
-}
-
-.cc-description {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.cc-rule-summary {
-  flex: 0 0 auto;
-}
-
-.cc-rule-help {
-  display: inline-flex;
-}
-
-.cc-rule-help :deep(.rich-hint-card) {
-  max-width: min(620px, calc(100vw - 56px));
-  min-width: min(520px, calc(100vw - 56px));
-  padding: 14px 16px;
-}
-
-.cc-rule-help :deep(.rich-hint-list) {
-  gap: 7px;
-}
-
-.cc-rule-help :deep(.rich-hint-list span) {
-  font-size: 12.5px;
-  line-height: 1.55;
 }
 
 .cc-status-summary {
@@ -819,12 +904,16 @@ onUnmounted(() => {
   min-height: 360px;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 960px) {
   .cc-grid {
     grid-template-columns: 1fr;
   }
 
-  .cc-heading,
+  .pane-resizer {
+    display: none;
+  }
+
+  .cc-toolbar,
   .cc-dictionary-dialog-head,
   .cc-dictionary-toolbar,
   .cc-dictionary-dialog-foot {

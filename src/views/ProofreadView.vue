@@ -38,9 +38,7 @@ let proofreadSeq = 0
 let proofreadInFlight = false
 let proofreadAgain = false
 let termDictionaryLoaded = false
-const termDictionaryLoadPromise = loadTermDictionary()
-
-void termDictionaryLoadPromise
+let termDictionaryLoadPromise: Promise<void> | null = null
 
 const issueCount = computed(() => issues.value.length)
 const sourceCount = computed(() => Array.from(sourceText.value).length)
@@ -82,6 +80,18 @@ async function loadTermDictionary() {
   } finally {
     termDictionaryLoaded = true
   }
+}
+
+function ensureTermDictionaryLoaded() {
+  if (!termDictionaryLoadPromise) {
+    termDictionaryLoadPromise = loadTermDictionary()
+  }
+  return termDictionaryLoadPromise
+}
+
+function openDictionary() {
+  dictionaryOpen.value = true
+  void ensureTermDictionaryLoaded()
 }
 
 function scheduleSaveTermDictionary() {
@@ -341,7 +351,7 @@ async function runProofread() {
   proofreadInFlight = true
   checking.value = true
   try {
-    await termDictionaryLoadPromise
+    await ensureTermDictionaryLoaded()
     const nextIssues = await proofreadText(sourceText.value, termRules.value)
     if (seq !== proofreadSeq) return
     issues.value = nextIssues
@@ -522,12 +532,8 @@ onUnmounted(() => {
     <div v-if="globalDragActive" class="drop-overlay">松开以校对文本或字幕文件</div>
 
     <section class="panel proofread-panel">
-      <div class="panel-heading proofread-heading">
-        <div>
-          <h2>字幕校对</h2>
-          <p>使用jieba-rs分词与词性标注，检查“的 / 地 / 得”疑似误用；检查自定义词库专有名词写法。</p>
-        </div>
-        <button type="button" class="dictionary-button" @click="dictionaryOpen = true">自定义词库</button>
+      <div class="proofread-toolbar">
+        <button type="button" class="dictionary-button" @click="openDictionary">自定义词库</button>
       </div>
 
       <div
@@ -649,9 +655,9 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.proofread-heading {
-  align-items: center;
-  margin-bottom: 0;
+.proofread-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .dictionary-button {
@@ -664,6 +670,7 @@ onUnmounted(() => {
 .proofread-grid {
   align-items: stretch;
   display: grid;
+  gap: 4px;
   grid-template-columns:
     minmax(280px, calc(var(--source-pane-percent, 58%) - 6px))
     12px
@@ -678,7 +685,7 @@ onUnmounted(() => {
   border: 0;
   border-radius: 6px;
   cursor: col-resize;
-  margin: 28px 0 0;
+  margin: 42px 0 0;
   min-height: 320px;
   min-width: 12px;
   padding: 0;
@@ -726,6 +733,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+  min-height: 34px;
 }
 
 .field-tools {
@@ -742,26 +750,36 @@ onUnmounted(() => {
 
 .field-head strong,
 .issue-list-head strong {
-  font-size: 13px;
-  font-weight: 700;
+  color: #102030;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .field-tool {
-  background: #e5eaee;
-  color: #24313c;
-  font-size: 13px;
+  background: #eef2f6;
+  border: 1px solid #dce5ec;
+  color: #43515c;
+  font-size: 12px;
   min-height: 28px;
   padding: 0 10px;
 }
 
 .field-tool.primary {
   background: #176b87;
+  border-color: #176b87;
   color: #fff;
 }
 
+.field-tool:disabled {
+  background: #eef2f6;
+  border-color: #dce5ec;
+  color: #a0acb6;
+}
+
 .text-editor-shell {
-  background: #fbfcfd;
-  border: 1px solid #d8e2e8;
+  background: #f9fbfc;
+  border: 1px solid #d6dee5;
   border-radius: 8px;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -791,7 +809,9 @@ onUnmounted(() => {
   border: 0;
   box-sizing: border-box;
   color: #18202a;
-  font: 14px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
   height: 100%;
   min-height: 0;
   outline: none;
@@ -830,8 +850,8 @@ onUnmounted(() => {
 
 .issue-items,
 .empty-issues {
-  background: #f6f8fa;
-  border: 1px solid #d8e2e8;
+  background: #f9fbfc;
+  border: 1px solid #d6dee5;
   border-radius: 8px;
   box-sizing: border-box;
   height: 100%;
@@ -950,7 +970,6 @@ onUnmounted(() => {
     display: none;
   }
 
-  .proofread-heading,
   .issue-list-head {
     align-items: stretch;
     flex-direction: column;

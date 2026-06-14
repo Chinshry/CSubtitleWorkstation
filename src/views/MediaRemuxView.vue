@@ -12,14 +12,21 @@ import {
   type TsSegment
 } from '../api/mediaTool'
 import { globalDragActive, pendingDrop } from '../stores/dropStore'
-import { ffmpegChecking, ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus } from '../stores/ffmpegStore'
+import { ffmpegChecking, ffmpegStatus, refreshFfmpegStatus } from '../stores/ffmpegStore'
+import {
+  activeMediaToolMode,
+  activeTool,
+  isMediaToolId,
+  mediaToolIdByMode,
+  mediaToolModeByToolId
+} from '../stores/toolStore'
 import type { CompressStatus } from '../types'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import CommandTaskActions from '../components/CommandTaskActions.vue'
 import JobLogPanel from '../components/JobLogPanel.vue'
 import PathPickerField from '../components/PathPickerField.vue'
 
-const mode = ref<MediaToolMode>('remuxToMp4')
+const mode = ref<MediaToolMode>(activeMediaToolMode.value)
 const inputPath = ref('')
 const coverPath = ref('')
 const audioPath = ref('')
@@ -65,7 +72,8 @@ const outputConflictsWithSource = computed(() => {
   return sourcePaths.value.some((path) => normalizePathForCompare(path) === output)
 })
 const runDisabledTip = computed(() => {
-  if (!ffmpegStatus.value?.available) return '请先在设置页配置可用的 ffmpeg'
+  if (ffmpegChecking.value) return '正在检测 ffmpeg'
+  if (ffmpegStatus.value && !ffmpegStatus.value.available) return '请先在设置页配置可用的 ffmpeg'
   if (!inputPath.value.trim()) return mode.value === 'concatTsToMp4' ? '请选择分片目录' : '请选择输入视频'
   if (mode.value === 'addCoverToMp4' && !coverPath.value.trim()) return '请选择封面图片'
   if (mode.value === 'mergeAudioVideo' && !audioPath.value.trim()) return '请选择音频来源'
@@ -100,6 +108,16 @@ const etaSeconds = computed(() => (
   remainingSeconds.value ? elapsedSeconds.value + remainingSeconds.value : 0
 ))
 
+const modeDescription = computed(() => (
+  mode.value === 'concatTsToMp4'
+    ? '按当前排序合并 TS / M2TS / MTS 分片，输出 MP4，不重新编码。'
+    : mode.value === 'addCoverToMp4'
+      ? '给 MP4 写入 JPG / PNG 封面，原视频和音频会原样复制。'
+      : mode.value === 'mergeAudioVideo'
+        ? '保留视频画面，合并单独的音频来源，输出 MP4。'
+        : '把常见视频容器重新封装为 MP4，默认只复制音视频流。'
+))
+
 function createJob(): MediaToolJob {
   return {
     id: jobId.value,
@@ -127,8 +145,13 @@ function resetProgress() {
 
 function setMode(next: MediaToolMode, reset = true) {
   if (running.value) return
+  const nextTool = mediaToolIdByMode[next]
+  if (isMediaToolId(activeTool.value) && activeTool.value !== nextTool) {
+    activeTool.value = nextTool
+  }
   if (mode.value === next) return
   mode.value = next
+  activeMediaToolMode.value = next
   if (!reset) return
   coverPath.value = ''
   audioPath.value = ''
@@ -147,6 +170,11 @@ function setMode(next: MediaToolMode, reset = true) {
   showCommandPreview.value = false
   segments.value = []
   segmentError.value = ''
+}
+
+function syncModeFromActiveTool() {
+  if (!isMediaToolId(activeTool.value)) return
+  setMode(mediaToolModeByToolId[activeTool.value])
 }
 
 function startElapsedTicker() {
@@ -494,6 +522,10 @@ watch([mode, inputPath], () => {
   }, 250)
 })
 
+watch(activeTool, () => {
+  syncModeFromActiveTool()
+})
+
 watch([mode, inputPath, coverPath, audioPath, outputPath, segments], () => {
   if (running.value) return
   if (previewTimer) clearTimeout(previewTimer)
@@ -504,13 +536,13 @@ watch([mode, inputPath, coverPath, audioPath, outputPath, segments], () => {
 
 watch(pendingDrop, (drop) => {
   if (!drop) return
-  if (drop.target !== 'tools' || drop.tool !== 'media-remux') return
+  if (drop.target !== 'tools' || !drop.tool || !isMediaToolId(drop.tool)) return
   applyDroppedPaths(drop.raw, drop.videoPath)
   pendingDrop.value = null
 })
 
 onMounted(async () => {
-  void initFfmpegStatus()
+  syncModeFromActiveTool()
   unlisteners.push(
     await listen<string>('media-tool-log', (event) => {
       logs.value.push(event.payload)
@@ -548,7 +580,11 @@ onMounted(async () => {
       if (typeof p.bitrateKbps === 'number') bitrateKbps.value = p.bitrateKbps
     })
   )
-  if (pendingDrop.value?.target === 'tools' && pendingDrop.value.tool === 'media-remux') {
+  if (
+    pendingDrop.value?.target === 'tools' &&
+    pendingDrop.value.tool &&
+    isMediaToolId(pendingDrop.value.tool)
+  ) {
     const drop = pendingDrop.value
     applyDroppedPaths(drop.raw, drop.videoPath)
     pendingDrop.value = null
@@ -591,55 +627,6 @@ function formatBytes(bytes: number) {
     </div>
 
     <section class="panel media-tool-panel">
-      <div class="media-tool-heading">
-        <div>
-          <h2>封装转换</h2>
-          <p>默认只复制音视频流，不重新编码；不兼容 MP4 的素材请回到压制页重新编码。</p>
-        </div>
-        <div class="mode-tabs" role="tablist" aria-label="封装转换模式">
-          <button
-            type="button"
-            :class="{ active: mode === 'remuxToMp4' }"
-            :disabled="running"
-            role="tab"
-            :aria-selected="mode === 'remuxToMp4'"
-            @click="setMode('remuxToMp4')"
-          >
-            单文件转 MP4
-          </button>
-          <button
-            type="button"
-            :class="{ active: mode === 'concatTsToMp4' }"
-            :disabled="running"
-            role="tab"
-            :aria-selected="mode === 'concatTsToMp4'"
-            @click="setMode('concatTsToMp4')"
-          >
-            TS 分片合并
-          </button>
-          <button
-            type="button"
-            :class="{ active: mode === 'addCoverToMp4' }"
-            :disabled="running"
-            role="tab"
-            :aria-selected="mode === 'addCoverToMp4'"
-            @click="setMode('addCoverToMp4')"
-          >
-            添加封面
-          </button>
-          <button
-            type="button"
-            :class="{ active: mode === 'mergeAudioVideo' }"
-            :disabled="running"
-            role="tab"
-            :aria-selected="mode === 'mergeAudioVideo'"
-            @click="setMode('mergeAudioVideo')"
-          >
-            合并音视频
-          </button>
-        </div>
-      </div>
-
       <div class="media-tool-grid" :class="{ 'has-extra-input': mode === 'addCoverToMp4' || mode === 'mergeAudioVideo' }">
         <PathPickerField
           v-model="inputPath"
@@ -771,51 +758,6 @@ function formatBytes(bytes: number) {
   gap: 16px;
 }
 
-.media-tool-heading {
-  align-items: flex-start;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-}
-
-.media-tool-heading h2 {
-  color: #102030;
-  font-size: 18px;
-  margin: 0;
-}
-
-.media-tool-heading p {
-  color: #667582;
-  font-size: 13px;
-  margin: 6px 0 0;
-}
-
-.mode-tabs {
-  background: #eef3f6;
-  border: 1px solid #d6e0e7;
-  border-radius: 8px;
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 4px;
-  padding: 4px;
-}
-
-.mode-tabs button {
-  background: transparent;
-  border: 0;
-  color: #536474;
-  font-size: 13px;
-  font-weight: 750;
-  line-height: 1;
-  min-height: 34px;
-  padding: 0 12px;
-}
-
-.mode-tabs button.active {
-  background: #176b87;
-  color: #fff;
-}
-
 .media-tool-grid {
   display: grid;
   gap: 12px;
@@ -895,15 +837,6 @@ function formatBytes(bytes: number) {
 }
 
 @media (max-width: 920px) {
-  .media-tool-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .mode-tabs {
-    width: fit-content;
-  }
-
   .media-tool-grid {
     grid-template-columns: 1fr;
   }

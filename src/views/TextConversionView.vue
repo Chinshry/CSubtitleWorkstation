@@ -46,9 +46,7 @@ let convertInFlight = false
 let convertAgain = false
 let scrollSyncing = false
 let customDictionaryLoaded = false
-const customDictionaryLoadPromise = loadCustomDictionary()
-
-void customDictionaryLoadPromise
+let customDictionaryLoadPromise: Promise<void> | null = null
 
 const modeLabel = computed(() => (mode.value === 's2t' ? '简体转繁体' : '繁体转简体'))
 const outputSuffix = computed(() => (mode.value === 's2t' ? '_繁体' : '_简体'))
@@ -88,10 +86,11 @@ async function convertCurrentText() {
   }
   const seq = ++convertSeq
   const text = sourceText.value
-  const rules = customRules.value
   convertInFlight = true
   textBusy.value = true
   try {
+    await ensureCustomDictionaryLoaded()
+    const rules = customRules.value
     const converted = await convertChineseText(text, mode.value, rules)
     if (seq !== convertSeq) return
     resultText.value = converted
@@ -110,6 +109,7 @@ async function convertCurrentText() {
 }
 
 async function convertTextNow(text: string) {
+  await ensureCustomDictionaryLoaded()
   return convertChineseText(text, mode.value, customRules.value)
 }
 
@@ -123,6 +123,18 @@ async function loadCustomDictionary() {
   } finally {
     customDictionaryLoaded = true
   }
+}
+
+function ensureCustomDictionaryLoaded() {
+  if (!customDictionaryLoadPromise) {
+    customDictionaryLoadPromise = loadCustomDictionary()
+  }
+  return customDictionaryLoadPromise
+}
+
+function openDictionary() {
+  dictionaryOpen.value = true
+  void ensureCustomDictionaryLoaded()
 }
 
 function scheduleSaveCustomDictionary() {
@@ -223,7 +235,7 @@ async function convertDroppedTextFile(path: string) {
   fileBusy.value = true
   fileStatus.value = '正在读取文本文件...'
   try {
-    await customDictionaryLoadPromise
+    await ensureCustomDictionaryLoaded()
     const text = await readPlainTextFile(path)
     const converted = await convertTextNow(text)
     pendingTextFilePath.value = path
@@ -387,13 +399,9 @@ onUnmounted(() => {
     <div v-if="globalDragActive" class="drop-overlay">松开以转换文本或字幕文件</div>
 
     <section class="panel text-conversion-panel">
-      <div class="panel-heading text-conversion-heading">
-        <div>
-          <h2>繁简字转换</h2>
-          <p>使用 zhconv 转换繁简文本，自定义词库会优先保护和替换指定词条。</p>
-        </div>
+      <div class="text-conversion-toolbar">
         <div class="heading-tools">
-          <button type="button" class="dictionary-button" @click="dictionaryOpen = true">自定义词库</button>
+          <button type="button" class="dictionary-button" @click="openDictionary">自定义词库</button>
           <div class="conversion-mode" role="group" aria-label="转换方向">
             <button :class="{ active: mode === 't2s' }" @click="setMode('t2s')">繁体 → 简体</button>
             <button :class="{ active: mode === 's2t' }" @click="setMode('s2t')">简体 → 繁体</button>
@@ -497,9 +505,9 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.text-conversion-heading {
-  align-items: center;
-  margin-bottom: 0;
+.text-conversion-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .heading-tools {
@@ -571,31 +579,36 @@ onUnmounted(() => {
 }
 
 .field-head strong {
-  font-size: 13px;
-  font-weight: 700;
+  color: #102030;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .field-tool {
-  background: #e5eaee;
-  color: #24313c;
-  font-size: 13px;
+  background: #eef2f6;
+  border: 1px solid #dce5ec;
+  color: #43515c;
+  font-size: 12px;
   min-height: 28px;
   padding: 0 10px;
 }
 
 .field-tool.primary {
   background: #176b87;
+  border-color: #176b87;
   color: #fff;
 }
 
 .field-tool:disabled {
-  background: #dce4e9;
-  color: #7a8790;
+  background: #eef2f6;
+  border-color: #dce5ec;
+  color: #a0acb6;
 }
 
 .text-editor-shell {
-  background: #fbfcfd;
-  border: 1px solid #d8e2e8;
+  background: #f9fbfc;
+  border: 1px solid #d6dee5;
   border-radius: 8px;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -625,7 +638,9 @@ onUnmounted(() => {
   background: transparent;
   border: 0;
   color: #18202a;
-  font: 14px/1.7 "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
   outline: none;
   padding: 12px;
   width: 100%;
@@ -652,8 +667,8 @@ onUnmounted(() => {
 }
 
 .result-preview {
-  background: #f6f8fa;
   overflow: auto;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -677,10 +692,6 @@ onUnmounted(() => {
 @media (max-width: 920px) {
   .conversion-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .text-conversion-heading {
-    align-items: flex-start;
   }
 
   .heading-tools {

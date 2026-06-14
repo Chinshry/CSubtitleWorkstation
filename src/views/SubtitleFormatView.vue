@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import {
   convertSubtitleFormat,
@@ -7,7 +7,7 @@ import {
   type SubtitleTargetFormat
 } from '../api/subtitleTool'
 import { globalDragActive, pendingDrop } from '../stores/dropStore'
-import { ffmpegChecking, ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus } from '../stores/ffmpegStore'
+import { ffmpegChecking, ffmpegStatus, refreshFfmpegStatus } from '../stores/ffmpegStore'
 import AppSelect from '../components/AppSelect.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import CommandTaskActions from '../components/CommandTaskActions.vue'
@@ -35,7 +35,8 @@ const outputConflictsWithInput = computed(() => (
 ))
 
 const runDisabledTip = computed(() => {
-  if (!ffmpegStatus.value?.available) return '请先在设置页配置可用的 ffmpeg'
+  if (ffmpegChecking.value) return '正在检测 ffmpeg'
+  if (ffmpegStatus.value && !ffmpegStatus.value.available) return '请先在设置页配置可用的 ffmpeg'
   if (!inputPath.value.trim()) return '请选择输入字幕'
   if (!outputPath.value.trim()) return '请选择输出字幕路径'
   if (outputConflictsWithInput.value) return '输出路径不能和输入字幕相同'
@@ -187,16 +188,7 @@ watch(pendingDrop, (drop) => {
   if (drop.target !== 'tools' || drop.tool !== 'subtitle-format') return
   applyDroppedPaths(drop.raw, drop.subtitlePath)
   pendingDrop.value = null
-})
-
-onMounted(() => {
-  void initFfmpegStatus()
-  if (pendingDrop.value?.target === 'tools' && pendingDrop.value.tool === 'subtitle-format') {
-    const drop = pendingDrop.value
-    applyDroppedPaths(drop.raw, drop.subtitlePath)
-    pendingDrop.value = null
-  }
-})
+}, { immediate: true })
 
 onUnmounted(() => {
   if (previewTimer) clearTimeout(previewTimer)
@@ -218,13 +210,6 @@ onUnmounted(() => {
     </div>
 
     <section class="panel subtitle-format-panel">
-      <div class="subtitle-format-heading">
-        <div>
-          <h2>字幕格式转换</h2>
-          <p>使用 ffmpeg 在 ASS / SSA / SRT / VTT 之间转换；转到 SRT / VTT 时会丢弃原格式不支持的样式和特效。</p>
-        </div>
-      </div>
-
       <div class="subtitle-format-grid">
         <PathPickerField
           v-model="inputPath"
@@ -311,18 +296,6 @@ onUnmounted(() => {
 .subtitle-format-panel {
   display: grid;
   gap: 16px;
-}
-
-.subtitle-format-heading h2 {
-  color: #102030;
-  font-size: 18px;
-  margin: 0;
-}
-
-.subtitle-format-heading p {
-  color: #667582;
-  font-size: 13px;
-  margin: 6px 0 0;
 }
 
 .subtitle-format-grid {

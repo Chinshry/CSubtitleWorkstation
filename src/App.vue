@@ -14,7 +14,7 @@ import {
   pendingDrop,
   pushDiag
 } from './stores/dropStore'
-import { activeTool, type ToolId } from './stores/toolStore'
+import { activeTool, isMediaToolId, type ToolId } from './stores/toolStore'
 import { hasAvailableUpdate, refreshAppUpdate } from './stores/updateStore'
 
 const active = ref<'home' | 'presets' | 'tools' | 'settings'>('home')
@@ -61,9 +61,9 @@ function resolveDropRoute(
   paths: string[]
 ) {
   const route: { target: 'home' | 'tools'; tool?: ToolId } = { target: 'home' }
-  if (active.value === 'tools' && activeTool.value === 'media-remux' && paths.some(isLikelyMediaToolPath)) {
+  if (active.value === 'tools' && isMediaToolId(activeTool.value) && paths.some(isLikelyMediaToolPath)) {
     route.target = 'tools'
-    route.tool = 'media-remux'
+    route.tool = activeTool.value
     return route
   }
   if (
