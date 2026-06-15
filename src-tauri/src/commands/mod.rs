@@ -8,5 +8,6 @@ pub mod media_tool;
 pub mod proofread;
 pub mod subtitle_tool;
 pub mod text_conversion;
+pub mod tool_config;
 pub mod updater;
 pub mod video;

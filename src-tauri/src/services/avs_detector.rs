@@ -171,44 +171,38 @@ fn detect_avisynth() -> DetectedAvisynth {
 /// 注册表 HKLM\SOFTWARE\AviSynth 默认值 → 安装目录路径
 #[cfg(windows)]
 fn detect_lav_filters() -> DetectedLavFilters {
-    use std::path::Path;
-
     let mut out = DetectedLavFilters::default();
-    let uninstall_roots = [
-        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-    ];
 
-    for root in uninstall_roots {
-        let Some((version, install_path)) = query_lav_uninstall_entry(root) else {
-            continue;
-        };
-        out.installed = true;
-        out.version = version;
-        out.install_path = install_path;
-        break;
-    }
-
-    if let Some(path) = out.install_path.as_deref() {
-        out.x64_available = Path::new(path).join("x64").exists();
-    }
-
-    if out.install_path.is_none() {
-        for path in common_lav_install_paths() {
-            if path.exists() {
-                out.installed = true;
-                out.install_path = Some(path.to_string_lossy().to_string());
-                out.x64_available = path.join("x64").exists();
-                break;
-            }
+    for path in common_lav_install_paths() {
+        if path.exists() {
+            out.installed = true;
+            out.install_path = Some(path.to_string_lossy().to_string());
+            out.x64_available = path.join("x64").exists();
+            break;
         }
     }
 
-    let has_splitter = registry_text_contains(r"HKCR\CLSID", "LAV Splitter");
-    let has_video = registry_text_contains(r"HKCR\CLSID", "LAV Video Decoder");
-    out.directshow_registered = has_splitter && has_video;
+    let splitter_path = query_registered_lav_filter_path(LAV_SPLITTER_CLSID);
+    let video_path = query_registered_lav_filter_path(LAV_VIDEO_DECODER_CLSID);
+    out.directshow_registered = splitter_path.is_some() && video_path.is_some();
+
     if out.directshow_registered {
         out.installed = true;
+        if out.install_path.is_none() {
+            out.install_path = splitter_path
+                .as_deref()
+                .and_then(lav_install_dir_from_registered_filter);
+        }
+        if !out.x64_available {
+            out.x64_available = splitter_path
+                .as_deref()
+                .map(is_registered_filter_x64)
+                .unwrap_or(false)
+                || video_path
+                    .as_deref()
+                    .map(is_registered_filter_x64)
+                    .unwrap_or(false);
+        }
     }
 
     out
@@ -220,77 +214,61 @@ fn detect_lav_filters() -> DetectedLavFilters {
 }
 
 #[cfg(windows)]
-fn query_lav_uninstall_entry(root: &str) -> Option<(Option<String>, Option<String>)> {
-    let mut list_cmd = Command::new(system_tool_path("reg.exe"));
-    list_cmd.args(["query", root]);
-    no_window(&mut list_cmd);
-    let list_output = list_cmd.output().ok()?;
-    if !list_output.status.success() {
-        return None;
-    }
+const LAV_SPLITTER_CLSID: &str = r"{B98D13E7-55DB-4385-A33D-09FD1BA26338}";
+#[cfg(windows)]
+const LAV_VIDEO_DECODER_CLSID: &str = r"{EE30215D-164F-4A92-A4EB-9D4C13390F9F}";
 
-    let list_text = String::from_utf8_lossy(&list_output.stdout);
-    for key in list_text
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-    {
+fn query_registered_lav_filter_path(clsid: &str) -> Option<String> {
+    for root in [
+        r"HKCR\CLSID",
+        r"HKLM\SOFTWARE\Classes\CLSID",
+        r"HKLM\SOFTWARE\WOW6432Node\Classes\CLSID",
+    ] {
+        let key = format!(r"{root}\{clsid}\InprocServer32");
         let mut cmd = Command::new(system_tool_path("reg.exe"));
-        cmd.args(["query", key]);
+        cmd.args(["query", &key, "/ve"]);
         no_window(&mut cmd);
         let Ok(output) = cmd.output() else { continue };
         if !output.status.success() {
             continue;
         }
         let text = String::from_utf8_lossy(&output.stdout);
-        if !text.contains("LAV Filters") {
-            continue;
-        }
-        let version = registry_value_from_text(&text, "DisplayVersion");
-        let install_path = registry_value_from_text(&text, "InstallLocation");
-        return Some((version, install_path));
-    }
-    None
-}
-
-#[cfg(windows)]
-fn registry_value_from_text(text: &str, value_name: &str) -> Option<String> {
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with(value_name) {
-            continue;
-        }
-        let Some(idx) = trimmed.find("REG_SZ") else {
-            continue;
-        };
-        let value = trimmed[idx + "REG_SZ".len()..].trim();
-        if !value.is_empty() {
-            return Some(value.to_string());
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if let Some(idx) = trimmed.find("REG_SZ") {
+                let value = trimmed[idx + "REG_SZ".len()..].trim();
+                if !value.is_empty() {
+                    return Some(value.to_string());
+                }
+            }
         }
     }
     None
 }
 
 #[cfg(windows)]
-fn registry_text_contains(root: &str, needle: &str) -> bool {
-    let mut cmd = Command::new(system_tool_path("reg.exe"));
-    cmd.args(["query", root, "/f", needle, "/s"]);
-    no_window(&mut cmd);
-    let Ok(output) = cmd.output() else {
-        return false;
-    };
-    if !output.status.success() {
-        return false;
+fn lav_install_dir_from_registered_filter(path: &str) -> Option<String> {
+    let path = Path::new(path);
+    let parent = path.parent()?;
+    if parent
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("x64") || name.eq_ignore_ascii_case("x86"))
+    {
+        return parent.parent().map(|dir| dir.to_string_lossy().to_string());
     }
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    text.contains(needle)
+    Some(parent.to_string_lossy().to_string())
 }
 
 #[cfg(windows)]
+fn is_registered_filter_x64(path: &str) -> bool {
+    Path::new(path)
+        .parent()
+        .and_then(|dir| dir.file_name())
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("x64"))
+}
+
 fn read_registry_install_path() -> Option<String> {
     for key in [
         "HKLM\\SOFTWARE\\AviSynth",

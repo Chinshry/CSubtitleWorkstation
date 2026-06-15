@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CompressJob, QuickProcessSettings, VideoEncodePreset } from '../types'
 import { isWindows } from '../stores/platformStore'
-import { avsStatus, initAvsStatus, initLavFiltersStatus, lavChecking, lavStatusLoaded } from '../stores/avsStore'
+import { avsStatus, lavChecking, lavStatusLoaded } from '../stores/avsStore'
 import { analyzeSubtitle, type SubtitleAnalysisResult } from '../api/compress'
 import { useEncoderOptions } from '../composables/useEncoderOptions'
 import { useToast } from '../composables/useToast'
@@ -305,16 +305,9 @@ watch(() => job.value.subtitlePath, analyzeSubtitleForEffects, { immediate: fals
 
 onMounted(() => {
   document.addEventListener('mousedown', closePresetMenuOnOutside)
-
-  // 加载支持的编码器列表
   void loadEncoderOptions().catch((err) => {
     console.error('Failed to get supported encoders:', err)
   })
-
-  if (isWindows.value) {
-    void initAvsStatus().finally(syncAvsAvailability)
-    void initLavFiltersStatus()
-  }
   syncAvsAvailability()
 })
 

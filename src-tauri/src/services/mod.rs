@@ -7,4 +7,5 @@ pub mod ffmpeg_locator;
 pub mod frame_extractor;
 pub mod subtitle_analyzer;
 pub mod temp_cleanup;
+pub mod tool_config_store;
 pub mod video_meta;

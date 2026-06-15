@@ -16,12 +16,48 @@ C:\Users\<用户名>\AppData\Roaming\com.chinshry.csubtitleworkstation\
 
 常见文件：
 
-- `config.json`：应用配置。包含 ffmpeg 路径、默认压制参数、编码预设、输出命名模板、最近 LOGO、LOGO 布局、更新检查设置等。
+- `config.json`：应用全局配置。包含 ffmpeg 路径、默认压制参数、编码预设、输出命名模板、最近 LOGO、LOGO 布局、更新检查设置、环境检测缓存等。
+- `toolbox.yaml`：工具箱配置。按 `textConversion`、`proofread`、`ccSubtitle` 分段保存文字转换词库、字幕校对词库、CC 字幕整理替换词库、ASS 头部模板、听障/花字样式选择；样式下拉列表从 ASS 头部模板里的 `[V4+ Styles]` 派生。
 - `.window-state.json`：窗口位置、大小、最大化状态。
+
+`config.json` 中还会保存环境检测缓存：
+
+```json
+{
+  "environmentCache": {
+    "ffmpegStatus": {},
+    "encoderOptions": [],
+    "avsStatus": {},
+    "lavFiltersStatus": {},
+    "updatedAt": 0
+  }
+}
+```
+
+用途：
+
+- 保存上一次检测到的 ffmpeg / ffprobe / subtitles-libass 状态。
+- 保存上一次检测到的编码器可用列表。
+- Windows 下保存上一次检测到的 AVS 与 LAV Filters 状态。
+- 应用下次启动时优先读取这些缓存结果，不再重复执行环境检测命令，从而减少启动和切页卡顿。
+
+刷新时机：
+
+- 首次没有缓存时，应用会在启动后延迟执行一次环境检测，并写入 `environmentCache`。
+- 用户在设置页点击“重新检测”时，会刷新对应环境缓存。
+- 用户选择新的 ffmpeg，或切回系统 PATH 时，会刷新 ffmpeg 缓存，并清空依赖 ffmpeg 的编码器 / AVS / LAV 缓存。
+
+与启动清理的关系：
+
+- 启动清理只处理 `AppData\Local` 下的临时目录，例如 `filter-temp`、`logo-editor-frames`、`avs-temp`。
+- `environmentCache` 位于 `AppData\Roaming` 下的 `config.json`，不会被启动清理删除。
+- 普通卸载通常不会删除 `AppData\Roaming` 下的用户配置；重装后该缓存一般仍会保留，除非卸载器或用户手动清理 AppData。
 
 删除影响：
 
 - 删除 `config.json` 会恢复应用默认配置。
+- 删除 `config.json` 也会删除环境检测缓存；下次启动会重新检测并重建缓存。
+- 删除 `toolbox.yaml` 会重置所有工具箱配置，不影响全局配置。
 - 删除 `.window-state.json` 只会重置窗口状态。
 
 ### WebView 缓存与调试开关

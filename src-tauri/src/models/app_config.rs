@@ -1,8 +1,10 @@
+use crate::models::avs_status::{AvsStatus, LavFiltersStatus};
+use crate::models::ffmpeg_status::FfmpegStatus;
+use crate::services::encoder_detector::EncoderInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     pub ffmpeg_mode: FfmpegMode,
     pub ffmpeg_path: Option<String>,
@@ -16,26 +18,30 @@ pub struct AppConfig {
     pub default_encode_preset_id: String,
     pub check_update_on_startup: bool,
     pub default_use_avs: bool,
-    #[serde(default)]
-    pub text_conversion_custom_dictionary: String,
-    #[serde(default)]
-    pub proofread_term_dictionary: String,
-    #[serde(default)]
-    pub cc_subtitle_replacement_dictionary: String,
-    #[serde(default)]
-    pub cc_subtitle_style_names: Vec<String>,
-    #[serde(default)]
-    pub cc_subtitle_ass_header: String,
-    #[serde(default)]
-    pub cc_subtitle_screen_style_name: String,
-    #[serde(default)]
-    pub cc_subtitle_speak_style_name: String,
     /// 最近使用过的 LOGO 图片，按 last_used_at 倒序，最多保留 10 项
     pub recent_logos: Vec<RecentLogo>,
     /// 按 (分辨率桶, LOGO 图路径) 区分的布局记忆。
     /// 桶 key 例如 "1080p-landscape" / "1080p-portrait" / "720p-landscape" / "4k-portrait"。
     /// 非常见分辨率（不在 720p/1080p/4K 横竖屏内）不写入此列表。
     pub logo_layouts: Vec<LogoLayoutEntry>,
+    #[serde(default)]
+    pub environment_cache: EnvironmentCache,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentCache {
+    #[serde(default)]
+    pub ffmpeg_status: Option<FfmpegStatus>,
+    #[serde(default)]
+    pub encoder_options: Option<Vec<EncoderInfo>>,
+    #[serde(default)]
+    pub avs_status: Option<AvsStatus>,
+    #[serde(default)]
+    pub lav_filters_status: Option<LavFiltersStatus>,
+    #[serde(default)]
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,15 +205,9 @@ impl Default for AppConfig {
             default_encode_preset_id: "balanced-x264".to_string(),
             check_update_on_startup: true,
             default_use_avs: false,
-            text_conversion_custom_dictionary: String::new(),
-            proofread_term_dictionary: String::new(),
-            cc_subtitle_replacement_dictionary: String::new(),
-            cc_subtitle_style_names: Vec::new(),
-            cc_subtitle_ass_header: String::new(),
-            cc_subtitle_screen_style_name: String::new(),
-            cc_subtitle_speak_style_name: String::new(),
             recent_logos: Vec::new(),
             logo_layouts: Vec::new(),
+            environment_cache: EnvironmentCache::default(),
         }
     }
 }

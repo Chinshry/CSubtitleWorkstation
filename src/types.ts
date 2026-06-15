@@ -34,6 +34,20 @@ export type LavFiltersStatus = {
   lavFiltersDirectshowRegistered: boolean
 }
 
+export type EncoderInfo = {
+  name: string
+  label: string
+  supported: boolean
+}
+
+export type EnvironmentCache = {
+  ffmpegStatus?: FfmpegStatus
+  encoderOptions?: EncoderInfo[]
+  avsStatus?: AvsStatus
+  lavFiltersStatus?: LavFiltersStatus
+  updatedAt?: number
+}
+
 export type AppConfig = {
   ffmpegMode: 'system' | 'custom'
   ffmpegPath?: string
@@ -47,16 +61,25 @@ export type AppConfig = {
   defaultEncodePresetId: string
   checkUpdateOnStartup: boolean
   defaultUseAvs: boolean
-  textConversionCustomDictionary: string
-  proofreadTermDictionary: string
-  ccSubtitleReplacementDictionary: string
-  ccSubtitleStyleNames: string[]
-  ccSubtitleAssHeader: string
-  ccSubtitleScreenStyleName: string
-  ccSubtitleSpeakStyleName: string
   recentLogos: RecentLogo[]
   /** 按 (分辨率桶, LOGO 路径) 区分的布局记忆 */
   logoLayouts: LogoLayoutEntry[]
+  environmentCache: EnvironmentCache
+}
+
+export type TextConversionConfig = {
+  customDictionary: string
+}
+
+export type ProofreadConfig = {
+  termDictionary: string
+}
+
+export type CcSubtitleConfig = {
+  replacementDictionary: string
+  assHeader: string
+  screenStyleName: string
+  speakStyleName: string
 }
 
 export type AppUpdateInfo = {

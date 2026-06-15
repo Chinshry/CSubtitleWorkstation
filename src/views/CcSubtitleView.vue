@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { loadConfig, saveConfig } from '../api/config'
+import { loadCcSubtitleConfig, saveCcSubtitleConfig } from '../api/toolConfig'
 import AppSelect from '../components/AppSelect.vue'
 import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import {
@@ -13,7 +13,7 @@ import {
 } from '../api/ccSubtitle'
 import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
-import type { AppConfig } from '../types'
+import type { CcSubtitleConfig } from '../types'
 import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
 
 const INPUT_PREVIEW_LIMIT = 200_000
@@ -33,7 +33,7 @@ const dictionaryOpen = ref(false)
 const busy = ref(false)
 const organizing = ref(false)
 const statusText = ref('')
-const appConfig = ref<AppConfig | null>(null)
+const toolConfig = ref<CcSubtitleConfig | null>(null)
 const ccGrid = ref<HTMLDivElement | null>(null)
 const sourcePanePercent = ref(50)
 const resizing = ref(false)
@@ -77,14 +77,14 @@ const ccGridStyle = computed(() => ({
 
 async function loadReplacementDictionary() {
   try {
-    const config = await loadConfig()
-    appConfig.value = config
-    replacementDictionary.value = config.ccSubtitleReplacementDictionary ?? ''
-    importedStyleNames.value = uniqueStyleNames(config.ccSubtitleStyleNames ?? [])
-    assHeaderTemplate.value = config.ccSubtitleAssHeader ?? ''
+    const config = await loadCcSubtitleConfig()
+    toolConfig.value = config
+    replacementDictionary.value = config.replacementDictionary ?? ''
+    assHeaderTemplate.value = config.assHeader ?? ''
+    importedStyleNames.value = parseAssStyleNames(assHeaderTemplate.value)
     stylesImported.value = importedStyleNames.value.length > 0
-    const savedScreenStyle = config.ccSubtitleScreenStyleName ?? ''
-    const savedSpeakStyle = config.ccSubtitleSpeakStyleName ?? ''
+    const savedScreenStyle = config.screenStyleName ?? ''
+    const savedSpeakStyle = config.speakStyleName ?? ''
     screenStyleName.value = importedStyleNames.value.includes(savedScreenStyle) ? savedScreenStyle : ''
     speakStyleName.value = importedStyleNames.value.includes(savedSpeakStyle) ? savedSpeakStyle : ''
   } catch (err) {
@@ -116,25 +116,23 @@ function scheduleSaveReplacementDictionary() {
 
 async function saveReplacementDictionary() {
   try {
-    const base = appConfig.value ?? await loadConfig()
+    const base = toolConfig.value ?? await loadCcSubtitleConfig()
     const validDictionary = serializeValidRuleDictionary(replacementDictionary.value, { validatePattern: true })
     if (
-      base.ccSubtitleReplacementDictionary === validDictionary &&
-      arraysEqual(base.ccSubtitleStyleNames ?? [], importedStyleNames.value) &&
-      (base.ccSubtitleAssHeader ?? '') === assHeaderTemplate.value &&
-      (base.ccSubtitleScreenStyleName ?? '') === screenStyleName.value &&
-      (base.ccSubtitleSpeakStyleName ?? '') === speakStyleName.value
+      base.replacementDictionary === validDictionary &&
+      (base.assHeader ?? '') === assHeaderTemplate.value &&
+      (base.screenStyleName ?? '') === screenStyleName.value &&
+      (base.speakStyleName ?? '') === speakStyleName.value
     ) return
-    const next: AppConfig = {
+    const next: CcSubtitleConfig = {
       ...base,
-      ccSubtitleReplacementDictionary: validDictionary,
-      ccSubtitleStyleNames: importedStyleNames.value,
-      ccSubtitleAssHeader: assHeaderTemplate.value,
-      ccSubtitleScreenStyleName: screenStyleName.value,
-      ccSubtitleSpeakStyleName: speakStyleName.value
+      replacementDictionary: validDictionary,
+      assHeader: assHeaderTemplate.value,
+      screenStyleName: screenStyleName.value,
+      speakStyleName: speakStyleName.value
     }
-    appConfig.value = next
-    await saveConfig(next)
+    toolConfig.value = next
+    await saveCcSubtitleConfig(next)
   } catch (err) {
     statusText.value = String(err)
   }
@@ -312,11 +310,6 @@ function extractReusableAssHeader(text: string) {
 
 function uniqueStyleNames(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
-}
-
-function arraysEqual(left: string[], right: string[]) {
-  if (left.length !== right.length) return false
-  return left.every((value, index) => value === right[index])
 }
 
 function previewText(text: string, limit: number) {

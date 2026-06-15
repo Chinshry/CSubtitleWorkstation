@@ -43,9 +43,12 @@ export function serializeValidRuleDictionary(
 }
 
 export function parseRuleDictionaryLine(line: string): RuleDictionaryEntry | null {
-  const quotedMatch = line.match(/^"(.*?)"\s*=\s*"(.*?)"\s*,?$/)
+  const quotedMatch = line.match(/^("(?:\\.|[^"\\])*")\s*=\s*("(?:\\.|[^"\\])*")\s*,?$/)
   if (quotedMatch) {
-    return { target: quotedMatch[1].trim(), pattern: quotedMatch[2].trim() }
+    return {
+      target: parseQuotedString(quotedMatch[1]).trim(),
+      pattern: parseQuotedString(quotedMatch[2]).trim()
+    }
   }
 
   const separators = ['->', '=>', '=', '\t']
@@ -149,11 +152,19 @@ export function applyCapturePlaceholders(target: string, captures: RegExpMatchAr
 }
 
 function stripOptionalQuotes(value: string) {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return parseQuotedString(value)
+  }
+  if (value.startsWith("'") && value.endsWith("'")) {
     return value.slice(1, -1)
   }
   return value
+}
+
+function parseQuotedString(value: string) {
+  try {
+    return JSON.parse(value) as string
+  } catch {
+    return value.slice(1, -1)
+  }
 }

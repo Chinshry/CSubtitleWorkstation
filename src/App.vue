@@ -16,10 +16,20 @@ import {
 } from './stores/dropStore'
 import { activeTool, isMediaToolId, type ToolId } from './stores/toolStore'
 import { hasAvailableUpdate, refreshAppUpdate } from './stores/updateStore'
+import { initFfmpegStatus } from './stores/ffmpegStore'
+import { initEncoderOptions } from './composables/useEncoderOptions'
+import { isWindows } from './stores/platformStore'
+import { initAvsStatus, initLavFiltersStatus } from './stores/avsStore'
 
-const active = ref<'home' | 'presets' | 'tools' | 'settings'>('home')
+type ViewId = 'home' | 'presets' | 'tools' | 'settings'
+
+const active = ref<ViewId>('home')
 const sidebarCollapsed = ref(true)
 const unlisteners: UnlistenFn[] = []
+
+function activateView(view: ViewId) {
+  active.value = view
+}
 
 function classifyPaths(paths: string[]) {
   const out: { videoPath?: string; subtitlePath?: string; textPath?: string } = {}
@@ -88,9 +98,25 @@ function resolveDropRoute(
   return route
 }
 
-onMounted(async () => {
-  pushDiag('App mounted, registering Tauri drag-drop listeners...')
+function runStartupWarmup() {
+  const run = async (label: string, task: () => Promise<void>) => {
+    try {
+      await task()
+    } catch (err) {
+      pushDiag(`Startup ${label} check skipped: ${String(err)}`)
+    }
+  }
 
+  void (async () => {
+    await run('ffmpeg', () => initFfmpegStatus({ silent: true }))
+    await run('encoder', initEncoderOptions)
+    if (!isWindows.value) return
+    await run('AVS', initAvsStatus)
+    await run('LAV Filters', initLavFiltersStatus)
+  })()
+}
+
+function runStartupUpdateCheck() {
   loadConfig()
     .then((config) => {
       if (config.checkUpdateOnStartup) {
@@ -100,6 +126,13 @@ onMounted(async () => {
     .catch((err) => {
       pushDiag(`Startup update check skipped: ${String(err)}`)
     })
+}
+
+onMounted(async () => {
+  pushDiag('App mounted, registering Tauri drag-drop listeners...')
+
+  runStartupWarmup()
+  runStartupUpdateCheck()
 
   // 直接监听 Tauri 核心拖拽事件，不依赖 webview 封装
   try {
@@ -135,9 +168,9 @@ onMounted(async () => {
         }
         // 自动切到对应工具页，避免用户拖入后看不到处理结果。
         if (route.target === 'tools') {
-          active.value = 'tools'
+          activateView('tools')
         } else if (route.target === 'home' && active.value !== 'home') {
-          active.value = 'home'
+          activateView('home')
         }
       })
     )
@@ -164,7 +197,7 @@ onUnmounted(() => {
         </div>
       </div>
       <nav>
-        <button :class="{ active: active === 'home' }" @click="active = 'home'" v-tooltip="'压制'">
+        <button :class="{ active: active === 'home' }" @click="activateView('home')" v-tooltip="'压制'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -173,7 +206,7 @@ onUnmounted(() => {
           </span>
           <span>压制</span>
         </button>
-        <button :class="{ active: active === 'presets' }" @click="active = 'presets'" v-tooltip="'预设'">
+        <button :class="{ active: active === 'presets' }" @click="activateView('presets')" v-tooltip="'预设'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 7h16" />
@@ -186,7 +219,7 @@ onUnmounted(() => {
           </span>
           <span>预设</span>
         </button>
-        <button :class="{ active: active === 'tools' }" @click="active = 'tools'" v-tooltip="'工具'">
+        <button :class="{ active: active === 'tools' }" @click="activateView('tools')" v-tooltip="'工具'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="8" width="18" height="12" rx="2" />
@@ -197,7 +230,7 @@ onUnmounted(() => {
           </span>
           <span>工具</span>
         </button>
-        <button :class="{ active: active === 'settings' }" @click="active = 'settings'" v-tooltip="'设置'">
+        <button :class="{ active: active === 'settings' }" @click="activateView('settings')" v-tooltip="'设置'">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3" />

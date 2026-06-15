@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { save } from '@tauri-apps/plugin-dialog'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { loadConfig, saveConfig } from '../api/config'
+import { loadProofreadConfig, saveProofreadConfig } from '../api/toolConfig'
 import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
@@ -13,7 +13,7 @@ import {
   type ProofreadIssue,
   type ProofreadTermRule
 } from '../api/proofread'
-import type { AppConfig } from '../types'
+import type { ProofreadConfig } from '../types'
 import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
 
 const sourceText = ref('')
@@ -25,7 +25,7 @@ const checking = ref(false)
 const pendingFilePath = ref('')
 const termDictionary = ref('')
 const dictionaryOpen = ref(false)
-const appConfig = ref<AppConfig | null>(null)
+const toolConfig = ref<ProofreadConfig | null>(null)
 const proofreadGrid = ref<HTMLDivElement | null>(null)
 const sourceTextarea = ref<HTMLTextAreaElement | null>(null)
 const sourceLineNumbers = ref<HTMLDivElement | null>(null)
@@ -72,9 +72,9 @@ function buildLineNumbers(text: string) {
 
 async function loadTermDictionary() {
   try {
-    const config = await loadConfig()
-    appConfig.value = config
-    termDictionary.value = config.proofreadTermDictionary ?? ''
+    const config = await loadProofreadConfig()
+    toolConfig.value = config
+    termDictionary.value = config.termDictionary ?? ''
   } catch (err) {
     statusText.value = String(err)
   } finally {
@@ -104,15 +104,15 @@ function scheduleSaveTermDictionary() {
 
 async function saveTermDictionary() {
   try {
-    const base = appConfig.value ?? await loadConfig()
+    const base = toolConfig.value ?? await loadProofreadConfig()
     const validDictionary = serializeValidRuleDictionary(termDictionary.value, { validatePattern: true })
-    if (base.proofreadTermDictionary === validDictionary) return
-    const next: AppConfig = {
+    if (base.termDictionary === validDictionary) return
+    const next: ProofreadConfig = {
       ...base,
-      proofreadTermDictionary: validDictionary
+      termDictionary: validDictionary
     }
-    appConfig.value = next
-    await saveConfig(next)
+    toolConfig.value = next
+    await saveProofreadConfig(next)
   } catch (err) {
     statusText.value = String(err)
   }

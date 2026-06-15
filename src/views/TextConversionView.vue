@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { save } from '@tauri-apps/plugin-dialog'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { loadConfig, saveConfig } from '../api/config'
+import { loadTextConversionConfig, saveTextConversionConfig } from '../api/toolConfig'
 import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
 import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
-import type { AppConfig } from '../types'
+import type { TextConversionConfig } from '../types'
 import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
 import {
   convertChineseText,
@@ -31,7 +31,7 @@ const fileStatus = ref('')
 const fileBusy = ref(false)
 const textBusy = ref(false)
 const dictionaryOpen = ref(false)
-const appConfig = ref<AppConfig | null>(null)
+const toolConfig = ref<TextConversionConfig | null>(null)
 const sourceTextarea = ref<HTMLTextAreaElement | null>(null)
 const resultPreview = ref<HTMLDivElement | null>(null)
 const sourceLineNumbers = ref<HTMLDivElement | null>(null)
@@ -115,9 +115,9 @@ async function convertTextNow(text: string) {
 
 async function loadCustomDictionary() {
   try {
-    const config = await loadConfig()
-    appConfig.value = config
-    customDictionary.value = config.textConversionCustomDictionary ?? ''
+    const config = await loadTextConversionConfig()
+    toolConfig.value = config
+    customDictionary.value = config.customDictionary ?? ''
   } catch (err) {
     fileStatus.value = String(err)
   } finally {
@@ -147,15 +147,15 @@ function scheduleSaveCustomDictionary() {
 
 async function saveCustomDictionary() {
   try {
-    const base = appConfig.value ?? await loadConfig()
+    const base = toolConfig.value ?? await loadTextConversionConfig()
     const validDictionary = serializeValidRuleDictionary(customDictionary.value, { validatePattern: false })
-    if (base.textConversionCustomDictionary === validDictionary) return
-    const next: AppConfig = {
+    if (base.customDictionary === validDictionary) return
+    const next: TextConversionConfig = {
       ...base,
-      textConversionCustomDictionary: validDictionary
+      customDictionary: validDictionary
     }
-    appConfig.value = next
-    await saveConfig(next)
+    toolConfig.value = next
+    await saveTextConversionConfig(next)
   } catch (err) {
     fileStatus.value = String(err)
   }

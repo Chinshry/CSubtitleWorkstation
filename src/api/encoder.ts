@@ -1,10 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-
-export interface EncoderInfo {
-  name: string
-  label: string
-  supported: boolean
-}
+import type { EncoderInfo } from '../types'
 
 export function getSupportedEncoders() {
   return invoke<EncoderInfo[]>('get_supported_encoders')

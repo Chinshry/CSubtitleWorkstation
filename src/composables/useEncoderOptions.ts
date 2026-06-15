@@ -1,5 +1,7 @@
 import { computed, ref } from 'vue'
-import { getSupportedEncoders, type EncoderInfo } from '../api/encoder'
+import { getSupportedEncoders } from '../api/encoder'
+import type { EncoderInfo } from '../types'
+import { readCachedEncoderOptions, writeCachedEncoderOptions } from '../utils/environmentCache'
 
 export type EncoderOption = {
   value: string | number
@@ -22,9 +24,28 @@ const FALLBACK_ENCODER_OPTIONS: EncoderOption[] = [
   { value: 'h264_videotoolbox', label: ENCODER_LABELS.h264_videotoolbox },
 ]
 
-export function useEncoderOptions() {
-  const supportedEncoders = ref<EncoderInfo[]>([])
+const supportedEncoders = ref<EncoderInfo[]>([])
+let initPromise: Promise<void> | null = null
 
+export async function initEncoderOptions(): Promise<void> {
+  if (supportedEncoders.value.length) return
+  if (initPromise) return initPromise
+  initPromise = (async () => {
+    const cached = await readCachedEncoderOptions()
+    if (cached?.length) {
+      supportedEncoders.value = cached
+      return
+    }
+    const next = await getSupportedEncoders()
+    supportedEncoders.value = next
+    await writeCachedEncoderOptions(next)
+  })().finally(() => {
+    initPromise = null
+  })
+  return initPromise
+}
+
+export function useEncoderOptions() {
   const encoderOptions = computed<EncoderOption[]>(() => {
     if (!supportedEncoders.value.length) return FALLBACK_ENCODER_OPTIONS
     return supportedEncoders.value
@@ -36,7 +57,7 @@ export function useEncoderOptions() {
   })
 
   async function loadEncoderOptions() {
-    supportedEncoders.value = await getSupportedEncoders()
+    await initEncoderOptions()
   }
 
   return {

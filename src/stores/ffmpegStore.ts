@@ -1,6 +1,11 @@
 import { computed, ref } from 'vue'
 import type { FfmpegStatus } from '../types'
 import { detectFfmpeg } from '../api/ffmpeg'
+import {
+  clearCachedFfmpegDependentEnvironment,
+  readCachedFfmpegStatus,
+  writeCachedFfmpegStatus
+} from '../utils/environmentCache'
 
 // 真实检测结果（仅 store 内部 + 设置面板的 setFfmpegStatus 写入）
 const realStatus = ref<FfmpegStatus | null>(null)
@@ -118,17 +123,24 @@ export const ffmpegStatus = computed<FfmpegStatus | null>(() => {
 let initPromise: Promise<void> | null = null
 
 // 首次调用时检测；后续调用复用已检测的结果或正在进行中的 Promise。
-export async function initFfmpegStatus(): Promise<void> {
+export async function initFfmpegStatus(options: { silent?: boolean } = {}): Promise<void> {
   if (realStatus.value) return
   if (initPromise) return initPromise
   initPromise = (async () => {
-    ffmpegChecking.value = true
+    const cached = await readCachedFfmpegStatus()
+    if (cached) {
+      realStatus.value = cached
+      return
+    }
+    if (!options.silent) ffmpegChecking.value = true
     try {
-      realStatus.value = await detectFfmpeg()
+      const next = await detectFfmpeg()
+      realStatus.value = next
+      await writeCachedFfmpegStatus(next)
     } catch {
       // 错误吞掉，UI 上仍可点"重新检测"
     } finally {
-      ffmpegChecking.value = false
+      if (!options.silent) ffmpegChecking.value = false
       initPromise = null
     }
   })()
@@ -141,6 +153,8 @@ export async function refreshFfmpegStatus(): Promise<FfmpegStatus | null> {
   try {
     const next = await detectFfmpeg()
     realStatus.value = next
+    await writeCachedFfmpegStatus(next)
+    await clearCachedFfmpegDependentEnvironment()
     return next
   } catch {
     return realStatus.value
@@ -152,4 +166,8 @@ export async function refreshFfmpegStatus(): Promise<FfmpegStatus | null> {
 // setFfmpegPath / resetFfmpegToSystem 已经返回新的 FfmpegStatus，直接把结果灌进 store。
 export function setFfmpegStatus(next: FfmpegStatus | null) {
   realStatus.value = next
+  void (async () => {
+    await writeCachedFfmpegStatus(next)
+    await clearCachedFfmpegDependentEnvironment()
+  })()
 }

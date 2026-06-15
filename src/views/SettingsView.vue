@@ -6,7 +6,6 @@ import { setFfmpegPath, resetFfmpegToSystem } from '../api/ffmpeg'
 import { getCurrentAppVersion } from '../api/updater'
 import {
   ffmpegStatus,
-  initFfmpegStatus,
   isFfmpegMissingMocked,
   isFfmpegMocked,
   isFfprobeMissingMocked,
@@ -31,7 +30,7 @@ import {
   setPlatformOverride,
   type Platform
 } from '../stores/platformStore'
-import { avsStatus, initAvsStatus, initLavFiltersStatus, refreshAvsStatus, refreshLavFiltersStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, isLavFiltersMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, setLavFiltersMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
+import { avsChecking, avsStatus, lavChecking, refreshAvsStatus, refreshLavFiltersStatus, isAvisynthMissingMocked, isAvsDemuxerMissingMocked, isLavFiltersMissingMocked, setAvisynthMissingMock, setAvsDemuxerMissingMock, setLavFiltersMissingMock, clearAllAvsMocks, isAvsMocked } from '../stores/avsStore'
 import {
   refreshAppUpdate,
   updateInfo,
@@ -280,21 +279,12 @@ async function withBusy<T>(key: string, fn: () => Promise<T>): Promise<T | undef
 }
 
 onMounted(async () => {
-  appVersion.value = await getCurrentAppVersion()
-  appConfig.value = await loadConfig()
-  // 切到设置页不再重复检测，仅在首次进入时跑一次
-  await initFfmpegStatus()
-  if (isWindows.value) {
-    avsPanelChecking.value = true
-    void initAvsStatus().finally(() => {
-      avsPanelChecking.value = false
-    })
-
-    lavPanelChecking.value = true
-    void initLavFiltersStatus().finally(() => {
-      lavPanelChecking.value = false
-    })
-  }
+  const [version, config] = await Promise.all([
+    getCurrentAppVersion(),
+    loadConfig()
+  ])
+  appVersion.value = version
+  appConfig.value = config
 })
 </script>
 
@@ -594,7 +584,7 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           <code>avisynth: Could not initialize ...</code>。
         </p>
       </div>
-      <div v-if="avsPanelChecking" class="panel-check-overlay" role="status" aria-live="polite">
+      <div v-if="avsPanelChecking || avsChecking" class="panel-check-overlay" role="status" aria-live="polite">
         <div class="panel-check-dialog">
           <span class="panel-check-spinner" aria-hidden="true"></span>
           <div>
@@ -656,7 +646,7 @@ eval "$(/usr/local/bin/brew shellenv)"</div>
           </li>
         </ol>
       </div>
-      <div v-if="lavPanelChecking" class="panel-check-overlay" role="status" aria-live="polite">
+      <div v-if="lavPanelChecking || lavChecking" class="panel-check-overlay" role="status" aria-live="polite">
         <div class="panel-check-dialog">
           <span class="panel-check-spinner" aria-hidden="true"></span>
           <div>

@@ -1,6 +1,12 @@
 import { computed, ref } from 'vue'
 import type { AvsStatus, LavFiltersStatus } from '../types'
 import { detectAvs, detectLavFilters } from '../api/avs'
+import {
+  readCachedAvsStatus,
+  readCachedLavFiltersStatus,
+  writeCachedAvsStatus,
+  writeCachedLavFiltersStatus
+} from '../utils/environmentCache'
 
 const realStatus = ref<AvsStatus | null>(null)
 const realLavStatus = ref<LavFiltersStatus | null>(null)
@@ -108,9 +114,16 @@ export async function initAvsStatus(): Promise<void> {
   if (realStatus.value) return
   if (initPromise) return initPromise
   initPromise = (async () => {
+    const cached = await readCachedAvsStatus()
+    if (cached) {
+      realStatus.value = cached
+      return
+    }
     avsChecking.value = true
     try {
-      realStatus.value = await detectAvs()
+      const next = await detectAvs()
+      realStatus.value = next
+      await writeCachedAvsStatus(next)
     } catch {
       // UI can still retry.
     } finally {
@@ -125,9 +138,16 @@ export async function initLavFiltersStatus(): Promise<void> {
   if (realLavStatus.value) return
   if (lavInitPromise) return lavInitPromise
   lavInitPromise = (async () => {
+    const cached = await readCachedLavFiltersStatus()
+    if (cached) {
+      realLavStatus.value = cached
+      return
+    }
     lavChecking.value = true
     try {
-      realLavStatus.value = await detectLavFilters()
+      const next = await detectLavFilters()
+      realLavStatus.value = next
+      await writeCachedLavFiltersStatus(next)
     } catch {
       // UI can still retry.
     } finally {
@@ -143,6 +163,7 @@ export async function refreshAvsStatus(): Promise<AvsStatus | null> {
   try {
     const next = await detectAvs()
     realStatus.value = next
+    await writeCachedAvsStatus(next)
     return next
   } catch {
     return realStatus.value
@@ -156,6 +177,7 @@ export async function refreshLavFiltersStatus(): Promise<LavFiltersStatus | null
   try {
     const next = await detectLavFilters()
     realLavStatus.value = next
+    await writeCachedLavFiltersStatus(next)
     return next
   } catch {
     return realLavStatus.value

@@ -7,7 +7,7 @@ import { inspectVideoMeta, clearFrameCache } from '../api/video'
 import { pendingDrop, pushDiag } from '../stores/dropStore'
 import { currentVideoPath } from '../stores/currentJobStore'
 import { configRevision } from '../stores/configStore'
-import { ffmpegChecking, ffmpegStatus, initFfmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
+import { ffmpegChecking, ffmpegStatus, refreshFfmpegStatus, shouldHideFfprobeOnlyFields } from '../stores/ffmpegStore'
 import type {
   AppConfig,
   CompressJob,
@@ -570,8 +570,6 @@ onMounted(async () => {
   } catch (err) {
     pushDiag(`loadConfig failed: ${formatError(err)}`)
   }
-  void initFfmpegStatus()
-
   unlisteners.push(
     await listen<string>('compress-log', (event) => {
       logs.value.push(event.payload)
