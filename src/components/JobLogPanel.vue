@@ -17,6 +17,8 @@ const props = defineProps<{
   remainingSeconds?: number
   running?: boolean
   cancelled?: boolean
+  completed?: boolean
+  failed?: boolean
   title?: string
   idleTitle?: string
   idleTip?: string
@@ -27,6 +29,8 @@ const finalStatus = computed(() => {
   // 取消优先级最高：运行中表示"取消中..."，已停止表示"已取消"
   if (props.running) return props.cancelled ? 'cancelling' : 'running'
   if (props.cancelled) return 'cancelled'
+  if (props.failed) return 'failed'
+  if (props.completed) return 'completed'
   if (!props.lines.length) return 'idle'
   const lastLine = props.lines[props.lines.length - 1]
   if (lastLine.includes('❌')) return 'failed'

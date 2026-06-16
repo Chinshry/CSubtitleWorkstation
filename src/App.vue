@@ -18,6 +18,7 @@ import { activeTool, isMediaToolId, type ToolId } from './stores/toolStore'
 import { hasAvailableUpdate, refreshAppUpdate } from './stores/updateStore'
 import { initFfmpegStatus } from './stores/ffmpegStore'
 import { initEncoderOptions } from './composables/useEncoderOptions'
+import { useToast } from './composables/useToast'
 import { isWindows } from './stores/platformStore'
 import { initAvsStatus, initLavFiltersStatus } from './stores/avsStore'
 
@@ -26,6 +27,7 @@ type ViewId = 'home' | 'presets' | 'tools' | 'settings'
 const active = ref<ViewId>('home')
 const sidebarCollapsed = ref(true)
 const unlisteners: UnlistenFn[] = []
+const toast = useToast()
 
 function activateView(view: ViewId) {
   active.value = view
@@ -66,36 +68,83 @@ function isLikelyMediaToolPath(path: string) {
   return !/\.[a-z0-9]{1,8}$/i.test(path)
 }
 
-function resolveDropRoute(
+function isSubtitlePath(path: string) {
+  return /\.(ass|ssa|srt|vtt|sub)$/i.test(path)
+}
+
+function isTextPath(path: string) {
+  return /\.txt$/i.test(path)
+}
+
+function isTsSegmentPath(path: string) {
+  return /\.(ts|m2ts|mts)$/i.test(path) || !/\.[a-z0-9]{1,8}$/i.test(path)
+}
+
+function isCoverImagePath(path: string) {
+  return /\.(jpe?g|png)$/i.test(path)
+}
+
+function isAudioPath(path: string) {
+  return /\.(m4a|aac|mp3|wav|flac|ac3|eac3|opus|ogg)$/i.test(path)
+}
+
+function supportsActiveToolDrop(
+  tool: ToolId,
   classified: { videoPath?: string; subtitlePath?: string; textPath?: string },
   paths: string[]
 ) {
-  const route: { target: 'home' | 'tools'; tool?: ToolId } = { target: 'home' }
-  if (active.value === 'tools' && isMediaToolId(activeTool.value) && paths.some(isLikelyMediaToolPath)) {
-    route.target = 'tools'
-    route.tool = activeTool.value
-    return route
+  switch (tool) {
+    case 'proofread':
+    case 'text-conversion':
+      return Boolean(classified.textPath || classified.subtitlePath) && paths.every((path) => isTextPath(path) || isSubtitlePath(path))
+    case 'cc-subtitle':
+    case 'subtitle-format':
+      return Boolean(classified.subtitlePath) && paths.every(isSubtitlePath)
+    case 'media-remux':
+      return paths.some(isLikelyMediaToolPath) && Boolean(classified.videoPath)
+    case 'media-concat-ts':
+      return paths.length === 1 || paths.every(isTsSegmentPath)
+    case 'media-cover':
+      return Boolean(classified.videoPath) || paths.some(isCoverImagePath)
+    case 'media-merge-av':
+      return Boolean(classified.videoPath) || paths.some(isAudioPath)
+    default:
+      return false
   }
+}
+
+function resolveDropRoute(
+  classified: { videoPath?: string; subtitlePath?: string; textPath?: string },
+  paths: string[]
+): { supported: true; target: 'home' | 'tools'; tool?: ToolId } | { supported: false; message: string } {
+  if (active.value === 'tools') {
+    if (supportsActiveToolDrop(activeTool.value, classified, paths)) {
+      return { supported: true, target: 'tools', tool: activeTool.value }
+    }
+    return { supported: false, message: '当前工具不支持拖入此类文件' }
+  }
+
+  if (active.value === 'home') {
+    if (classified.videoPath || classified.subtitlePath) {
+      return { supported: true, target: 'home' }
+    }
+    return { supported: false, message: '压制页只支持拖入视频或字幕文件' }
+  }
+
   if (
-    active.value !== 'tools' &&
     classified.subtitlePath &&
     !classified.videoPath &&
-    paths.every((path) => /\.(ass|ssa|srt|vtt|sub)$/i.test(path))
+    paths.every(isSubtitlePath)
   ) {
-    route.target = 'tools'
-    route.tool = 'subtitle-format'
-    return route
-  }
-  if (active.value === 'tools' && classified.textPath) {
-    route.target = 'tools'
-    route.tool = activeTool.value
-    return route
+    return { supported: true, target: 'tools', tool: 'subtitle-format' }
   }
   if (classified.textPath && !classified.videoPath && !classified.subtitlePath) {
-    route.target = 'tools'
-    route.tool = activeTool.value
+    return { supported: true, target: 'tools', tool: 'text-conversion' }
   }
-  return route
+  if (classified.videoPath || classified.subtitlePath) {
+    return { supported: true, target: 'home' }
+  }
+  return { supported: false, message: '不支持拖入此类文件' }
 }
 
 function runStartupWarmup() {
@@ -159,6 +208,11 @@ onMounted(async () => {
         }
         const classified = classifyPaths(paths)
         const route = resolveDropRoute(classified, paths)
+        if (!route.supported) {
+          toast.warning(route.message)
+          pushDiag(`drop rejected: ${route.message}`)
+          return
+        }
         if (route.tool) activeTool.value = route.tool
         pendingDrop.value = {
           ...route,

@@ -95,7 +95,7 @@ const mediaTools: ToolItem[] = [
   {
     id: 'media-concat-ts',
     name: 'TS 分片合并',
-    description: '按文件顺序合并 TS / M2TS / MTS 分片并输出 MP4，自动整理 AAC 音频封装头，不重新编码。'
+    description: '按文件顺序合并 TS / M2TS / MTS 分片，可输出 MP4 或 TS；MP4 会自动整理 AAC 音频封装头，不重新编码。'
   },
   {
     id: 'media-merge-av',
@@ -236,7 +236,11 @@ watch(activeTool, (toolId) => {
       </div>
     </aside>
 
-    <section class="tool-content" :aria-label="activeToolMeta.name">
+    <section
+      class="tool-content"
+      :class="{ 'is-fill-tool': ['cc-subtitle', 'text-conversion', 'proofread'].includes(selectedTool) }"
+      :aria-label="activeToolMeta.name"
+    >
       <header class="tool-content-header">
         <div>
           <h3>{{ activeToolMeta.name }}</h3>
@@ -262,7 +266,9 @@ watch(activeTool, (toolId) => {
         <p>正在加载当前工具页面，完成后会自动显示。</p>
       </div>
 
-      <component v-else :is="activeToolComponent" :key="renderedTool" />
+      <KeepAlive>
+        <component v-if="!preparingTool" :is="activeToolComponent" :key="renderedTool" />
+      </KeepAlive>
     </section>
   </main>
 </template>
@@ -278,14 +284,23 @@ watch(activeTool, (toolId) => {
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   min-height: 0;
+  padding: 0 0 0 22px;
 }
 
 .tool-content > :deep(.text-conversion-workspace),
 .tool-content > :deep(.proofread-workspace),
-.tool-content > :deep(.cc-subtitle-workspace),
+.tool-content > :deep(.cc-subtitle-workspace) {
+  height: 100%;
+  min-height: 0;
+}
+
 .tool-content > :deep(.subtitle-format-workspace),
 .tool-content > :deep(.media-remux-workspace) {
   min-height: 0;
+}
+
+.tool-content > :deep(.log-panel) {
+  margin-bottom: 22px;
 }
 
 .tool-sidebar {
@@ -395,12 +410,20 @@ watch(activeTool, (toolId) => {
 }
 
 .tool-content {
+  align-content: start;
   display: grid;
   gap: 12px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto max-content;
   height: 100%;
-  min-width: 0;
   min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 22px 22px 0;
+}
+
+.tool-content.is-fill-tool {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .tool-loading {
@@ -500,7 +523,8 @@ watch(activeTool, (toolId) => {
 @media (max-width: 920px) {
   .tools-workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto max-content;
+    padding-left: 18px;
   }
 
   .tool-sidebar {

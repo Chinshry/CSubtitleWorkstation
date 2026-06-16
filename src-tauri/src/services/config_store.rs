@@ -20,7 +20,8 @@ pub fn load(app: &AppHandle) -> Result<AppConfig, String> {
     }
 
     let raw = fs::read_to_string(&path).map_err(|err| format!("无法读取配置: {err}"))?;
-    serde_json::from_str(&raw).map_err(|err| format!("配置格式错误: {err}"))
+    let raw = raw.trim_start_matches('\u{feff}');
+    serde_json::from_str(raw).map_err(|err| format!("配置格式错误: {err}"))
 }
 
 pub fn save(app: &AppHandle, config: &AppConfig) -> Result<(), String> {

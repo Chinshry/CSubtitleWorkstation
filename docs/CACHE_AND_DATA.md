@@ -17,7 +17,7 @@ C:\Users\<用户名>\AppData\Roaming\com.chinshry.csubtitleworkstation\
 常见文件：
 
 - `config.json`：应用全局配置。包含 ffmpeg 路径、默认压制参数、编码预设、输出命名模板、最近 LOGO、LOGO 布局、更新检查设置、环境检测缓存等。
-- `toolbox.yaml`：工具箱配置。按 `textConversion`、`proofread`、`ccSubtitle` 分段保存文字转换词库、字幕校对词库、CC 字幕整理替换词库、ASS 头部模板、听障/花字样式选择；样式下拉列表从 ASS 头部模板里的 `[V4+ Styles]` 派生。
+- `toolbox.yaml`：工具箱配置。按 `textConversion`、`proofread`、`ccSubtitle` 分段保存文字转换词库、字幕校对词库、CC 字幕整理替换词库，以及多个 CC 字幕样式方案；每个样式方案保存 ASS 头部模板和听轴/花字样式选择，样式下拉列表从 ASS 头部模板里的 `[V4+ Styles]` 派生。
 - `.window-state.json`：窗口位置、大小、最大化状态。
 
 `config.json` 中还会保存环境检测缓存：

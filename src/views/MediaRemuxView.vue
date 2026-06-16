@@ -9,6 +9,7 @@ import {
   startMediaTool,
   type MediaToolJob,
   type MediaToolMode,
+  type MediaOutputFormat,
   type TsSegment
 } from '../api/mediaTool'
 import { globalDragActive, pendingDrop } from '../stores/dropStore'
@@ -21,6 +22,7 @@ import {
   mediaToolModeByToolId
 } from '../stores/toolStore'
 import type { CompressStatus } from '../types'
+import AppSelect from '../components/AppSelect.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import CommandTaskActions from '../components/CommandTaskActions.vue'
 import JobLogPanel from '../components/JobLogPanel.vue'
@@ -31,6 +33,7 @@ const inputPath = ref('')
 const coverPath = ref('')
 const audioPath = ref('')
 const outputPath = ref('')
+const outputFormat = ref<MediaOutputFormat>('mp4')
 const command = ref<string[]>([])
 const logs = ref<string[]>([])
 const showCommandPreview = ref(false)
@@ -56,11 +59,20 @@ let elapsedTicker: ReturnType<typeof setInterval> | null = null
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let segmentTimer: ReturnType<typeof setTimeout> | null = null
 
+const outputFormatOptions: { value: MediaOutputFormat; label: string }[] = [
+  { value: 'mp4', label: 'MP4' },
+  { value: 'ts', label: 'TS' }
+]
+
 const segmentTotalBytes = computed(() => (
   segments.value.reduce((sum, item) => sum + item.sizeBytes, 0)
 ))
 
 const visibleSegments = computed(() => segments.value.slice(0, 12))
+const activeOutputFormat = computed<MediaOutputFormat>(() => (
+  mode.value === 'concatTsToMp4' ? outputFormat.value : 'mp4'
+))
+const outputFormatLabel = computed(() => activeOutputFormat.value.toUpperCase())
 const sourcePaths = computed(() => [
   inputPath.value,
   mode.value === 'addCoverToMp4' ? coverPath.value : '',
@@ -77,7 +89,7 @@ const runDisabledTip = computed(() => {
   if (!inputPath.value.trim()) return mode.value === 'concatTsToMp4' ? '请选择分片目录' : '请选择输入视频'
   if (mode.value === 'addCoverToMp4' && !coverPath.value.trim()) return '请选择封面图片'
   if (mode.value === 'mergeAudioVideo' && !audioPath.value.trim()) return '请选择音频来源'
-  if (!outputPath.value.trim()) return '请选择输出 MP4 路径'
+  if (!outputPath.value.trim()) return `请选择输出 ${outputFormatLabel.value} 路径`
   if (outputConflictsWithSource.value) return '输出路径不能和输入文件相同'
   if (mode.value === 'concatTsToMp4') {
     if (segmentsLoading.value) return '正在读取分片列表'
@@ -86,16 +98,6 @@ const runDisabledTip = computed(() => {
   return '可以开始转换'
 })
 const canRun = computed(() => runDisabledTip.value === '可以开始转换')
-const dragHint = computed(() => (
-  mode.value === 'addCoverToMp4'
-    ? '松开以读取视频或封面图片'
-    : mode.value === 'mergeAudioVideo'
-      ? '松开以读取视频或音频来源文件'
-    : mode.value === 'concatTsToMp4'
-    ? '松开以读取 TS 分片目录或分片文件'
-    : '松开以读取视频文件'
-))
-
 const remainingSeconds = computed(() => {
   const dur = durationSeconds.value
   const cur = currentSeconds.value
@@ -110,7 +112,7 @@ const etaSeconds = computed(() => (
 
 const modeDescription = computed(() => (
   mode.value === 'concatTsToMp4'
-    ? '按当前排序合并 TS / M2TS / MTS 分片，输出 MP4，不重新编码。'
+    ? `按当前排序合并 TS / M2TS / MTS 分片，输出 ${outputFormatLabel.value}，不重新编码。`
     : mode.value === 'addCoverToMp4'
       ? '给 MP4 写入 JPG / PNG 封面，原视频和音频会原样复制。'
       : mode.value === 'mergeAudioVideo'
@@ -125,7 +127,8 @@ function createJob(): MediaToolJob {
     inputPath: inputPath.value,
     coverPath: coverPath.value || undefined,
     audioPath: audioPath.value || undefined,
-    outputPath: outputPath.value
+    outputPath: outputPath.value,
+    outputFormat: activeOutputFormat.value
   }
 }
 
@@ -152,6 +155,9 @@ function setMode(next: MediaToolMode, reset = true) {
   if (mode.value === next) return
   mode.value = next
   activeMediaToolMode.value = next
+  if (next !== 'concatTsToMp4') {
+    outputFormat.value = 'mp4'
+  }
   if (!reset) return
   coverPath.value = ''
   audioPath.value = ''
@@ -248,8 +254,9 @@ function normalizePathForCompare(path: string) {
 function outputForInput(path: string) {
   if (!path.trim()) return ''
   const parts = splitPath(path)
+  const extension = activeOutputFormat.value
   const file = mode.value === 'concatTsToMp4'
-    ? `${parts.stem || 'segments'} 合并.mp4`
+    ? `${parts.stem || 'segments'} 合并.${extension}`
     : mode.value === 'addCoverToMp4'
       ? `${parts.stem} 添加封面.mp4`
       : mode.value === 'mergeAudioVideo'
@@ -258,9 +265,25 @@ function outputForInput(path: string) {
   return parts.dir ? `${parts.dir}${parts.sep}${file}` : file
 }
 
+function withOutputExtension(path: string, extension = activeOutputFormat.value) {
+  if (!path.trim()) return path
+  return path.replace(/\.(mp4|ts)$/i, '') + `.${extension}`
+}
+
 function applyAutoOutput() {
   if (!inputPath.value.trim()) return
   outputPath.value = outputForInput(inputPath.value)
+}
+
+function clearInput() {
+  inputPath.value = ''
+  coverPath.value = ''
+  audioPath.value = ''
+  outputPath.value = ''
+  command.value = []
+  showCommandPreview.value = false
+  segments.value = []
+  segmentError.value = ''
 }
 
 function applyDroppedPaths(paths: string[], videoPath?: string) {
@@ -424,13 +447,14 @@ async function pickSegmentFolder() {
 
 async function pickOutputPath() {
   if (running.value) return
+  const extension = activeOutputFormat.value
   const selected = await save({
-    title: '选择输出 MP4 文件',
-    defaultPath: outputPath.value || outputForInput(inputPath.value) || 'output.mp4',
-    filters: [{ name: 'MP4 视频', extensions: ['mp4'] }]
+    title: `选择输出 ${extension.toUpperCase()} 文件`,
+    defaultPath: outputPath.value || outputForInput(inputPath.value) || `output.${extension}`,
+    filters: [{ name: `${extension.toUpperCase()} 视频`, extensions: [extension] }]
   })
   if (typeof selected === 'string') {
-    outputPath.value = selected.toLowerCase().endsWith('.mp4') ? selected : `${selected}.mp4`
+    outputPath.value = selected.toLowerCase().endsWith(`.${extension}`) ? selected : `${selected}.${extension}`
   }
 }
 
@@ -496,7 +520,7 @@ async function runJob() {
     stopElapsedTicker()
     const msg = formatError(error)
     if (/codec|Invalid data|not currently supported|Could not write header/i.test(msg)) {
-      logs.value.push(`${msg}\n当前音视频流可能不兼容 MP4 容器；请到压制页重新编码后再输出 MP4。`)
+      logs.value.push(`${msg}\n当前音视频流可能不兼容 ${outputFormatLabel.value} 容器；请到压制页重新编码后再输出。`)
     } else {
       logs.value.push(msg)
     }
@@ -526,13 +550,22 @@ watch(activeTool, () => {
   syncModeFromActiveTool()
 })
 
-watch([mode, inputPath, coverPath, audioPath, outputPath, segments], () => {
+watch([mode, inputPath, coverPath, audioPath, outputPath, outputFormat, segments], () => {
   if (running.value) return
   if (previewTimer) clearTimeout(previewTimer)
   previewTimer = setTimeout(() => {
     void previewCommand()
   }, 300)
 }, { deep: true })
+
+watch(outputFormat, (format) => {
+  if (mode.value !== 'concatTsToMp4') return
+  if (outputPath.value.trim()) {
+    outputPath.value = withOutputExtension(outputPath.value, format)
+  } else if (inputPath.value.trim()) {
+    applyAutoOutput()
+  }
+})
 
 watch(pendingDrop, (drop) => {
   if (!drop) return
@@ -614,8 +647,6 @@ function formatBytes(bytes: number) {
 
 <template>
   <section class="media-remux-workspace">
-    <div v-if="globalDragActive" class="drop-overlay">{{ dragHint }}</div>
-
     <div v-if="ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
       <strong>正在检测 ffmpeg 环境</strong>
       <span>正在检测 ffmpeg / ffprobe，请稍候。</span>
@@ -626,14 +657,34 @@ function formatBytes(bytes: number) {
       <button class="secondary" @click="refreshFfmpeg">重新检测</button>
     </div>
 
-    <section class="panel media-tool-panel">
-      <div class="media-tool-grid" :class="{ 'has-extra-input': mode === 'addCoverToMp4' || mode === 'mergeAudioVideo' }">
+    <section class="panel media-tool-panel" :class="{ 'is-empty': !inputPath, 'drag-target': globalDragActive }">
+      <div v-if="!inputPath" class="tool-dropzone">
+        <div class="dropzone-icon">⬇︎</div>
+        <div class="dropzone-title">{{ mode === 'concatTsToMp4' ? '拖入 TS 分片目录开始合并' : '拖入视频开始处理' }}</div>
+        <div class="dropzone-sub">
+          <span class="dropzone-note">
+            {{ mode === 'concatTsToMp4' ? '支持 TS / M2TS / MTS 分片目录' : mode === 'addCoverToMp4' ? '支持 MP4 / M4V / MOV' : '支持常见视频容器' }}
+          </span>
+          <br />
+          {{ mode === 'concatTsToMp4' ? '读取分片后会按文件名顺序合并，可选择输出 MP4 或 TS。' : mode === 'mergeAudioVideo' ? '选择视频后再补充音频来源，默认原样复制不重新编码。' : mode === 'addCoverToMp4' ? '选择视频后再补充 JPG / PNG 封面图，原音视频不重新编码。' : '选择视频后会自动生成输出 MP4 路径，默认只复制音视频流。' }}
+        </div>
+        <div class="dropzone-actions">
+          <button class="secondary" type="button" @click="mode === 'concatTsToMp4' ? pickSegmentFolder() : pickInputFile()">
+            {{ mode === 'concatTsToMp4' ? '选择分片目录' : '选择视频' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="media-tool-grid" :class="{ 'has-extra-input': mode === 'addCoverToMp4' || mode === 'mergeAudioVideo', 'has-format': mode === 'concatTsToMp4' }">
         <PathPickerField
           v-model="inputPath"
           :label="mode === 'concatTsToMp4' ? '分片目录' : '输入视频'"
           :placeholder="mode === 'concatTsToMp4' ? '选择包含 .ts / .m2ts / .mts 的文件夹' : mode === 'addCoverToMp4' ? '选择 mp4 / m4v / mov 视频文件' : mode === 'mergeAudioVideo' ? '选择要保留画面的视频文件' : '选择 mkv / mov / ts / flv 等视频文件'"
           :disabled="running"
+          compact
+          compact-action="clear"
           @pick="mode === 'concatTsToMp4' ? pickSegmentFolder() : pickInputFile()"
+          @clear="clearInput"
         />
 
         <PathPickerField
@@ -642,6 +693,8 @@ function formatBytes(bytes: number) {
           label="输入音频"
           placeholder="选择音频或视频文件"
           :disabled="running"
+          compact
+          compact-action="clear"
           @pick="pickAudioFile"
         />
 
@@ -651,19 +704,34 @@ function formatBytes(bytes: number) {
           label="封面图片"
           placeholder="选择 jpg / png 封面图片"
           :disabled="running"
+          compact
+          compact-action="clear"
           @pick="pickCoverFile"
         />
 
+        <label v-if="mode === 'concatTsToMp4'" class="format-field">
+          <span>输出格式</span>
+          <AppSelect
+            v-model="outputFormat"
+            class="output-format-select"
+            :disabled="running"
+            title="选择 TS 分片合并输出格式"
+            :options="outputFormatOptions"
+          />
+        </label>
+
         <PathPickerField
           v-model="outputPath"
-          label="输出 MP4"
+          :label="`输出 ${outputFormatLabel}`"
           placeholder="选择输出位置"
           :disabled="running || !inputPath"
+          compact
+          compact-action="edit"
           @pick="pickOutputPath"
         />
       </div>
       <p v-if="outputConflictsWithSource" class="form-warning">
-        输出路径不能和输入文件相同，请选择一个新的 MP4 文件。
+        输出路径不能和输入文件相同，请选择一个新的 {{ outputFormatLabel }} 文件。
       </p>
       <div v-if="mode === 'remuxToMp4'" class="tool-note">
         <strong>处理说明</strong>
@@ -701,7 +769,7 @@ function formatBytes(bytes: number) {
           仅显示前 {{ visibleSegments.length }} 个；实际会按当前排序合并全部 {{ segments.length }} 个分片。
         </p>
         <p class="muted">
-          合并输出 MP4 时会自动整理 TS 分片中 AAC 音频的封装头，不重新编码。
+          选择 MP4 时会自动整理 TS 分片中 AAC 音频的封装头；选择 TS 时会保留 TS 容器输出，均不重新编码。
         </p>
       </div>
     </section>
@@ -758,14 +826,102 @@ function formatBytes(bytes: number) {
   gap: 16px;
 }
 
+.media-tool-panel.is-empty {
+  padding: 32px 22px;
+}
+
+.media-tool-panel.drag-target {
+  background: #eef7fa;
+  border-color: #176b87;
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.15);
+}
+
+.tool-dropzone {
+  align-items: center;
+  border: 2px dashed #b8c8d2;
+  border-radius: 10px;
+  color: #43515c;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 38px 20px;
+  text-align: center;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.media-tool-panel.drag-target .tool-dropzone {
+  background: rgba(23, 107, 135, 0.08);
+  border-color: #176b87;
+  color: #0f5268;
+}
+
+.media-tool-panel.drag-target .dropzone-title {
+  color: #0f5268;
+}
+
 .media-tool-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  grid-template-columns: 1fr;
 }
 
 .media-tool-grid.has-extra-input {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
+}
+
+.media-tool-grid.has-format {
+  grid-template-columns: 1fr;
+  max-width: 1320px;
+  width: 100%;
+}
+
+.format-field {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 76px 100px;
+}
+
+.media-tool-grid :deep(.path-picker-field) {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.format-field > span,
+.media-tool-grid :deep(.path-picker-field > span) {
+  background: #176b87;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(23, 107, 135, 0.18);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.media-tool-grid :deep(.path-picker-control) {
+  gap: 8px;
+}
+
+.format-field :deep(.app-select) {
+  width: 100px;
+}
+
+.format-field :deep(.app-select-trigger) {
+  gap: 4px;
+  padding: 0 7px;
+}
+
+.format-field :deep(.app-select-panel) {
+  padding: 5px;
+}
+
+.format-field :deep(.app-select-option) {
+  padding: 7px 6px;
 }
 
 .tool-note,
@@ -837,12 +993,15 @@ function formatBytes(bytes: number) {
 }
 
 @media (max-width: 920px) {
-  .media-tool-grid {
+  .format-field,
+  .media-tool-grid :deep(.path-picker-field) {
     grid-template-columns: 1fr;
   }
 
-  .media-tool-grid.has-extra-input {
-    grid-template-columns: 1fr;
+  .format-field > span,
+  .media-tool-grid :deep(.path-picker-field > span) {
+    justify-self: start;
+    min-width: 76px;
   }
 }
 </style>

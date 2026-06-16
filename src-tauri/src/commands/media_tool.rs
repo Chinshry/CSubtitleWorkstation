@@ -19,6 +19,8 @@ pub struct MediaToolJob {
     pub cover_path: Option<String>,
     pub audio_path: Option<String>,
     pub output_path: String,
+    #[serde(default)]
+    pub output_format: MediaOutputFormat,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -28,6 +30,19 @@ pub enum MediaToolMode {
     ConcatTsToMp4,
     AddCoverToMp4,
     MergeAudioVideo,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MediaOutputFormat {
+    Mp4,
+    Ts,
+}
+
+impl Default for MediaOutputFormat {
+    fn default() -> Self {
+        Self::Mp4
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -280,6 +295,7 @@ fn start_media_tool_blocking(app: AppHandle, job: MediaToolJob) -> Result<(), St
 
     let app_for_wait = app.clone();
     let job_id_for_wait = job.id.clone();
+    let output_format_label = media_output_format_label(&job);
     thread::spawn(move || {
         let status = child.wait();
         let was_cancelled = if let Some(state) = app_for_wait.try_state::<AppState>() {
@@ -331,7 +347,9 @@ fn start_media_tool_blocking(app: AppHandle, job: MediaToolJob) -> Result<(), St
                 );
                 let _ = app_for_wait.emit(
                     "media-tool-log",
-                    "如果错误与 codec、tag、header 或 muxer 相关，通常表示当前音视频流不兼容 MP4 容器；请到压制页重新编码后再输出 MP4。",
+                    format!(
+                        "如果错误与 codec、tag、header 或 muxer 相关，通常表示当前音视频流不兼容 {output_format_label} 容器；请到压制页重新编码后再输出。"
+                    ),
                 );
             }
             Err(err) => {
@@ -380,9 +398,15 @@ fn build_media_tool_command(
                 concat_list_path.to_string(),
                 "-c".to_string(),
                 "copy".to_string(),
-                "-bsf:a".to_string(),
-                "aac_adtstoasc".to_string(),
             ]);
+            match job.output_format {
+                MediaOutputFormat::Mp4 => {
+                    args.extend(["-bsf:a".to_string(), "aac_adtstoasc".to_string()]);
+                }
+                MediaOutputFormat::Ts => {
+                    args.extend(["-f".to_string(), "mpegts".to_string()]);
+                }
+            }
         }
         MediaToolMode::AddCoverToMp4 => {
             let cover_path = job
@@ -438,9 +462,7 @@ fn validate_media_job(job: &MediaToolJob) -> Result<(), String> {
     if job.output_path.trim().is_empty() {
         return Err("输出路径不能为空。".to_string());
     }
-    if !job.output_path.to_ascii_lowercase().ends_with(".mp4") {
-        return Err("封装转换第一版只输出 MP4 文件。".to_string());
-    }
+    validate_output_extension(job)?;
     if output_matches_source(job) {
         return Err("输出路径不能和输入文件相同。".to_string());
     }
@@ -491,6 +513,34 @@ fn validate_media_job(job: &MediaToolJob) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn media_output_format_label(job: &MediaToolJob) -> &'static str {
+    match job.mode {
+        MediaToolMode::ConcatTsToMp4 => match job.output_format {
+            MediaOutputFormat::Mp4 => "MP4",
+            MediaOutputFormat::Ts => "TS",
+        },
+        _ => "MP4",
+    }
+}
+
+fn validate_output_extension(job: &MediaToolJob) -> Result<(), String> {
+    let output = job.output_path.to_ascii_lowercase();
+    match job.mode {
+        MediaToolMode::ConcatTsToMp4 => match job.output_format {
+            MediaOutputFormat::Mp4 if output.ends_with(".mp4") => Ok(()),
+            MediaOutputFormat::Ts if output.ends_with(".ts") => Ok(()),
+            MediaOutputFormat::Mp4 => {
+                Err("TS 分片合并选择 MP4 输出时，输出文件必须是 .mp4。".to_string())
+            }
+            MediaOutputFormat::Ts => {
+                Err("TS 分片合并选择 TS 输出时，输出文件必须是 .ts。".to_string())
+            }
+        },
+        _ if output.ends_with(".mp4") => Ok(()),
+        _ => Err("封装转换第一版只输出 MP4 文件。".to_string()),
+    }
 }
 
 fn output_matches_source(job: &MediaToolJob) -> bool {
@@ -829,6 +879,7 @@ mod tests {
             cover_path: None,
             audio_path: None,
             output_path: r"E:\out.mp4".to_string(),
+            output_format: MediaOutputFormat::Mp4,
         }
     }
 
@@ -840,6 +891,7 @@ mod tests {
             cover_path: Some(cover_path.to_string_lossy().to_string()),
             audio_path: None,
             output_path: r"E:\out.mp4".to_string(),
+            output_format: MediaOutputFormat::Mp4,
         }
     }
 
@@ -851,6 +903,7 @@ mod tests {
             cover_path: None,
             audio_path: Some(audio_path.to_string_lossy().to_string()),
             output_path: r"E:\out.mp4".to_string(),
+            output_format: MediaOutputFormat::Mp4,
         }
     }
 
@@ -899,6 +952,19 @@ mod tests {
         assert!(command.windows(2).any(|pair| pair == ["-f", "concat"]));
         assert!(command.windows(2).any(|pair| pair == ["-safe", "0"]));
         assert!(command.windows(2).any(|pair| pair == ["-c", "copy"]));
+        let _ = fs::remove_dir_all(input_dir);
+    }
+
+    #[test]
+    fn concat_ts_output_uses_mpegts_without_mp4_bitstream_filter() {
+        let input_dir = unique_temp_path("segments");
+        fs::create_dir_all(&input_dir).unwrap();
+        let mut job = job(MediaToolMode::ConcatTsToMp4, &input_dir);
+        job.output_path = r"E:\out.ts".to_string();
+        job.output_format = MediaOutputFormat::Ts;
+        let command = build_media_tool_command("ffmpeg", &job, r"E:\temp\list.txt").unwrap();
+        assert!(command.windows(2).any(|pair| pair == ["-f", "mpegts"]));
+        assert!(!command.iter().any(|arg| arg == "-bsf:a"));
         let _ = fs::remove_dir_all(input_dir);
     }
 

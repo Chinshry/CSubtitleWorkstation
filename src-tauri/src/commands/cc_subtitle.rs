@@ -572,8 +572,8 @@ mod tests {
 
     fn rules() -> Vec<super::CompiledReplacementRule> {
         super::compile_replacement_rules(vec![CcReplacementRule {
-            replacement: "章昊".to_string(),
-            pattern: r"(?i)ZHANG\s*HAO".to_string(),
+            replacement: "示例名称".to_string(),
+            pattern: r"(?i)EXAMPLE\s*NAME".to_string(),
         }])
         .unwrap()
     }
@@ -584,11 +584,11 @@ mod tests {
 
     #[test]
     fn splits_cc_tag_into_screen_and_speak_lines() {
-        let input = "[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,[ZHANG HAO]Hello...\\Nworld\n";
+        let input = "[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,[EXAMPLE NAME]Hello...\\Nworld\n";
         let output = organize_cc_subtitle(input, &rules(), &style_names(), None);
         assert!(output
             .text
-            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,花字,章昊"));
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.00,花字,示例名称"));
         assert!(output
             .text
             .contains("Dialogue: 0,0:00:00.00,0:00:01.00,听轴,Hello... world"));

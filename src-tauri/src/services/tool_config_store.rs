@@ -1,4 +1,6 @@
-use crate::models::tool_config::{CcSubtitleConfig, ProofreadConfig, TextConversionConfig};
+use crate::models::tool_config::{
+    CcStyleProfile, CcSubtitleConfig, ProofreadConfig, TextConversionConfig,
+};
 use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager};
 
@@ -73,7 +75,8 @@ fn load_toolbox(app: &AppHandle, file_name: &str) -> Result<ToolboxConfig, Strin
         return Ok(ToolboxConfig::default());
     }
 
-    let raw = fs::read_to_string(&path).map_err(|err| format!("failed to read toolbox config: {err}"))?;
+    let raw =
+        fs::read_to_string(&path).map_err(|err| format!("failed to read toolbox config: {err}"))?;
     Ok(parse_toolbox(&raw))
 }
 
@@ -97,9 +100,8 @@ fn parse_toolbox(raw: &str) -> ToolboxConfig {
     let cc_subtitle = parse_section(raw, CC_SUBTITLE_SECTION)
         .map(|section| CcSubtitleConfig {
             replacement_dictionary: parse_block(&section, "replacementDictionary"),
-            ass_header: parse_block(&section, "assHeader"),
-            screen_style_name: parse_scalar(&section, "screenStyleName"),
-            speak_style_name: parse_scalar(&section, "speakStyleName"),
+            style_profile_id: parse_scalar(&section, "styleProfileId"),
+            style_profiles: parse_style_profiles(&section),
         })
         .unwrap_or_default();
 
@@ -115,7 +117,10 @@ fn format_toolbox(config: &ToolboxConfig) -> String {
         "{}{}{}",
         format_section(
             TEXT_CONVERSION_SECTION,
-            &format_block("customDictionary", &config.text_conversion.custom_dictionary),
+            &format_block(
+                "customDictionary",
+                &config.text_conversion.custom_dictionary
+            ),
         ),
         format_section(
             PROOFREAD_SECTION,
@@ -124,11 +129,13 @@ fn format_toolbox(config: &ToolboxConfig) -> String {
         format_section(
             CC_SUBTITLE_SECTION,
             &format!(
-                "{}{}{}{}",
-                format_block("replacementDictionary", &config.cc_subtitle.replacement_dictionary),
-                format_block("assHeader", &config.cc_subtitle.ass_header),
-                format_scalar("screenStyleName", &config.cc_subtitle.screen_style_name),
-                format_scalar("speakStyleName", &config.cc_subtitle.speak_style_name),
+                "{}{}{}",
+                format_block(
+                    "replacementDictionary",
+                    &config.cc_subtitle.replacement_dictionary
+                ),
+                format_scalar("styleProfileId", &config.cc_subtitle.style_profile_id),
+                format_style_profiles("styleProfiles", &config.cc_subtitle.style_profiles),
             ),
         ),
     )
@@ -156,6 +163,32 @@ fn format_block(key: &str, value: &str) -> String {
 
 fn format_scalar(key: &str, value: &str) -> String {
     format!("{key}: {}\n", quote_scalar(value))
+}
+
+fn format_style_profiles(key: &str, profiles: &[CcStyleProfile]) -> String {
+    let mut out = format!("{key}:\n");
+    for profile in profiles {
+        let body = format!(
+            "{}{}{}{}{}",
+            format_scalar("id", &profile.id),
+            format_scalar("name", &profile.name),
+            format_block("assHeader", &profile.ass_header),
+            format_scalar("screenStyleName", &profile.screen_style_name),
+            format_scalar("speakStyleName", &profile.speak_style_name),
+        );
+        let mut lines = body.lines();
+        if let Some(first) = lines.next() {
+            out.push_str("  - ");
+            out.push_str(first);
+            out.push('\n');
+        }
+        for line in lines {
+            out.push_str("    ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
 }
 
 fn quote_scalar(value: &str) -> String {
@@ -213,17 +246,64 @@ fn parse_scalar(raw: &str, key: &str) -> String {
     };
     raw.lines()
         .nth(start)
-        .and_then(|line| line.split_once(':').map(|(_, rest)| unquote_scalar(rest.trim())))
+        .and_then(|line| {
+            line.split_once(':')
+                .map(|(_, rest)| unquote_scalar(rest.trim()))
+        })
         .unwrap_or_default()
+}
+
+fn parse_style_profiles(raw: &str) -> Vec<CcStyleProfile> {
+    let Some(start) = find_key_line(raw, "styleProfiles") else {
+        return Vec::new();
+    };
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut profiles = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+
+    for line in lines.into_iter().skip(start + 1) {
+        if is_top_level_key(line) {
+            break;
+        }
+        if let Some(first) = line.strip_prefix("  - ") {
+            if !current.is_empty() {
+                profiles.push(parse_style_profile(&current.join("\n")));
+                current.clear();
+            }
+            current.push(first.to_string());
+        } else if let Some(rest) = line.strip_prefix("    ") {
+            current.push(rest.to_string());
+        } else if line.trim().is_empty() {
+            current.push(String::new());
+        }
+    }
+    if !current.is_empty() {
+        profiles.push(parse_style_profile(&current.join("\n")));
+    }
+
+    profiles
+        .into_iter()
+        .filter(|profile| {
+            !profile.id.trim().is_empty()
+                && !profile.name.trim().is_empty()
+                && !profile.ass_header.trim().is_empty()
+        })
+        .collect()
+}
+
+fn parse_style_profile(raw: &str) -> CcStyleProfile {
+    CcStyleProfile {
+        id: parse_scalar(raw, "id"),
+        name: parse_scalar(raw, "name"),
+        ass_header: parse_block(raw, "assHeader"),
+        screen_style_name: parse_scalar(raw, "screenStyleName"),
+        speak_style_name: parse_scalar(raw, "speakStyleName"),
+    }
 }
 
 fn find_key_line(raw: &str, key: &str) -> Option<usize> {
     raw.lines().position(|line| {
-        line.starts_with(key)
-            && line
-                .as_bytes()
-                .get(key.len())
-                .is_some_and(|ch| *ch == b':')
+        line.starts_with(key) && line.as_bytes().get(key.len()).is_some_and(|ch| *ch == b':')
     })
 }
 

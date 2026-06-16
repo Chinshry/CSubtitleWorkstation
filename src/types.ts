@@ -77,6 +77,13 @@ export type ProofreadConfig = {
 
 export type CcSubtitleConfig = {
   replacementDictionary: string
+  styleProfileId: string
+  styleProfiles: CcStyleProfile[]
+}
+
+export type CcStyleProfile = {
+  id: string
+  name: string
   assHeader: string
   screenStyleName: string
   speakStyleName: string

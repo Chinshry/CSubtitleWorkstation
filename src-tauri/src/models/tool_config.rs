@@ -23,6 +23,20 @@ pub struct CcSubtitleConfig {
     #[serde(default)]
     pub replacement_dictionary: String,
     #[serde(default)]
+    pub style_profile_id: String,
+    #[serde(default)]
+    pub style_profiles: Vec<CcStyleProfile>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct CcStyleProfile {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
     pub ass_header: String,
     #[serde(default)]
     pub screen_style_name: String,

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 export type MediaToolMode = 'remuxToMp4' | 'concatTsToMp4' | 'addCoverToMp4' | 'mergeAudioVideo'
+export type MediaOutputFormat = 'mp4' | 'ts'
 
 export interface MediaToolJob {
   id: string
@@ -9,6 +10,7 @@ export interface MediaToolJob {
   coverPath?: string
   audioPath?: string
   outputPath: string
+  outputFormat?: MediaOutputFormat
 }
 
 export interface TsSegment {

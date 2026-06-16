@@ -1,3 +1,5 @@
+use crate::models::app_config::AppConfig;
+use crate::models::ffmpeg_status::FfmpegStatus;
 use crate::services::{config_store, ffmpeg_locator, frame_extractor, video_meta};
 use tauri::AppHandle;
 
@@ -7,8 +9,7 @@ pub fn inspect_video_meta(app: AppHandle, path: String) -> Result<video_meta::Vi
     if trimmed.is_empty() {
         return Err("Path is empty.".to_string());
     }
-    let config = config_store::load(&app)?;
-    let status = ffmpeg_locator::detect(&config);
+    let status = detect_ffmpeg_for_media(&app);
     let ffmpeg_path = status
         .ffmpeg_path
         .ok_or_else(|| "ffmpeg is not configured.".to_string())?;
@@ -27,8 +28,7 @@ pub fn extract_video_frame(
     if trimmed.is_empty() {
         return Err("视频路径为空".to_string());
     }
-    let config = config_store::load(&app)?;
-    let status = ffmpeg_locator::detect(&config);
+    let status = detect_ffmpeg_for_media(&app);
     let ffmpeg_path = status
         .ffmpeg_path
         .ok_or_else(|| "ffmpeg 未配置".to_string())?;
@@ -44,4 +44,9 @@ pub fn clear_frame_cache(app: AppHandle) -> Result<(), String> {
     let dir = frame_extractor::frame_cache_dir(&app)?;
     frame_extractor::cleanup_frame_cache(&dir);
     Ok(())
+}
+
+fn detect_ffmpeg_for_media(app: &AppHandle) -> FfmpegStatus {
+    let config = config_store::load(app).unwrap_or_else(|_| AppConfig::default());
+    ffmpeg_locator::detect(&config)
 }

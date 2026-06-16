@@ -11,14 +11,16 @@ import { ffmpegChecking, ffmpegStatus, refreshFfmpegStatus } from '../stores/ffm
 import AppSelect from '../components/AppSelect.vue'
 import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import CommandTaskActions from '../components/CommandTaskActions.vue'
+import JobLogPanel from '../components/JobLogPanel.vue'
 import PathPickerField from '../components/PathPickerField.vue'
 
 const inputPath = ref('')
 const outputPath = ref('')
-const targetFormat = ref<SubtitleTargetFormat>('srt')
+const targetFormat = ref<SubtitleTargetFormat>('ass')
 const command = ref<string[]>([])
 const logs = ref<string[]>([])
 const running = ref(false)
+const jobFailed = ref(false)
 const showCommandPreview = ref(false)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -44,12 +46,13 @@ const runDisabledTip = computed(() => {
 })
 
 const canRun = computed(() => runDisabledTip.value === '可以开始转换')
-const statusText = computed(() => {
-  if (running.value) return '转换中…'
-  if (!logs.value.length) return '待开始'
-  return logs.value.some((line) => line.includes('❌')) ? '已失败' : '已完成'
+const failed = computed(() => jobFailed.value)
+const completed = computed(() => !running.value && logs.value.length > 0 && !failed.value)
+const progressPercent = computed(() => {
+  if (running.value) return 35
+  if (completed.value) return 100
+  return 0
 })
-
 function createJob() {
   return {
     inputPath: inputPath.value,
@@ -97,6 +100,12 @@ function outputForInput(path: string) {
 function applyAutoOutput() {
   if (!inputPath.value.trim()) return
   outputPath.value = outputForInput(inputPath.value)
+}
+
+function clearInput() {
+  inputPath.value = ''
+  outputPath.value = ''
+  command.value = []
 }
 
 function applyDroppedPaths(paths: string[], subtitlePath?: string) {
@@ -148,16 +157,16 @@ async function previewCommand() {
 async function runJob() {
   if (!canRun.value) return
   running.value = true
+  jobFailed.value = false
   logs.value = []
   try {
     await previewCommand()
     const result = await convertSubtitleFormat(createJob())
     logs.value = result.logs.length ? result.logs : [`已输出：${result.outputPath}`]
   } catch (error) {
+    jobFailed.value = true
     logs.value = formatError(error).split('\n').filter(Boolean)
-    if (!logs.value.some((line) => line.includes('❌'))) {
-      logs.value.push('❌ 字幕格式转换失败')
-    }
+    if (!logs.value.length) logs.value = ['Subtitle format conversion failed']
   } finally {
     running.value = false
   }
@@ -197,8 +206,6 @@ onUnmounted(() => {
 
 <template>
   <section class="subtitle-format-workspace">
-    <div v-if="globalDragActive" class="drop-overlay">松开以读取字幕文件</div>
-
     <div v-if="ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
       <strong>正在检测 ffmpeg 环境</strong>
       <span>正在检测 ffmpeg / ffprobe，请稍候。</span>
@@ -209,14 +216,30 @@ onUnmounted(() => {
       <button class="secondary" @click="refreshFfmpeg">重新检测</button>
     </div>
 
-    <section class="panel subtitle-format-panel">
-      <div class="subtitle-format-grid">
+    <section class="panel subtitle-format-panel" :class="{ 'is-empty': !inputPath, 'drag-target': globalDragActive }">
+      <div v-if="!inputPath" class="tool-dropzone">
+        <div class="dropzone-icon">⬇︎</div>
+        <div class="dropzone-title">拖入字幕开始转换</div>
+        <div class="dropzone-sub">
+          <span class="dropzone-note">支持 ASS / SSA / SRT / VTT / SUB</span>
+          <br />
+          选择目标格式后会自动生成输出路径；转换到 SRT / VTT 时会简化不支持的样式。
+        </div>
+        <div class="dropzone-actions">
+          <button class="secondary" type="button" @click="pickInputFile">选择字幕</button>
+        </div>
+      </div>
+
+      <div v-else class="subtitle-format-grid">
         <PathPickerField
           v-model="inputPath"
           label="输入字幕"
           placeholder="选择 ass / ssa / srt / vtt / sub 字幕文件"
           :disabled="running"
+          compact
+          compact-action="clear"
           @pick="pickInputFile"
+          @clear="clearInput"
         />
 
         <label class="format-field">
@@ -234,6 +257,8 @@ onUnmounted(() => {
           label="输出字幕"
           placeholder="选择输出字幕路径"
           :disabled="running || !inputPath"
+          compact
+          compact-action="edit"
           @pick="pickOutputPath"
         />
       </div>
@@ -258,28 +283,24 @@ onUnmounted(() => {
       :can-run="canRun"
       start-label="开始转换"
       cancel-label="取消转换"
-      running-label="转换中…"
+      running-label="转换中..."
       :cancelable="false"
       preview-disabled-tip="选择输入和输出后自动生成命令"
       :run-disabled-tip="runDisabledTip"
       @run="runJob"
     />
 
-    <section class="panel subtitle-format-log">
-      <div class="panel-heading">
-        <div class="heading-title">
-          <h2>转换结果</h2>
-          <span class="status-badge">{{ statusText }}</span>
-        </div>
-      </div>
-      <div v-if="logs.length" class="log-lines">
-        <p v-for="(line, index) in logs" :key="index">{{ line }}</p>
-      </div>
-      <div v-else class="idle-result">
-        <p>尚未开始转换</p>
-        <span>选择输入、目标格式和输出路径后点击上方「开始转换」。</span>
-      </div>
-    </section>
+    <JobLogPanel
+      title="转换进度"
+      idle-title="尚未开始转换"
+      idle-tip="选择输入、目标格式和输出路径后点击上方「开始转换」。"
+      :lines="logs"
+      :command="command"
+      :percent="progressPercent"
+      :running="running"
+      :completed="completed"
+      :failed="failed"
+    />
   </section>
 </template>
 
@@ -298,20 +319,92 @@ onUnmounted(() => {
   gap: 16px;
 }
 
+.subtitle-format-panel.is-empty {
+  padding: 32px 22px;
+}
+
+.subtitle-format-panel.drag-target {
+  background: #eef7fa;
+  border-color: #176b87;
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.15);
+}
+
+.tool-dropzone {
+  align-items: center;
+  border: 2px dashed #b8c8d2;
+  border-radius: 10px;
+  color: #43515c;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 38px 20px;
+  text-align: center;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.subtitle-format-panel.drag-target .tool-dropzone {
+  background: rgba(23, 107, 135, 0.08);
+  border-color: #176b87;
+  color: #0f5268;
+}
+
+.subtitle-format-panel.drag-target .dropzone-title {
+  color: #0f5268;
+}
+
 .subtitle-format-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) 160px minmax(0, 1fr);
+  gap: 14px;
+  grid-template-columns: 1fr;
 }
 
 .format-field {
+  align-items: center;
   display: grid;
-  gap: 6px;
+  gap: 16px;
+  grid-template-columns: 76px 100px;
 }
 
-.format-field > span {
-  color: #4d5b66;
-  font-size: 13px;
+.subtitle-format-grid :deep(.path-picker-field) {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.format-field > span,
+.subtitle-format-grid :deep(.path-picker-field > span) {
+  background: #176b87;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(23, 107, 135, 0.18);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.subtitle-format-grid :deep(.path-picker-control) {
+  gap: 8px;
+}
+
+.format-field :deep(.app-select) {
+  width: 100px;
+}
+
+.format-field :deep(.app-select-trigger) {
+  gap: 4px;
+  padding: 0 7px;
+}
+
+.format-field :deep(.app-select-panel) {
+  padding: 5px;
+}
+
+.format-field :deep(.app-select-option) {
+  padding: 7px 6px;
 }
 
 .tool-note {
@@ -339,52 +432,17 @@ onUnmounted(() => {
   padding: 10px 12px;
 }
 
-.subtitle-format-log {
-  display: grid;
-  gap: 12px;
-  min-height: 180px;
-}
-
-.log-lines {
-  background: #0f1720;
-  border-radius: 8px;
-  color: #d7e7ef;
-  display: grid;
-  font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
-  font-size: 12px;
-  gap: 4px;
-  max-height: 260px;
-  overflow: auto;
-  padding: 12px;
-}
-
-.log-lines p {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.idle-result {
-  align-items: center;
-  color: #8794a0;
-  display: grid;
-  justify-items: center;
-  min-height: 120px;
-}
-
-.idle-result p {
-  color: #102030;
-  font-weight: 750;
-  margin: 0;
-}
-
-.idle-result span {
-  font-size: 13px;
-}
 
 @media (max-width: 920px) {
-  .subtitle-format-grid {
+  .format-field,
+  .subtitle-format-grid :deep(.path-picker-field) {
     grid-template-columns: 1fr;
+  }
+
+  .format-field > span,
+  .subtitle-format-grid :deep(.path-picker-field > span) {
+    justify-self: start;
+    min-width: 76px;
   }
 }
 </style>
