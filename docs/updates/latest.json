@@ -1,13 +1,13 @@
 {
-  "version": "0.1.12",
-  "notes": "## ✨ 新增功能\n\n- 压制页新增「视频处理」，支持在同一个压制流程里处理单视频或字幕压制任务。\n- 视频处理支持旋转、镜像、分辨率、帧率和视频码率调整；旋转与镜像独立配置，并支持 180° 旋转。\n- 支持无字幕单视频处理，初始拖拽入口已明确提示「视频必选、字幕可选」。\n- 质量值支持留空；留空时不生成 `-crf` / `-cq` / `-qp` 参数，便于只按码率控制输出。\n- 优化 LOGO 层级、AVS 无字幕回退、命令预览刷新和视频处理相关帮助说明。\n\n## 🎨 体验改进\n\n- 压制页初始状态改为全屏拖拽入口，导入视频后再显示完整压制控件。\n- 调整视频处理、LOGO 配置、AVS、LOGO 层级等控件布局和提示样式。",
-  "pub_date": "2026-06-13T12:23:50Z",
+  "version": "0.1.13",
+  "notes": "## ✨ 新增功能\n\n- 媒体工具页新增封装转换（remux）、媒体拼接、音视频合并等处理能力，支持更完整的无重编码整理流程。\n- 重构媒体封装视图，拆分更清晰的输入、输出和任务设置区域，工具加载状态更直观。\n- 新增字幕格式转换工具，并打磨字幕文件选择、输出路径和转换流程。\n- 音频来源文件支持更灵活的路径选择，便于在合并和封装转换流程中复用已有素材。\n\n## 🐞 问题修复\n\n- 修复配置文件持续膨胀后导致应用加载卡顿的问题，减少历史任务和缓存数据对启动体验的影响。\n- 修复 macOS 版本发布构建时 AVS 检测模块的条件编译错误。\n\n## 🎨 体验改进\n\n- 优化媒体工具页的任务组织和控件布局，让封装转换、拼接合并、字幕转换等工具入口更集中。\n- 改进工具加载提示和路径选择交互，降低首次进入媒体工具页时的等待感。",
+  "pub_date": "2026-06-18T12:03:08Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.12/CSubtitleWorkstation_0.1.12_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.13/CSubtitleWorkstation_0.1.13_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.12/CSubtitleWorkstation_0.1.12_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.13/CSubtitleWorkstation_0.1.13_universal.dmg"
     }
   }
 }
