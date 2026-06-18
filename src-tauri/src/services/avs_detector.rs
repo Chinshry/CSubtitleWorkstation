@@ -218,6 +218,7 @@ const LAV_SPLITTER_CLSID: &str = r"{B98D13E7-55DB-4385-A33D-09FD1BA26338}";
 #[cfg(windows)]
 const LAV_VIDEO_DECODER_CLSID: &str = r"{EE30215D-164F-4A92-A4EB-9D4C13390F9F}";
 
+#[cfg(windows)]
 fn query_registered_lav_filter_path(clsid: &str) -> Option<String> {
     for root in [
         r"HKCR\CLSID",
@@ -269,6 +270,7 @@ fn is_registered_filter_x64(path: &str) -> bool {
         .is_some_and(|name| name.eq_ignore_ascii_case("x64"))
 }
 
+#[cfg(windows)]
 fn read_registry_install_path() -> Option<String> {
     for key in [
         "HKLM\\SOFTWARE\\AviSynth",
