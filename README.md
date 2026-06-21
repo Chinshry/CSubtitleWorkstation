@@ -7,8 +7,11 @@
 **一键压制字幕视频，支持 LOGO 叠加、特效字幕、实时进度反馈**
 
 <p>
+  <a href="README.en.md">English</a>
+</p>
+<p>
   <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases">📥 下载</a> ·
-  <a href="docs/REQUIREMENTS.md">📖 需求文档</a> ·
+  <a href="docs/DEVELOPMENT_GUIDELINES.md">📖 开发指南</a> ·
   <a href="https://github.com/Chinshry/CSubtitleWorkstation/issues">🐛 反馈问题</a>
 </p>
 
@@ -357,5 +360,5 @@ Issues 和建议欢迎！提交 PR 前请确保代码通过 linter 和测试。
 
 ## 📚 文档
 
-- [需求与技术方案](docs/REQUIREMENTS.md) — 项目设计文档
+- [项目开发指南](docs/DEVELOPMENT_GUIDELINES.md) — 项目开发指南
 - [用户数据与缓存](docs/CACHE_AND_DATA.md) — 本地配置、缓存和临时文件位置
