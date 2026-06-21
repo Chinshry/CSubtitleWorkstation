@@ -5,6 +5,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import type { LogoLayout, LogoLayoutEntry, RecentLogo } from '../types'
 import { extractVideoFrame } from '../api/video'
 import { globalDragActive, pendingDrop } from '../stores/dropStore'
+import { useI18n } from '../i18n'
 
 const props = defineProps<{
   videoPath: string
@@ -22,6 +23,8 @@ const emit = defineEmits<{
   /** 即时更新最近 LOGO 列表（删除场景） */
   (e: 'update-recent', recentLogos: RecentLogo[]): void
 }>()
+
+const { t } = useI18n()
 
 // 图片扩展名白名单：与 chooseLogo 对话框 filter 保持一致
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|bmp)$/i
@@ -319,7 +322,7 @@ async function preloadLogoAspect(path: string) {
         }
         resolve()
       }
-      img.onerror = () => reject(new Error('LOGO 图片加载失败'))
+      img.onerror = () => reject(new Error(t('logoEditor.errors.imageLoadFailed')))
       img.src = url
     })
   } catch {
@@ -403,9 +406,9 @@ async function chooseLogo() {
   const selected = await openDialog({
     multiple: false,
     directory: false,
-    title: '选择 LOGO 图片',
+    title: t('logoEditor.dialog.chooseLogo'),
     filters: [
-      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }
+      { name: t('logoEditor.dialog.imageFilter'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }
     ]
   })
   if (typeof selected === 'string') {
@@ -699,7 +702,7 @@ function buildLogoLayouts(): LogoLayoutEntry[] {
 
 function onSave() {
   if (!hasValidLogo.value) {
-    frameError.value = '请先选择 LOGO 图片'
+    frameError.value = t('logoEditor.errors.chooseLogoFirst')
     return
   }
   emit('save', buildLayout(), buildRecent(), buildLogoLayouts())
@@ -707,7 +710,7 @@ function onSave() {
 
 function onCancel() {
   if (dirty.value) {
-    const ok = window.confirm('当前 LOGO 配置尚未保存，确定要关闭吗？')
+    const ok = window.confirm(t('logoEditor.confirmUnsaved'))
     if (!ok) return
   }
   emit('cancel')
@@ -768,7 +771,7 @@ onBeforeUnmount(() => {
     <div class="logo-editor" role="dialog" aria-modal="true">
       <header class="le-header">
         <!-- 关闭入口收敛到底部「取消」按钮 + ESC 键，避免三个重复出口 -->
-        <h2>配置 LOGO 位置</h2>
+        <h2>{{ t('logoEditor.title') }}</h2>
       </header>
 
       <div class="le-body">
@@ -787,12 +790,12 @@ onBeforeUnmount(() => {
               <circle cx="8.5" cy="8.5" r="1.5" />
               <path d="m21 15-5-5L5 21" />
             </svg>
-            <div class="le-dropzone-title">{{ globalDragActive ? '松开以载入图片' : '选择 LOGO 图片' }}</div>
-            <div class="le-dropzone-hint">点击选择，或拖入 PNG / JPG / WEBP / BMP</div>
+            <div class="le-dropzone-title">{{ globalDragActive ? t('logoEditor.drop.release') : t('logoEditor.drop.choose') }}</div>
+            <div class="le-dropzone-hint">{{ t('logoEditor.drop.hint') }}</div>
           </div>
 
           <div class="le-current">
-            <div class="le-section-title">当前 LOGO</div>
+            <div class="le-section-title">{{ t('logoEditor.current.title') }}</div>
             <div v-if="hasValidLogo" class="le-current-card">
               <img :src="logoUrl" class="le-thumb" alt="LOGO" />
               <div class="le-current-name" v-tooltip="currentDisplayName">{{ currentDisplayName }}</div>
@@ -803,11 +806,11 @@ onBeforeUnmount(() => {
                 <span>{{ logoPath }}</span>
               </div>
             </div>
-            <div v-else class="le-empty">未选择 LOGO</div>
+            <div v-else class="le-empty">{{ t('logoEditor.current.empty') }}</div>
           </div>
 
           <div class="le-recent">
-            <div class="le-section-title">最近使用</div>
+            <div class="le-section-title">{{ t('logoEditor.recent.title') }}</div>
             <ul v-if="recentLogos.length" class="le-recent-list">
               <li
                 v-for="item in recentLogos"
@@ -835,8 +838,8 @@ onBeforeUnmount(() => {
                   v-if="editingPath !== item.path"
                   type="button"
                   class="le-recent-act le-recent-rename"
-                  v-tooltip="'重命名'"
-                  aria-label="重命名"
+                  v-tooltip="t('common.rename')"
+                  :aria-label="t('common.rename')"
                   @click="startRename(item, $event)"
                 >
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -848,8 +851,8 @@ onBeforeUnmount(() => {
                   v-if="editingPath !== item.path"
                   type="button"
                   class="le-recent-act le-recent-del"
-                  v-tooltip="`移除 ${displayLabel(item)}`"
-                  aria-label="移除"
+                  v-tooltip="t('logoEditor.recent.removeTip', { name: displayLabel(item) })"
+                  :aria-label="t('common.delete')"
                   @click="removeRecent(item.path, $event)"
                 >
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -858,16 +861,16 @@ onBeforeUnmount(() => {
                 </button>
               </li>
             </ul>
-            <div v-else class="le-empty">暂无记录</div>
+            <div v-else class="le-empty">{{ t('logoEditor.recent.empty') }}</div>
           </div>
         </aside>
 
         <section class="le-main">
           <div class="le-status-bar">
-            <span>位置：<code>x={{ pxX }} y={{ pxY }}</code></span>
-            <span>尺寸：<code>{{ pxW }} × {{ pxH }}</code></span>
-            <span>百分比：<code>{{ (xPct * 100).toFixed(1) }}%, {{ (yPct * 100).toFixed(1) }}% / {{ (wPct * 100).toFixed(1) }}%, {{ (hPct * 100).toFixed(1) }}%</code></span>
-            <span class="muted">视频：{{ videoWidth ?? '?' }}×{{ videoHeight ?? '?' }}</span>
+            <span>{{ t('logoEditor.status.position') }}<code>x={{ pxX }} y={{ pxY }}</code></span>
+            <span>{{ t('logoEditor.status.size') }}<code>{{ pxW }} × {{ pxH }}</code></span>
+            <span>{{ t('logoEditor.status.percent') }}<code>{{ (xPct * 100).toFixed(1) }}%, {{ (yPct * 100).toFixed(1) }}% / {{ (wPct * 100).toFixed(1) }}%, {{ (hPct * 100).toFixed(1) }}%</code></span>
+            <span class="muted">{{ t('logoEditor.status.video') }}{{ videoWidth ?? '?' }}×{{ videoHeight ?? '?' }}</span>
           </div>
 
           <div class="le-stage-shell" @wheel="onStageWheel">
@@ -878,11 +881,11 @@ onBeforeUnmount(() => {
                 :style="stageBoxStyle"
                 @pointerdown="onStagePointerDown"
               >
-                <img v-if="frameUrl" :src="frameUrl" class="le-frame" alt="预览帧" draggable="false" />
+                <img v-if="frameUrl" :src="frameUrl" class="le-frame" :alt="t('logoEditor.frame.alt')" draggable="false" />
                 <div v-else class="le-frame-placeholder">
-                  <span v-if="frameLoading">抽帧中…</span>
+                  <span v-if="frameLoading">{{ t('logoEditor.frame.loading') }}</span>
                   <span v-else-if="frameError">{{ frameError }}</span>
-                  <span v-else>等待视频帧…</span>
+                  <span v-else>{{ t('logoEditor.frame.waiting') }}</span>
                 </div>
 
                 <div
@@ -917,16 +920,16 @@ onBeforeUnmount(() => {
                 min="100"
                 max="500"
                 step="25"
-                aria-label="画面缩放比例"
+                :aria-label="t('logoEditor.zoom.aria')"
                 @keydown.stop
               />
               <span class="le-zoom-suffix">%</span>
               <div class="le-zoom-tip" role="tooltip">
                 <div class="le-zoom-tip-row">
-                  <span>缩放:</span><kbd>Ctrl</kbd><span>+</span><kbd>滚轮</kbd><span>/</span><kbd>+/-</kbd>
+                  <span>{{ t('logoEditor.zoom.zoom') }}</span><kbd>Ctrl</kbd><span>+</span><kbd>{{ t('logoEditor.zoom.wheel') }}</kbd><span>/</span><kbd>+/-</kbd>
                 </div>
                 <div class="le-zoom-tip-row">
-                  <span>复位:</span><kbd>Ctrl</kbd><span>+</span><kbd>0</kbd>
+                  <span>{{ t('logoEditor.zoom.reset') }}</span><kbd>Ctrl</kbd><span>+</span><kbd>0</kbd>
                 </div>
               </div>
             </div>
@@ -955,8 +958,8 @@ onBeforeUnmount(() => {
               type="button"
               :class="{ loading: frameLoading }"
               :disabled="frameLoading"
-              v-tooltip="frameLoading ? '抽帧中…' : '重新抽取当前帧'"
-              :aria-label="frameLoading ? '抽帧中' : '重新抽取当前帧'"
+              v-tooltip="frameLoading ? t('logoEditor.frame.loading') : t('logoEditor.frame.refresh')"
+              :aria-label="frameLoading ? t('logoEditor.frame.loadingAria') : t('logoEditor.frame.refresh')"
               @click="refreshFrame"
             >
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -969,8 +972,8 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="le-footer">
-        <button class="secondary" type="button" @click="onCancel">取消</button>
-        <button class="primary" type="button" :disabled="!hasValidLogo" @click="onSave">保存</button>
+        <button class="secondary" type="button" @click="onCancel">{{ t('common.cancel') }}</button>
+        <button class="primary" type="button" :disabled="!hasValidLogo" @click="onSave">{{ t('common.save') }}</button>
       </footer>
     </div>
   </div>

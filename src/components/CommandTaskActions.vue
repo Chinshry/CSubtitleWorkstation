@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from '../i18n'
+
 const props = withDefaults(defineProps<{
   command: string[]
   running: boolean
@@ -10,13 +12,11 @@ const props = withDefaults(defineProps<{
   previewDisabledTip?: string
   runDisabledTip?: string
 }>(), {
-  cancelable: true,
-  runningLabel: '处理中…',
-  previewDisabledTip: '选择输入和输出后自动生成命令',
-  runDisabledTip: '请先补全任务配置'
+  cancelable: true
 })
 
 const previewOpen = defineModel<boolean>('previewOpen', { required: true })
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'run'): void
@@ -31,22 +31,22 @@ const emit = defineEmits<{
       class="secondary command-toggle"
       :class="{ active: previewOpen }"
       :disabled="!props.command.length"
-      v-tooltip="props.command.length ? '' : props.previewDisabledTip"
+      v-tooltip="props.command.length ? '' : (props.previewDisabledTip ?? t('common.commandPreviewDisabledTip'))"
       @click="previewOpen = !previewOpen"
     >
-      {{ previewOpen ? '隐藏命令预览' : '显示命令预览' }}
+      {{ previewOpen ? t('common.hideCommandPreview') : t('common.showCommandPreview') }}
     </button>
     <button v-if="props.running && props.cancelable" type="button" class="danger" @click="emit('cancel')">
       {{ props.cancelLabel }}
     </button>
     <button v-else-if="props.running" type="button" disabled>
-      {{ props.runningLabel }}
+      {{ props.runningLabel ?? t('common.processing') }}
     </button>
     <button
       v-else
       type="button"
       :disabled="!props.canRun"
-      v-tooltip="props.canRun ? '' : props.runDisabledTip"
+      v-tooltip="props.canRun ? '' : (props.runDisabledTip ?? t('common.runDisabledTip'))"
       @click="emit('run')"
     >
       {{ props.startLabel }}

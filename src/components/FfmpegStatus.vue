@@ -1,39 +1,42 @@
 <script setup lang="ts">
 import type { FfmpegStatus } from '../types'
+import { useI18n } from '../i18n'
 
 defineProps<{
   status: FfmpegStatus | null
   loading: boolean
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
   <section class="panel ffmpeg-status">
     <div class="panel-heading">
       <div>
-        <h2>ffmpeg 状态</h2>
-        <p>应用只检测并调用本机 ffmpeg，不内置 ffmpeg。</p>
+        <h2>{{ t('ffmpegStatus.title') }}</h2>
+        <p>{{ t('ffmpegStatus.description') }}</p>
       </div>
       <span class="badge" :class="status?.available ? 'ok' : 'bad'">
-        {{ loading ? '检测中' : status?.available ? '可用' : '不可用' }}
+        {{ loading ? t('ffmpegStatus.checking') : status?.available ? t('ffmpegStatus.available') : t('ffmpegStatus.unavailable') }}
       </span>
     </div>
 
     <dl class="details">
       <div>
-        <dt>来源</dt>
+        <dt>{{ t('ffmpegStatus.source') }}</dt>
         <dd>{{ status?.source ?? '-' }}</dd>
       </div>
       <div>
-        <dt>路径</dt>
+        <dt>{{ t('ffmpegStatus.path') }}</dt>
         <dd>{{ status?.ffmpegPath ?? '-' }}</dd>
       </div>
       <div>
-        <dt>版本</dt>
+        <dt>{{ t('ffmpegStatus.version') }}</dt>
         <dd>{{ status?.ffmpegVersion ?? '-' }}</dd>
       </div>
       <div v-if="status?.message">
-        <dt>提示</dt>
+        <dt>{{ t('ffmpegStatus.message') }}</dt>
         <dd>{{ status.message }}</dd>
       </div>
     </dl>

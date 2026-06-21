@@ -21,6 +21,7 @@ import { initEncoderOptions } from './composables/useEncoderOptions'
 import { useToast } from './composables/useToast'
 import { isWindows } from './stores/platformStore'
 import { initAvsStatus, initLavFiltersStatus } from './stores/avsStore'
+import { initLocale, useI18n } from './i18n'
 
 type ViewId = 'home' | 'presets' | 'tools' | 'settings'
 
@@ -28,6 +29,7 @@ const active = ref<ViewId>('home')
 const sidebarCollapsed = ref(true)
 const unlisteners: UnlistenFn[] = []
 const toast = useToast()
+const { t } = useI18n()
 
 function activateView(view: ViewId) {
   active.value = view
@@ -121,14 +123,14 @@ function resolveDropRoute(
     if (supportsActiveToolDrop(activeTool.value, classified, paths)) {
       return { supported: true, target: 'tools', tool: activeTool.value }
     }
-    return { supported: false, message: '当前工具不支持拖入此类文件' }
+    return { supported: false, message: t('app.drop.unsupportedActiveTool') }
   }
 
   if (active.value === 'home') {
     if (classified.videoPath || classified.subtitlePath) {
       return { supported: true, target: 'home' }
     }
-    return { supported: false, message: '压制页只支持拖入视频或字幕文件' }
+    return { supported: false, message: t('app.drop.unsupportedHome') }
   }
 
   if (
@@ -144,7 +146,7 @@ function resolveDropRoute(
   if (classified.videoPath || classified.subtitlePath) {
     return { supported: true, target: 'home' }
   }
-  return { supported: false, message: '不支持拖入此类文件' }
+  return { supported: false, message: t('app.drop.unsupportedFile') }
 }
 
 function runStartupWarmup() {
@@ -168,6 +170,7 @@ function runStartupWarmup() {
 function runStartupUpdateCheck() {
   loadConfig()
     .then((config) => {
+      initLocale(config.language)
       if (config.checkUpdateOnStartup) {
         return refreshAppUpdate({ silent: true })
       }
@@ -203,7 +206,7 @@ onMounted(async () => {
         const paths = event.payload?.paths ?? []
         pushDiag(`drag-drop received ${paths.length} path(s): ${paths.join(' | ')}`)
         if (!paths.length) {
-          pushDiag('WARN: drop event has no paths. 请确认 tauri.conf.json 的 dragDropEnabled=true 已生效（须重启 tauri dev）')
+          pushDiag(t('diagnostics.dropNoPaths'))
           return
         }
         const classified = classifyPaths(paths)
@@ -244,23 +247,23 @@ onUnmounted(() => {
     <TitleBar />
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="brand">
-        <img :src="brandLogo" alt="CC字幕压制工作站" class="brand-logo" />
+        <img :src="brandLogo" :alt="t('app.name')" class="brand-logo" />
         <div class="brand-text">
-          <strong>CC字幕压制工作站</strong>
-          <span class="brand-sub">Subtitle WorkStation</span>
+          <strong>{{ t('app.name') }}</strong>
+          <span class="brand-sub">{{ t('app.subtitle') }}</span>
         </div>
       </div>
       <nav>
-        <button :class="{ active: active === 'home' }" @click="activateView('home')" v-tooltip="'压制'">
+        <button :class="{ active: active === 'home' }" @click="activateView('home')">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="5" width="18" height="14" rx="2" />
               <path d="M7 11h4M7 15h7" />
             </svg>
           </span>
-          <span>压制</span>
+          <span>{{ t('nav.home') }}</span>
         </button>
-        <button :class="{ active: active === 'presets' }" @click="activateView('presets')" v-tooltip="'预设'">
+        <button :class="{ active: active === 'presets' }" @click="activateView('presets')">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 7h16" />
@@ -271,9 +274,9 @@ onUnmounted(() => {
               <circle cx="12" cy="17" r="2" />
             </svg>
           </span>
-          <span>预设</span>
+          <span>{{ t('nav.presets') }}</span>
         </button>
-        <button :class="{ active: active === 'tools' }" @click="activateView('tools')" v-tooltip="'工具'">
+        <button :class="{ active: active === 'tools' }" @click="activateView('tools')">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="8" width="18" height="12" rx="2" />
@@ -282,20 +285,20 @@ onUnmounted(() => {
               <path d="M12 13v2" />
             </svg>
           </span>
-          <span>工具</span>
+          <span>{{ t('nav.tools') }}</span>
         </button>
-        <button :class="{ active: active === 'settings' }" @click="activateView('settings')" v-tooltip="'设置'">
+        <button :class="{ active: active === 'settings' }" @click="activateView('settings')">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.4 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
             </svg>
           </span>
-          <span>设置</span>
+          <span>{{ t('nav.settings') }}</span>
           <span v-if="hasAvailableUpdate" class="nav-update-dot" aria-hidden="true"></span>
         </button>
       </nav>
-      <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" v-tooltip="sidebarCollapsed ? '展开' : '折叠'">
+      <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>

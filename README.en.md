@@ -7,8 +7,11 @@
 **One-click subtitle video encoding with logo overlays, effect subtitles, and real-time progress feedback**
 
 <p>
+  <a href="README.md">简体中文</a>
+</p>
+
+<p>
   <a href="https://github.com/Chinshry/CSubtitleWorkstation/releases">Download</a> ·
-  <a href="README.md">简体中文</a> ·
   <a href="docs/DEVELOPMENT_GUIDELINES.md">Development Guide</a> ·
   <a href="https://github.com/Chinshry/CSubtitleWorkstation/issues">Issues</a>
 </p>
@@ -33,7 +36,7 @@ Replace traditional subtitle encoding workflows with a visual desktop interface:
 
 ---
 
-## Why?
+## 💡 Why?
 
 Traditional subtitle video encoding often depends on third-party GUI tools such as Xiaowan Toolbox or hand-written BAT scripts. Common problems include:
 
@@ -48,52 +51,52 @@ Traditional subtitle video encoding often depends on third-party GUI tools such 
 
 ---
 
-## Features
+## ✨ Features
 
 ### Main Encoding Workflow
 
-- **Drag-and-drop import**: drop videos and subtitles into the window to start. Single-video tasks and video + subtitle imports are both supported.
-- **Video metadata analysis**: automatically reads resolution, frame rate, codec, duration, CFR/VFR status, and other key details.
-- **Visual encoding options**: configure quality, bitrate, and encoder in one place. Quality can be left empty, in which case `-crf`, `-cq`, or `-qp` is not generated.
-- **Video processing**: deinterlace, rotate, mirror, scale, adjust frame rate, and set video bitrate in the same encoding task.
-- **Command preview and logs**: expand the full ffmpeg command before starting. During encoding, view progress, speed, fps, bitrate, output size, and stdout/stderr.
-- **Task cancellation**: cancel an encoding task and let ffmpeg exit gracefully. Already written segments are preserved as playable output whenever possible.
+- 🎬 **Drag-and-drop import**: drop videos and subtitles into the window to start. Single-video tasks and video + subtitle imports are both supported.
+- 📊 **Video metadata analysis**: automatically reads resolution, frame rate, codec, duration, CFR/VFR status, and other key details.
+- 🎨 **Visual encoding options**: configure quality, bitrate, and encoder in one place. Quality can be left empty, in which case `-crf`, `-cq`, or `-qp` is not generated.
+- 🎛️ **Video processing**: deinterlace, rotate, mirror, scale, adjust frame rate, and set video bitrate in the same encoding task.
+- 👁️ **Command preview and logs**: expand the full ffmpeg command before starting. During encoding, view progress, speed, fps, bitrate, output size, and stdout/stderr.
+- ⏹️ **Task cancellation**: cancel an encoding task and let ffmpeg exit gracefully. Already written segments are preserved as playable output whenever possible.
 
 ### Subtitles and Logo
 
-- **Standard subtitle burn-in**: renders ASS / SSA / SRT / VTT / SUB subtitles with ffmpeg libass.
-- **Effect subtitle detection** (Windows): scans VSFilterMod extension tags and suggests AVS encoding when they are detected.
-- **AVS effect subtitle encoding** (Windows): uses AviSynth+ / VSFilterMod to process complex ASS effects, vector drawings, and img tags.
-- **Subtitle check panel**: reports missing images, missing fonts, missing styles, ASS color matrix issues, and effect tag risks.
-- **Visual logo editor**: drag and resize logos on extracted video frames. Layouts are saved by resolution and orientation, and the subtitle/logo layer order can be configured.
+- 🔤 **Standard subtitle burn-in**: renders ASS / SSA / SRT / VTT / SUB subtitles with ffmpeg libass.
+- 🧠 **Effect subtitle detection** (Windows): scans VSFilterMod extension tags and suggests AVS encoding when they are detected.
+- 🧩 **AVS effect subtitle encoding** (Windows): uses AviSynth+ / VSFilterMod to process complex ASS effects, vector drawings, and img tags.
+- 🔍 **Subtitle check panel**: reports missing images, missing fonts, missing styles, ASS color matrix issues, and effect tag risks.
+- 🖼️ **Visual logo editor**: drag and resize logos on extracted video frames. Layouts are saved by resolution and orientation, and the subtitle/logo layer order can be configured.
 
 ### Tools Page
 
-- **Text tools**
-  - **CC subtitle organizer**: splits web CC speaker labels, organizes decorative text lines and transcription lines, and supports SRT to ASS conversion.
-  - **Simplified/Traditional Chinese conversion**: live preview, diff highlighting, synchronized scrolling, and custom dictionary priority matching.
-  - **Subtitle proofreading**: checks suspicious Chinese "的 / 地 / 得" usage, supports custom dictionaries, regular expressions, and test matching, and only suggests changes instead of replacing automatically.
-- **Format conversion**
-  - **Subtitle format conversion**: convert between ASS / SSA / SRT / VTT. Dropping a single subtitle can open the tool directly.
-  - **Video to MP4**: remux common video containers to MP4. Stream copy is used by default with no re-encoding.
-- **Media processing**
-  - **TS segment merge**: merge TS / M2TS / MTS segments in order and output MP4 without re-encoding.
-  - **Merge audio and video**: keep the original video stream and mux a separate audio source into MP4.
-  - **Add cover image**: write JPG / PNG cover art into MP4 while copying original audio and video streams.
+- 📝 **Text tools**
+  - 🧾 **CC subtitle organizer**: splits web CC speaker labels, organizes decorative text lines and transcription lines, and supports SRT to ASS conversion.
+  - 🔁 **Simplified/Traditional Chinese conversion**: live preview, diff highlighting, synchronized scrolling, and custom dictionary priority matching.
+  - ✅ **Subtitle proofreading**: checks suspicious Chinese "的 / 地 / 得" usage, supports custom dictionaries, regular expressions, and test matching, and only suggests changes instead of replacing automatically.
+- 🔄 **Format conversion**
+  - 🔄 **Subtitle format conversion**: convert between ASS / SSA / SRT / VTT. Dropping a single subtitle can open the tool directly.
+  - 📦 **Video to MP4**: remux common video containers to MP4. Stream copy is used by default with no re-encoding.
+- 🎞️ **Media processing**
+  - 🎞️ **TS segment merge**: merge TS / M2TS / MTS segments in order and output MP4 without re-encoding.
+  - 🎧 **Merge audio and video**: keep the original video stream and mux a separate audio source into MP4.
+  - 🖼️ **Add cover image**: write JPG / PNG cover art into MP4 while copying original audio and video streams.
 
 ### Presets
 
-- **Encoding preset management**: built-in x264, x265, NVENC, AMF, and VideoToolbox presets, with custom create/edit/import/export support.
-- **Output filename templates**: supports variables such as `{video_name}`, `{resolution}`, `{encoder}`, `{crf}`, and `{date:YYYYMMDD}`.
+- 🧰 **Encoding preset management**: built-in x264, x265, NVENC, AMF, and VideoToolbox presets, with custom create/edit/import/export support.
+- 📝 **Output filename templates**: supports variables such as `{video_name}`, `{resolution}`, `{encoder}`, `{crf}`, and `{date:YYYYMMDD}`.
 
 ### Environment and Updates
 
-- **Application update checks**: silently check on startup or manually check from Settings. New versions are announced with Toast notifications.
-- **macOS compatibility checks**: verifies whether ffmpeg contains the `subtitles` / `ass` filters and suggests `ffmpeg-full` when they are missing.
+- 🔔 **Application update checks**: silently check on startup or manually check from Settings. New versions are announced with Toast notifications.
+- 🍎 **macOS compatibility checks**: verifies whether ffmpeg contains the `subtitles` / `ass` filters and suggests `ffmpeg-full` when they are missing.
 
 ---
 
-## Supported Formats
+## 📋 Supported Formats
 
 | Type | Supported formats |
 |------|-------------------|
@@ -104,7 +107,7 @@ Traditional subtitle video encoding often depends on third-party GUI tools such 
 
 ---
 
-## Platform Support
+## 🖥️ Platform Support
 
 | Feature | Windows | macOS |
 |------|---------|-------|
@@ -123,7 +126,7 @@ Traditional subtitle video encoding often depends on third-party GUI tools such 
 
 ---
 
-## Screenshots
+## 📸 Screenshots
 
 <table>
   <tr>
@@ -160,7 +163,7 @@ Traditional subtitle video encoding often depends on third-party GUI tools such 
 
 ---
 
-## Download and Installation
+## 📥 Download and Installation
 
 Download the latest version from the [Releases page](https://github.com/Chinshry/CSubtitleWorkstation/releases).
 
@@ -190,7 +193,7 @@ If this does not work on macOS 14 or later:
 
 ---
 
-## FAQ
+## ❓ FAQ
 
 <details>
 <summary><strong>Where do I configure ffmpeg?</strong></summary>
@@ -309,7 +312,7 @@ The app stores configuration, window state, subtitle proofreading dictionaries, 
 
 ---
 
-## Advanced
+## 🔧 Advanced
 
 <details>
 <summary><strong>Development environment and commands</strong></summary>
@@ -346,17 +349,17 @@ npm run build          # frontend build only
 
 ---
 
-## Star History
+## 📊 Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Chinshry/CSubtitleWorkstation&type=Date)](https://www.star-history.com/#Chinshry/CSubtitleWorkstation&Date)
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 Issues and suggestions are welcome. Before submitting a PR, make sure the code passes linting and tests.
 
-## Documentation
+## 📚 Documentation
 
 - [Development Guidelines](docs/DEVELOPMENT_GUIDELINES.md) - Project development guide
 - [Cache and User Data](docs/CACHE_AND_DATA.md) - Local configuration, cache, and temporary file locations

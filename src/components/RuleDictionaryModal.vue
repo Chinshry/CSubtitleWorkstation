@@ -9,6 +9,7 @@ import {
   removeRuleDictionaryEntry,
   setRuleDictionaryEntry
 } from '../utils/ruleDictionary'
+import { useI18n } from '../i18n'
 
 type PreviewMatch = {
   lineIndex: number
@@ -45,6 +46,7 @@ const emit = defineEmits<{
 const mode = ref<'table' | 'raw'>('table')
 const testText = ref('')
 const entryEditorRef = ref<HTMLElement | null>(null)
+const { t } = useI18n()
 
 const rules = computed(() => parseRuleDictionary(props.modelValue))
 const entries = computed(() => buildEditableRuleDictionaryEntries(props.modelValue, {
@@ -138,19 +140,19 @@ function removeEntry(lineIndex: number) {
             <h2>{{ title }}</h2>
             <p>{{ description }}</p>
           </div>
-          <button type="button" class="field-tool" @click="setOpen(false)">关闭</button>
+          <button type="button" class="field-tool" @click="setOpen(false)">{{ t('ruleDictionary.close') }}</button>
         </div>
 
         <div class="rule-dictionary-toolbar">
-          <div class="rule-dictionary-tabs" role="tablist" aria-label="词库编辑方式">
+          <div class="rule-dictionary-tabs" role="tablist" :aria-label="t('ruleDictionary.tabsLabel')">
             <button type="button" :class="{ active: mode === 'table' }" @click="mode = 'table'">
-              词条编辑
+              {{ t('ruleDictionary.entryTab') }}
             </button>
             <button type="button" :class="{ active: mode === 'raw' }" @click="mode = 'raw'">
-              原始文本
+              {{ t('ruleDictionary.rawTab') }}
             </button>
           </div>
-          <button type="button" class="field-tool primary" @click="addEntry">新增</button>
+          <button type="button" class="field-tool primary" @click="addEntry">{{ t('ruleDictionary.add') }}</button>
         </div>
 
         <div v-if="mode === 'table'" ref="entryEditorRef" class="rule-entry-editor">
@@ -183,20 +185,20 @@ function removeEntry(lineIndex: number) {
                   @input="updateEntry(entry.lineIndex, 'pattern', ($event.target as HTMLInputElement).value)"
                 />
               </label>
-              <button type="button" class="field-tool" @click="removeEntry(entry.lineIndex)">删除</button>
-              <small v-if="!entry.valid">这一行格式无法识别，可切到原始文本检查。</small>
-              <small v-else-if="!entry.patternValid">匹配规则看起来不是有效正则。</small>
+              <button type="button" class="field-tool" @click="removeEntry(entry.lineIndex)">{{ t('ruleDictionary.delete') }}</button>
+              <small v-if="!entry.valid">{{ t('ruleDictionary.invalidLine') }}</small>
+              <small v-else-if="!entry.patternValid">{{ t('ruleDictionary.invalidPattern') }}</small>
             </div>
           </div>
-          <button v-else type="button" class="rule-entry-empty" @click="addEntry">新增第一条规则</button>
+          <button v-else type="button" class="rule-entry-empty" @click="addEntry">{{ t('ruleDictionary.addFirst') }}</button>
         </div>
 
         <div v-if="mode === 'table'" class="rule-preview">
           <label>
-            <span>试匹配</span>
+            <span>{{ t('ruleDictionary.testMatch') }}</span>
             <input
               v-model="testText"
-              placeholder="输入一小段字幕文本，检查上面的规则会不会命中"
+              :placeholder="t('ruleDictionary.testPlaceholder')"
             />
           </label>
           <div v-if="testText" class="rule-preview-result">
@@ -220,7 +222,7 @@ function removeEntry(lineIndex: number) {
                 <span class="rule-preview-replace">{{ match.original }} → {{ match.suggestion }}</span>
               </div>
             </div>
-            <span v-else class="rule-preview-empty">当前没有匹配到任何词条。</span>
+            <span v-else class="rule-preview-empty">{{ t('ruleDictionary.noMatches') }}</span>
           </div>
         </div>
 
@@ -234,9 +236,9 @@ function removeEntry(lineIndex: number) {
 
         <div class="rule-dictionary-dialog-foot">
           <span>
-            {{ rules.length }} 条可用规则<span v-if="invalidCount">，{{ invalidCount }} 条需要检查</span>。修改后会自动记忆并重新处理<span v-if="supportsCapture">；目标文本支持 %1 捕获组</span>。
+            {{ t('ruleDictionary.summary', { valid: rules.length }) }}<span v-if="invalidCount">{{ t('ruleDictionary.invalidSummary', { invalid: invalidCount }) }}</span>{{ t('ruleDictionary.autoSaveHint') }}<span v-if="supportsCapture">{{ t('ruleDictionary.captureHint') }}</span>{{ t('ruleDictionary.endPunctuation') }}
           </span>
-          <button type="button" class="field-tool primary" @click="setOpen(false)">完成</button>
+          <button type="button" class="field-tool primary" @click="setOpen(false)">{{ t('ruleDictionary.done') }}</button>
         </div>
       </section>
     </div>

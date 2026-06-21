@@ -780,7 +780,7 @@ pub fn normalize_output_path(video_path: &str, output_path: &str) -> String {
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or("output");
-    let filename = format!("{stem} 中字.mp4");
+    let filename = format!("{stem} subtitles.mp4");
 
     if trimmed.is_empty() {
         return video

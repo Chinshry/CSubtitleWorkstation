@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+
 /**
  * ASS YCbCr Matrix 与视频 color_space / color_range 一致性判定
  *
@@ -129,7 +131,7 @@ function describeStandard(s: MatrixStandard): string {
     case '240M':
       return 'SMPTE 240M'
     default:
-      return '未知'
+      return t('colorMatrix.standard.unknown')
   }
 }
 
@@ -178,9 +180,9 @@ export function checkColorMatrix(
         ...base,
         level: 'warn',
         shouldWarn: true,
-        title: 'ASS 未声明 YCbCr Matrix，但视频是 BT.2020（HDR/4K）',
-        detail: 'libass 默认按分辨率启发式选择矩阵（PlayResY≥720→BT.709），在 BT.2020 视频上烧入字幕颜色会偏。',
-        suggestion: '建议在 ASS [Script Info] 段加入：YCbCr Matrix: TV.2020',
+        title: t('colorMatrix.missingBt2020.title'),
+        detail: t('colorMatrix.missingBt2020.detail'),
+        suggestion: t('colorMatrix.suggestion.addMatrix', { matrix: 'TV.2020' }),
       }
     }
     if (videoRangeKind === 'full') {
@@ -188,11 +190,11 @@ export function checkColorMatrix(
         ...base,
         level: 'warn',
         shouldWarn: true,
-        title: 'ASS 未声明 YCbCr Matrix，但视频是 full range',
-        detail: 'libass 默认按 limited range 渲染字幕，烧到 full range 视频上黑色会发灰或白色过曝。',
-        suggestion: `建议在 ASS [Script Info] 段加入：YCbCr Matrix: ${
-          suggestAssMatrix(videoStandard === 'unknown' ? '709' : videoStandard, 'full') ?? 'PC.709'
-        }`,
+        title: t('colorMatrix.missingFullRange.title'),
+        detail: t('colorMatrix.missingFullRange.detail'),
+        suggestion: t('colorMatrix.suggestion.addMatrix', {
+          matrix: suggestAssMatrix(videoStandard === 'unknown' ? '709' : videoStandard, 'full') ?? 'PC.709',
+        }),
       }
     }
     return { ...base, level: 'info', shouldWarn: false, title: '' }
@@ -205,7 +207,7 @@ export function checkColorMatrix(
       level: 'info',
       shouldWarn: false,
       title: 'ASS YCbCr Matrix: None',
-      detail: '字幕作者显式跳过 RGB→YUV 转换。除非你清楚意图，否则一般不需要这样设置。',
+      detail: t('colorMatrix.none.detail'),
     }
   }
 
@@ -215,9 +217,11 @@ export function checkColorMatrix(
       ...base,
       level: 'warn',
       shouldWarn: true,
-      title: `ASS YCbCr Matrix 值无法识别：${parsed.raw}`,
-      detail: '标准取值为 TV.601 / TV.709 / TV.2020 / PC.601 / PC.709 / PC.2020 / None',
-      suggestion: videoStandard !== 'unknown' ? `建议改为 ${suggestAssMatrix(videoStandard, videoRangeKind)}` : undefined,
+      title: t('colorMatrix.unrecognized.title', { value: parsed.raw }),
+      detail: t('colorMatrix.unrecognized.detail'),
+      suggestion: videoStandard !== 'unknown'
+        ? t('colorMatrix.suggestion.changeTo', { matrix: suggestAssMatrix(videoStandard, videoRangeKind) ?? '' })
+        : undefined,
     }
   }
 
@@ -238,10 +242,13 @@ export function checkColorMatrix(
       shouldWarn: true,
       assRange,
       assStandard,
-      title: `ASS 矩阵(${describeStandard(assStandard)}) 与视频(${describeStandard(videoStandard)}) 不匹配`,
+      title: t('colorMatrix.matrixMismatch.title', {
+        ass: describeStandard(assStandard),
+        video: describeStandard(videoStandard),
+      }),
       detail:
-        '烧入字幕颜色会整体偏色（红/蓝偏移），这是 libass / VSFilterMod 按 ASS 声明的矩阵执行 RGB→YUV 导致的。',
-      suggestion: suggested ? `建议把 ASS 头部改为：YCbCr Matrix: ${suggested}` : undefined,
+        t('colorMatrix.matrixMismatch.detail'),
+      suggestion: suggested ? t('colorMatrix.suggestion.changeHeader', { matrix: suggested }) : undefined,
     }
   }
 
@@ -253,9 +260,12 @@ export function checkColorMatrix(
       shouldWarn: true,
       assRange,
       assStandard,
-      title: `ASS 量化范围(${assRange}) 与视频(${videoRangeKind === 'full' ? 'PC/full' : 'TV/limited'}) 不匹配`,
-      detail: '矩阵一致但量化范围不同；黑/白电平会偏，常见表现为字幕黑色发灰或白色过曝。',
-      suggestion: suggested ? `建议把 ASS 头部改为：YCbCr Matrix: ${suggested}` : undefined,
+      title: t('colorMatrix.rangeMismatch.title', {
+        ass: assRange,
+        video: videoRangeKind === 'full' ? 'PC/full' : 'TV/limited',
+      }),
+      detail: t('colorMatrix.rangeMismatch.detail'),
+      suggestion: suggested ? t('colorMatrix.suggestion.changeHeader', { matrix: suggested }) : undefined,
     }
   }
 
@@ -267,7 +277,7 @@ export function checkColorMatrix(
       shouldWarn: false,
       assRange,
       assStandard,
-      title: '视频未声明 color_space，无法严格比对',
+      title: t('colorMatrix.videoUnknown.title'),
     }
   }
 
@@ -277,6 +287,6 @@ export function checkColorMatrix(
     shouldWarn: false,
     assRange,
     assStandard,
-    title: `色彩矩阵一致（${assRange}.${assStandard}）`,
+    title: t('colorMatrix.ok.title', { matrix: `${assRange}.${assStandard}` }),
   }
 }

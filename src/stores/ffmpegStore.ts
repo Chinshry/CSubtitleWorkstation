@@ -6,6 +6,7 @@ import {
   readCachedFfmpegStatus,
   writeCachedFfmpegStatus
 } from '../utils/environmentCache'
+import { t } from '../i18n'
 
 // 真实检测结果（仅 store 内部 + 设置面板的 setFfmpegStatus 写入）
 const realStatus = ref<FfmpegStatus | null>(null)
@@ -77,7 +78,7 @@ export const ffmpegStatus = computed<FfmpegStatus | null>(() => {
       source: 'not_found',
       subtitleFilterAvailable: false,
       assFilterAvailable: false,
-      message: '[调试] 模拟 ffmpeg 未找到'
+      message: t('debugMock.ffmpegMissing')
     }
   }
 
@@ -103,7 +104,7 @@ export const ffmpegStatus = computed<FfmpegStatus | null>(() => {
       ...mocked,
       ffprobePath: undefined,
       ffprobeVersion: undefined,
-      message: '[调试] 模拟 ffprobe 缺失（仅影响视频信息精度）'
+      message: t('debugMock.ffprobeMissing')
     }
   }
 
@@ -113,7 +114,7 @@ export const ffmpegStatus = computed<FfmpegStatus | null>(() => {
       available: false,
       subtitleFilterAvailable: false,
       assFilterAvailable: false,
-      message: '[调试] 模拟 subtitles/libass filter 缺失'
+      message: t('debugMock.subtitleFilterMissing')
     }
   }
 

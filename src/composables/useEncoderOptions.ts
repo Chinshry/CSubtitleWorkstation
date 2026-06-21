@@ -2,26 +2,27 @@ import { computed, ref } from 'vue'
 import { getSupportedEncoders } from '../api/encoder'
 import type { EncoderInfo } from '../types'
 import { readCachedEncoderOptions, writeCachedEncoderOptions } from '../utils/environmentCache'
+import { useI18n } from '../i18n'
 
 export type EncoderOption = {
   value: string | number
   label: string
 }
 
-const ENCODER_LABELS: Record<string, string> = {
-  libx264: 'CPU libx264（H.264，兼容性最好，支持 AVS）',
-  libx265: 'CPU libx265（H.265/HEVC，体积更小，速度较慢）',
-  h264_nvenc: 'NVIDIA h264_nvenc（显卡硬编，速度快，不支持 AVS）',
-  h264_amf: 'AMD h264_amf（显卡硬编，速度快，不支持 AVS）',
-  h264_videotoolbox: 'macOS h264_videotoolbox（Apple 硬编，不支持 AVS）',
+const ENCODER_LABEL_KEYS: Record<string, string> = {
+  libx264: 'encoderOptions.libx264',
+  libx265: 'encoderOptions.libx265',
+  h264_nvenc: 'encoderOptions.h264Nvenc',
+  h264_amf: 'encoderOptions.h264Amf',
+  h264_videotoolbox: 'encoderOptions.h264Videotoolbox',
 }
 
-const FALLBACK_ENCODER_OPTIONS: EncoderOption[] = [
-  { value: 'libx264', label: ENCODER_LABELS.libx264 },
-  { value: 'libx265', label: ENCODER_LABELS.libx265 },
-  { value: 'h264_nvenc', label: ENCODER_LABELS.h264_nvenc },
-  { value: 'h264_amf', label: ENCODER_LABELS.h264_amf },
-  { value: 'h264_videotoolbox', label: ENCODER_LABELS.h264_videotoolbox },
+const FALLBACK_ENCODER_VALUES = [
+  'libx264',
+  'libx265',
+  'h264_nvenc',
+  'h264_amf',
+  'h264_videotoolbox',
 ]
 
 const supportedEncoders = ref<EncoderInfo[]>([])
@@ -46,13 +47,25 @@ export async function initEncoderOptions(): Promise<void> {
 }
 
 export function useEncoderOptions() {
+  const { t } = useI18n()
+
+  function encoderLabel(name: string, fallback: string) {
+    const key = ENCODER_LABEL_KEYS[name]
+    return key ? t(key) : fallback
+  }
+
   const encoderOptions = computed<EncoderOption[]>(() => {
-    if (!supportedEncoders.value.length) return FALLBACK_ENCODER_OPTIONS
+    if (!supportedEncoders.value.length) {
+      return FALLBACK_ENCODER_VALUES.map((value) => ({
+        value,
+        label: encoderLabel(value, value),
+      }))
+    }
     return supportedEncoders.value
       .filter((encoder) => encoder.supported)
       .map((encoder) => ({
         value: encoder.name,
-        label: ENCODER_LABELS[encoder.name] || encoder.label,
+        label: encoderLabel(encoder.name, encoder.label),
       }))
   })
 

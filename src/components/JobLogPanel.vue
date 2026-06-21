@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from '../i18n'
 
 const props = defineProps<{
   lines: string[]
@@ -24,6 +25,8 @@ const props = defineProps<{
   idleTip?: string
 }>()
 
+const { t } = useI18n()
+
 // 根据日志判断最终状态
 const finalStatus = computed(() => {
   // 取消优先级最高：运行中表示"取消中..."，已停止表示"已取消"
@@ -40,12 +43,12 @@ const finalStatus = computed(() => {
 
 const statusLabel = computed(() => {
   switch (finalStatus.value) {
-    case 'running': return '运行中'
-    case 'cancelling': return '取消中…'
-    case 'cancelled': return '已取消'
-    case 'completed': return '已完成'
-    case 'failed': return '已失败'
-    default: return '待开始'
+    case 'running': return t('logPanel.status.running')
+    case 'cancelling': return t('logPanel.status.cancelling')
+    case 'cancelled': return t('logPanel.status.cancelled')
+    case 'completed': return t('logPanel.status.completed')
+    case 'failed': return t('logPanel.status.failed')
+    default: return t('logPanel.status.idle')
   }
 })
 
@@ -70,15 +73,15 @@ const copyHint = ref('')
 async function copyAll() {
   const text = props.lines.join('\n')
   if (!text.trim()) {
-    copyHint.value = '无内容'
+    copyHint.value = t('common.noContent')
     setTimeout(() => (copyHint.value = ''), 1500)
     return
   }
   try {
     await navigator.clipboard.writeText(text)
-    copyHint.value = '已复制'
+    copyHint.value = t('common.copied')
   } catch {
-    copyHint.value = '复制失败'
+    copyHint.value = t('common.copyFailed')
   }
   setTimeout(() => (copyHint.value = ''), 1500)
 }
@@ -116,12 +119,12 @@ const estimatedSizeKb = computed(() => {
   <section class="panel log-panel" :class="{ 'is-idle-empty': isIdleEmpty }">
     <div class="panel-heading">
       <div class="heading-title">
-        <h2>{{ title ?? '压制进度' }}</h2>
+        <h2>{{ title ?? t('logPanel.defaultTitle') }}</h2>
         <span :class="['status-badge', statusClass]">{{ statusLabel }}</span>
       </div>
-      <button v-if="!isIdleEmpty" class="copy-btn" :class="{ active: copyHint }" @click="copyAll" data-tip="复制全部日志">
+      <button v-if="!isIdleEmpty" class="copy-btn" :class="{ active: copyHint }" @click="copyAll" :data-tip="t('logPanel.copyAllTip')">
         <span v-if="copyHint">{{ copyHint }}</span>
-        <span v-else>复制</span>
+        <span v-else>{{ t('common.copy') }}</span>
       </button>
     </div>
 
@@ -131,8 +134,8 @@ const estimatedSizeKb = computed(() => {
           <polygon points="6 4 20 12 6 20 6 4"></polygon>
         </svg>
       </div>
-      <p class="idle-hero-title">{{ idleTitle ?? '尚未开始压制' }}</p>
-      <p class="idle-hero-tip">{{ idleTip ?? '配置好参数后点击上方「开始压制」按钮' }}</p>
+      <p class="idle-hero-title">{{ idleTitle ?? t('logPanel.defaultIdleTitle') }}</p>
+      <p class="idle-hero-tip">{{ idleTip ?? t('logPanel.defaultIdleTip') }}</p>
     </div>
 
     <template v-else>
@@ -144,34 +147,34 @@ const estimatedSizeKb = computed(() => {
       </div>
 
       <div class="eta-pills" v-if="(elapsedSeconds ?? 0) > 0">
-        <span class="eta-pill" v-tooltip="'壁钟耗时：从开始压制到现在的真实流逝时间'">
-          <em>已用</em>
+        <span class="eta-pill" v-tooltip="t('logPanel.elapsedTip')">
+          <em>{{ t('logPanel.elapsed') }}</em>
           <span>{{ formatTime(elapsedSeconds) }}</span>
         </span>
-        <span class="eta-pill highlight" v-tooltip="'剩余 = (视频总时长 - 已压制) / 当前速度'">
-          <em>剩余</em>
+        <span class="eta-pill highlight" v-tooltip="t('logPanel.remainingTip')">
+          <em>{{ t('logPanel.remaining') }}</em>
           <span>{{ formatTimeOrDash(remainingSeconds) }}</span>
         </span>
-        <span class="eta-pill estimate" v-tooltip="'预计总耗时 = 已用 + 剩余（按当前平滑速度估算）'">
-          <em>预计</em>
+        <span class="eta-pill estimate" v-tooltip="t('logPanel.estimatedTip')">
+          <em>{{ t('logPanel.estimated') }}</em>
           <span>{{ formatTimeOrDash(etaSeconds) }}</span>
         </span>
       </div>
 
       <div class="progress-meta" v-if="(elapsedSeconds ?? 0) > 0">
         <div class="meta-item">
-          <span class="meta-label">时长</span>
+          <span class="meta-label">{{ t('logPanel.duration') }}</span>
           <span class="meta-value">{{ formatTime(currentSeconds) }} / {{ formatTime(durationSeconds) }}</span>
         </div>
         <div class="meta-item">
-          <span class="meta-label">大小</span>
+          <span class="meta-label">{{ t('logPanel.size') }}</span>
           <span class="meta-value">
             {{ formatSize(sizeKb) }}
-            <small v-if="estimatedSizeKb">/ 预估 {{ formatSize(estimatedSizeKb) }}</small>
+            <small v-if="estimatedSizeKb">{{ t('logPanel.estimatedSize', { size: formatSize(estimatedSizeKb) }) }}</small>
           </span>
         </div>
         <div class="meta-item" v-if="speed">
-          <span class="meta-label">速度</span>
+          <span class="meta-label">{{ t('logPanel.speed') }}</span>
           <span class="meta-value">{{ speed.toFixed(2) }}x</span>
         </div>
         <div class="meta-item" v-if="fps">
@@ -179,7 +182,7 @@ const estimatedSizeKb = computed(() => {
           <span class="meta-value">{{ fps.toFixed(1) }}</span>
         </div>
         <div class="meta-item" v-if="bitrateKbps">
-          <span class="meta-label">码率</span>
+          <span class="meta-label">{{ t('logPanel.bitrate') }}</span>
           <span class="meta-value">{{ bitrateKbps.toFixed(0) }} kbps</span>
         </div>
       </div>
@@ -188,7 +191,7 @@ const estimatedSizeKb = computed(() => {
 
       <div class="log-lines">
         <p v-for="(line, index) in lines" :key="index">{{ line }}</p>
-        <p v-if="!lines.length" class="muted">暂无日志</p>
+        <p v-if="!lines.length" class="muted">{{ t('logPanel.noLogs') }}</p>
       </div>
     </template>
   </section>

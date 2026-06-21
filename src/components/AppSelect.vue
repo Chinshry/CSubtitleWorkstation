@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
+import { useI18n } from '../i18n'
 
 interface SelectOption {
   value: string | number
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', val: string | number): void
 }>()
 
+const { t } = useI18n()
 const triggerRef = ref<HTMLButtonElement | null>(null)
 const panelRef = ref<HTMLDivElement | null>(null)
 const open = ref(false)
@@ -141,7 +143,7 @@ watch(
       @keydown="onKeydown"
     >
       <span class="app-select-value" :class="{ placeholder: !currentLabel }">
-        {{ currentLabel || placeholder || '请选择…' }}
+        {{ currentLabel || placeholder || t('common.selectPlaceholder') }}
       </span>
       <svg
         class="app-select-chevron"

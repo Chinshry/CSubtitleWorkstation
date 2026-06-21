@@ -1,30 +1,31 @@
 import type { AppConfig, CompressJob, VideoEncodePreset } from '../types'
+import { t } from '../i18n'
 
-export const DEFAULT_ENCODE_PRESETS: VideoEncodePreset[] = [
+const DEFAULT_ENCODE_PRESET_BLUEPRINTS: Array<Omit<VideoEncodePreset, 'name'> & { nameKey: string }> = [
   {
     id: 'balanced-x264',
-    name: 'x264 平衡',
+    nameKey: 'encodePresets.balancedX264',
     encoder: 'libx264',
     crf: 18,
     customVideoArgs: '-preset slow -profile:v high -pix_fmt yuv420p',
   },
   {
     id: 'fast-nvenc',
-    name: 'NVENC 快速',
+    nameKey: 'encodePresets.fastNvenc',
     encoder: 'h264_nvenc',
     crf: 19,
     customVideoArgs: '-spatial-aq 1 -temporal-aq 1',
   },
   {
     id: 'fast-amf',
-    name: 'AMF 快速',
+    nameKey: 'encodePresets.fastAmf',
     encoder: 'h264_amf',
     crf: 20,
     customVideoArgs: '-quality balanced -pix_fmt yuv420p',
   },
   {
     id: 'fast-videotoolbox',
-    name: 'Apple 快速',
+    nameKey: 'encodePresets.fastVideotoolbox',
     encoder: 'h264_videotoolbox',
     crf: 20,
     maxBitrate: 6000,
@@ -32,15 +33,23 @@ export const DEFAULT_ENCODE_PRESETS: VideoEncodePreset[] = [
   },
   {
     id: 'hevc-small',
-    name: 'x265 体积优先',
+    nameKey: 'encodePresets.hevcSmall',
     encoder: 'libx265',
     crf: 22,
     customVideoArgs: '-preset medium -pix_fmt yuv420p -x265-params aq-mode=1:psy-rd=2.0',
   },
 ]
 
+export function createDefaultEncodePresets(): VideoEncodePreset[] {
+  return DEFAULT_ENCODE_PRESET_BLUEPRINTS.map(({ nameKey, ...preset }) => ({
+    ...preset,
+    name: t(nameKey),
+  }))
+}
+
 export function normalizeEncodePresets(config?: AppConfig | null): VideoEncodePreset[] {
-  const raw = config?.encodePresets?.length ? config.encodePresets : DEFAULT_ENCODE_PRESETS
+  const defaults = createDefaultEncodePresets()
+  const raw = config?.encodePresets?.length ? config.encodePresets : defaults
   const seen = new Set<string>()
   const presets = raw
     .filter((item): item is VideoEncodePreset => !!item?.id && !!item?.name)
@@ -55,7 +64,7 @@ export function normalizeEncodePresets(config?: AppConfig | null): VideoEncodePr
       seen.add(item.id)
       return true
     })
-  if (!presets.length) return DEFAULT_ENCODE_PRESETS
+  if (!presets.length) return defaults
   return presets
 }
 

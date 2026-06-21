@@ -9,6 +9,7 @@ import { useToast } from '../composables/useToast'
 import EncodeSettingsFields from './EncodeSettingsFields.vue'
 import AppSelect from './AppSelect.vue'
 import InfoHint from './InfoHint.vue'
+import { useI18n } from '../i18n'
 
 const job = defineModel<CompressJob>({ required: true })
 
@@ -35,9 +36,11 @@ const emit = defineEmits<{
 // 支持的编码器列表和自动启用 AVS 的原因
 const { encoderOptions, loadEncoderOptions } = useEncoderOptions()
 const avsAutoEnabledReason = ref<string>('')
+const detectedTagsDisplay = ref<string[]>([])
 const advancedOpen = ref(false)
 const presetMenuOpen = ref(false)
 const toast = useToast()
+const { t } = useI18n()
 let subtitleAnalyzeSeq = 0
 
 const defaultQuickProcess: QuickProcessSettings = {
@@ -117,43 +120,45 @@ const quickVideoBitrate = computed<number | undefined>({
 })
 
 const quickSummary = computed(() => {
-  if (!quickProcess.value.enabled) return '关闭'
+  if (!quickProcess.value.enabled) return t('compressForm.quick.off')
   const parts: string[] = []
-  const rotation = quickRotationOptions.find((item) => item.value === quickRotation.value)
-  const mirror = quickMirrorOptions.find((item) => item.value === quickMirror.value)
-  const scale = quickScaleOptions.find((item) => item.value === quickProcess.value.scale)
+  const rotation = quickRotationOptions.value.find((item) => item.value === quickRotation.value)
+  const mirror = quickMirrorOptions.value.find((item) => item.value === quickMirror.value)
+  const scale = quickScaleOptions.value.find((item) => item.value === quickProcess.value.scale)
   if (rotation && rotation.value !== 'none') parts.push(rotation.label)
   if (mirror && mirror.value !== 'none') parts.push(mirror.label)
   if (scale && scale.value !== 'none') {
-    parts.push(scale.value === 'custom' ? `缩放 ${quickProcess.value.customScale || '自定义'}` : scale.label)
+    parts.push(scale.value === 'custom'
+      ? t('compressForm.quick.customScaleSummary', { value: quickProcess.value.customScale || t('compressForm.quick.custom') })
+      : scale.label)
   }
   if (quickProcess.value.frameRate) parts.push(`${quickProcess.value.frameRate} fps`)
   if (quickProcess.value.videoBitrateKbps) parts.push(`${quickProcess.value.videoBitrateKbps} Kbps`)
-  return parts.length ? parts.join(' · ') : '未选择处理项'
+  return parts.length ? parts.join(' · ') : t('compressForm.quick.noneSelected')
 })
 
-const quickRotationOptions: Array<{ value: QuickProcessSettings['rotation'], label: string }> = [
-  { value: 'none', label: '不旋转' },
-  { value: 'rotate_cw', label: '顺时针 90°' },
-  { value: 'rotate_ccw', label: '逆时针 90°' },
-  { value: 'rotate_180', label: '旋转 180°' },
-]
+const quickRotationOptions = computed<Array<{ value: QuickProcessSettings['rotation'], label: string }>>(() => [
+  { value: 'none', label: t('compressForm.quick.rotation.none') },
+  { value: 'rotate_cw', label: t('compressForm.quick.rotation.cw') },
+  { value: 'rotate_ccw', label: t('compressForm.quick.rotation.ccw') },
+  { value: 'rotate_180', label: t('compressForm.quick.rotation.rotate180') },
+])
 
-const quickMirrorOptions: Array<{ value: QuickProcessSettings['mirror'], label: string }> = [
-  { value: 'none', label: '不镜像' },
-  { value: 'hflip', label: '横向镜像' },
-  { value: 'vflip', label: '竖向镜像' },
-]
+const quickMirrorOptions = computed<Array<{ value: QuickProcessSettings['mirror'], label: string }>>(() => [
+  { value: 'none', label: t('compressForm.quick.mirror.none') },
+  { value: 'hflip', label: t('compressForm.quick.mirror.hflip') },
+  { value: 'vflip', label: t('compressForm.quick.mirror.vflip') },
+])
 
-const quickScaleOptions: Array<{ value: QuickProcessSettings['scale'], label: string }> = [
-  { value: 'none', label: '不调整分辨率' },
-  { value: 'landscape_4k', label: '横屏 4K（高 2160）' },
-  { value: 'landscape_1080', label: '横屏 1080（高 1080）' },
-  { value: 'landscape_720', label: '横屏 720（高 720）' },
-  { value: 'portrait_1080', label: '竖屏 1080（宽 1080）' },
-  { value: 'portrait_720', label: '竖屏 720（宽 720）' },
-  { value: 'custom', label: '自定义' },
-]
+const quickScaleOptions = computed<Array<{ value: QuickProcessSettings['scale'], label: string }>>(() => [
+  { value: 'none', label: t('compressForm.quick.scale.none') },
+  { value: 'landscape_4k', label: t('compressForm.quick.scale.landscape4k') },
+  { value: 'landscape_1080', label: t('compressForm.quick.scale.landscape1080') },
+  { value: 'landscape_720', label: t('compressForm.quick.scale.landscape720') },
+  { value: 'portrait_1080', label: t('compressForm.quick.scale.portrait1080') },
+  { value: 'portrait_720', label: t('compressForm.quick.scale.portrait720') },
+  { value: 'custom', label: t('compressForm.quick.custom') },
+])
 
 const encodePresetOptions = computed(() => {
   return (props.encodePresets ?? []).map((preset) => ({
@@ -177,14 +182,6 @@ const selectedEncodePresetName = computed(() => {
   return encodePresetOptions.value.find((item) => item.value === selectedEncodePresetModel.value)?.label ?? ''
 })
 
-// 从 avsAutoEnabledReason 中提取检测到的标签
-const detectedTagsDisplay = computed(() => {
-  if (!avsAutoEnabledReason.value) return []
-  const match = avsAutoEnabledReason.value.match(/检测到字幕特效（(.+?)）/)
-  if (!match || !match[1]) return []
-  return match[1].split('、')
-})
-
 // 副标题：仅 Windows 提示可启用 AVS，其它平台说明走 filter 模式
 const avsHint = computed(() => {
   if (avsAutoEnabledReason.value) {
@@ -195,11 +192,7 @@ const avsHint = computed(() => {
 
 // AVS 开关的完整提示
 const avsToggleTip = computed(() => {
-  let tip = '启用 AviSynth+ 脚本作为 ffmpeg 输入，字幕由 VSFilterMod 的 TextSubMod 渲染。\n'
-  tip += '仅 Windows 支持；需要本机安装 AviSynth+ 且 ffmpeg 启用了 --enable-avisynth（如 Gyan.dev full 版）。\n'
-  tip += '启用后 LOGO overlay 与 yadif 仍然有效，但 ffmpeg subtitles 滤镜会被跳过。\n\n'
-  tip += '可启用 AVS 压制模式；不勾选则走 ffmpeg filter 模式。'
-  return tip
+  return t('compressForm.avs.toggleTip')
 })
 
 // 当前视频是否 VP9：VP9 在 AVS fallback 下经 DirectShow 解码链读取，依赖 64 位 LAV Filters
@@ -216,18 +209,17 @@ const lavResolvingForVp9 = computed(
 // AVS 开关启用条件：仅 Windows + 检测通过；VP9 视频的 LAV 检测尚未出结果时暂时禁用
 const avsToggleDisabled = computed(() => avsEnvUnavailable.value || lavResolvingForVp9.value)
 const avsToggleDisabledTip = computed(() => {
-  if (!isWindows.value) return 'AVS 压制仅 Windows 支持'
+  if (!isWindows.value) return t('compressForm.avs.windowsOnly')
   const s = avsStatus.value
-  if (!s) return '正在检测 AVS 环境…'
-  if (avsEnvUnavailable.value) return s.message ?? 'AVS 环境不可用'
-  if (lavResolvingForVp9.value) return '正在检测 64 位 LAV Filters；VP9 视频需确认 DirectShow 解码支持后才能启用 AVS…'
+  if (!s) return t('compressForm.avs.checking')
+  if (avsEnvUnavailable.value) return s.message ?? t('compressForm.avs.unavailable')
+  if (lavResolvingForVp9.value) return t('compressForm.avs.lavResolving')
   return ''
 })
 
 // VP9 视频 + LAV 检测中：解码支持未知，显示中性「检测中」提示
 const lavCheckingHint = computed(() => lavResolvingForVp9.value)
-const lavCheckingTip =
-  '正在检测 64 位 LAV Filters。\nVP9 视频经 DirectShow 解码链读取，确认解码支持后才能启用 AVS。'
+const lavCheckingTip = computed(() => t('compressForm.avs.lavCheckingTip'))
 
 // VP9 解码依赖：仅 VP9 视频在 AVS fallback 下需要 64 位 LAV Filters，缺失时仅提示（不禁用）。
 // 读 avsStatus（已叠加调试 mock），故「模拟 LAV 缺失」与真机缺失都会触发。
@@ -239,8 +231,7 @@ const lavMissingHint = computed(
     !lavChecking.value &&
     avsStatus.value?.lavFiltersInstalled === false
 )
-const lavMissingTip =
-  '未检测到 64 位 LAV Filters。\n压制 VP9 视频时会经 DirectShow 解码链读取，缺少 LAV 可能导致解码失败。\n建议安装 64 位 LAV Filters 后重试。'
+const lavMissingTip = computed(() => t('compressForm.avs.lavMissingTip'))
 
 // 平台不支持或 mock 切换导致已勾选但不可用时，强制关掉
 function syncAvsAvailability() {
@@ -263,6 +254,7 @@ async function analyzeSubtitleForEffects() {
   const seq = ++subtitleAnalyzeSeq
   if (!subtitlePath) {
     avsAutoEnabledReason.value = ''
+    detectedTagsDisplay.value = []
     emit('subtitle-analyzing', false)
     emit('subtitle-analyzed', null)
     return
@@ -277,6 +269,7 @@ async function analyzeSubtitleForEffects() {
     if (seq !== subtitleAnalyzeSeq) return
     console.error('Failed to analyze subtitle:', err)
     avsAutoEnabledReason.value = ''
+    detectedTagsDisplay.value = []
     emit('subtitle-analyzed', null)
     return
   } finally {
@@ -291,10 +284,12 @@ async function analyzeSubtitleForEffects() {
 
   // 仅在 Windows 且 AVS 环境可用时自动勾选 AVS；其它平台只是检测信息
   if (result.hasEffects && isWindows.value && avsStatus.value?.available) {
-    avsAutoEnabledReason.value = `检测到字幕特效（${result.detectedTags.join('、')}），已自动启用 AVS 压制`
+    detectedTagsDisplay.value = result.detectedTags
+    avsAutoEnabledReason.value = t('compressForm.avs.autoEnabled', { tags: result.detectedTags.join('、') })
     job.value.useAvs = true
   } else {
     avsAutoEnabledReason.value = ''
+    detectedTagsDisplay.value = []
   }
   // 矩阵信息无论平台都需要透传，banner 判定逻辑在外层
   emit('subtitle-analyzed', result)
@@ -315,7 +310,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', closePresetMenuOnOutside)
 })
 // 压制预设提示：解释作用 + 引导用户去哪儿管理预设
-const presetTip = '一键应用一组编码器、质量值、最大码率组合。\n\n在左侧侧边栏「预设」页面新增、修改或删除预设。\n应用预设后，下方质量值/最大码率/编码器仍可手动微调，不会回写到预设本身。'
+const presetTip = computed(() => t('compressForm.preset.tip'))
 
 // 已配置 LOGO 的摘要文案
 // 直接给百分比对用户不直观，改成「方位（九宫格） + 像素尺寸」
@@ -323,7 +318,11 @@ const logoSummary = computed(() => {
   const layout = job.value.logoLayout
   if (!layout || !layout.path) return ''
   const video_name = logoBasename(layout.path)
-  return `已配置：${video_name} · ${describeLogoPosition(layout)} · ${describeLogoSize(layout)}`
+  return t('compressForm.logo.summary', {
+    name: video_name,
+    position: describeLogoPosition(layout),
+    size: describeLogoSize(layout)
+  })
 })
 
 // LOGO 层级：AVS 模式下 VSFilterMod TextSubMod 把字幕烧进 AVS 输出，
@@ -346,12 +345,12 @@ function describeLogoPosition(layout: NonNullable<typeof job.value.logoLayout>):
   // LOGO 中心点占视频画面的百分比（取中心点更符合"摆在哪个角落"的语感）
   const cx = layout.xPct + layout.wPct / 2
   const cy = layout.yPct + layout.hPct / 2
-  const horiz = cx < 0.34 ? '左' : cx < 0.67 ? '中' : '右'
-  const vert = cy < 0.34 ? '上' : cy < 0.67 ? '中' : '下'
-  if (horiz === '中' && vert === '中') return '画面中央'
-  if (horiz === '中') return vert === '上' ? '顶部居中' : '底部居中'
-  if (vert === '中') return horiz === '左' ? '左侧居中' : '右侧居中'
-  return `${horiz}${vert}角` // 左上角 / 右上角 / 左下角 / 右下角
+  const horiz = cx < 0.34 ? 'left' : cx < 0.67 ? 'center' : 'right'
+  const vert = cy < 0.34 ? 'top' : cy < 0.67 ? 'middle' : 'bottom'
+  if (horiz === 'center' && vert === 'middle') return t('compressForm.logo.position.center')
+  if (horiz === 'center') return vert === 'top' ? t('compressForm.logo.position.topCenter') : t('compressForm.logo.position.bottomCenter')
+  if (vert === 'middle') return horiz === 'left' ? t('compressForm.logo.position.leftCenter') : t('compressForm.logo.position.rightCenter')
+  return t(`compressForm.logo.position.${vert}${horiz[0].toUpperCase()}${horiz.slice(1)}`)
 }
 
 function describeLogoSize(layout: NonNullable<typeof job.value.logoLayout>): string {
@@ -360,7 +359,7 @@ function describeLogoSize(layout: NonNullable<typeof job.value.logoLayout>): str
   if (vw && vh && vw > 0 && vh > 0) {
     const w = Math.round(layout.wPct * vw)
     const h = Math.round(layout.hPct * vh)
-    return `${w} × ${h} 像素`
+    return t('compressForm.logo.sizePixels', { width: w, height: h })
   }
   // 视频分辨率未就绪时退回到百分比
   return `${(layout.wPct * 100).toFixed(1)}% × ${(layout.hPct * 100).toFixed(1)}%`
@@ -404,20 +403,20 @@ function applyEncodePresetOption(presetId: string, presetName: string) {
   emit('update:selected-encode-preset-id', presetId)
   emit('apply-encode-preset', presetId)
   presetMenuOpen.value = false
-  toast.success(presetName ? `已套用到当前参数：${presetName}` : '已套用预设', 2500)
+  toast.success(presetName ? t('compressForm.preset.appliedNamed', { name: presetName }) : t('compressForm.preset.applied'), 2500)
 }
 
 function describeEncodePreset(preset: VideoEncodePreset): string {
   return [
     preset.encoder,
-    `质量 ${preset.crf}`,
+    t('compressForm.preset.qualitySummary', { crf: preset.crf }),
     describePresetBitrate(preset.maxBitrate),
   ].join(' · ')
 }
 
 function describePresetBitrate(maxBitrate: number | undefined): string {
-  if (maxBitrate === undefined) return '不限码率'
-  if (maxBitrate === 0) return '自动码率'
+  if (maxBitrate === undefined) return t('compressForm.preset.unlimitedBitrate')
+  if (maxBitrate === 0) return t('compressForm.preset.autoBitrate')
   return `${maxBitrate} Kbps`
 }
 
@@ -437,7 +436,7 @@ function buildEncodePresetCommandSummary(preset: VideoEncodePreset): string {
   if (typeof preset.maxBitrate === 'number' && preset.maxBitrate > 0) {
     args.push('-maxrate', `${preset.maxBitrate}k`, '-bufsize', `${preset.maxBitrate * 2}k`)
   } else if (preset.maxBitrate === 0) {
-    args.push('-maxrate', '原视频码率+1000k', '-bufsize', '2倍最大码率')
+    args.push('-maxrate', t('compressForm.preset.sourceBitratePlus'), '-bufsize', t('compressForm.preset.doubleMaxBitrate'))
   }
   const custom = preset.customVideoArgs?.trim()
   if (custom) args.push(custom)
@@ -470,22 +469,22 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
   <section class="panel">
     <div class="panel-heading compress-heading">
       <div>
-        <h2>压制参数</h2>
+        <h2>{{ t('compressForm.title') }}</h2>
       </div>
       <div v-if="encodePresetOptions.length" class="preset-picker">
         <button
           type="button"
           class="secondary preset-menu-trigger"
-          v-tooltip="selectedEncodePresetName ? `上次套用：${selectedEncodePresetName}` : '选择一个压制预设并套用到当前参数'"
+          v-tooltip="selectedEncodePresetName ? t('compressForm.preset.lastApplied', { name: selectedEncodePresetName }) : t('compressForm.preset.applyTip')"
           @click="togglePresetMenu"
         >
-          套用预设
+          {{ t('compressForm.preset.apply') }}
         </button>
         <InfoHint
           placement="left"
-          title="压制预设"
-          body="一键应用一组编码器、质量值、最大码率组合。应用后下方参数仍可手动微调，不会回写到预设本身。"
-          :items="['在左侧「预设」页面新增、修改或删除预设。', '适合把常用平台规格保存成固定方案。']"
+          :title="t('compressForm.preset.title')"
+          :body="t('compressForm.preset.body')"
+          :items="[t('compressForm.preset.itemManage'), t('compressForm.preset.itemUseCase')]"
         />
         <div v-if="presetMenuOpen" class="preset-menu">
           <button
@@ -509,98 +508,98 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
           <label class="switch-row quick-process-switch">
             <input v-model="quickEnabled" type="checkbox" />
             <span class="switch"></span>
-            <span>视频处理</span>
+            <span>{{ t('compressForm.quick.title') }}</span>
             <small v-if="quickEnabled">{{ quickSummary }}</small>
             <InfoHint
               placement="right"
-              title="视频处理"
-              body="把旋转、镜像、分辨率、帧率和视频码率处理编译进当前压制命令，会重新编码视频并输出新文件。"
-              :items="['适合旋转、镜像、缩放、抽帧或码率调整。', '字幕、LOGO、编码器和质量值仍复用当前压制页设置。']"
+              :title="t('compressForm.quick.title')"
+              :body="t('compressForm.quick.body')"
+              :items="[t('compressForm.quick.itemUseCase'), t('compressForm.quick.itemReuse')]"
             />
           </label>
 
           <div v-if="quickEnabled" class="quick-process-grid">
             <label class="quick-field-rotate">
               <span class="quick-field-label">
-                旋转
+                {{ t('compressForm.quick.rotate') }}
                 <InfoHint
                   placement="right"
-                  title="旋转"
+                  :title="t('compressForm.quick.rotate')"
                   command="transpose / hflip,vflip"
-                  body="在压制时旋转输出画面，会写入视频滤镜并重新编码画面。"
-                  :items="['用于手机竖屏、录屏方向错误等场景。', '180° 使用 hflip,vflip，效果等同画面倒转。']"
+                  :body="t('compressForm.quick.rotateBody')"
+                  :items="[t('compressForm.quick.rotateItemUseCase'), t('compressForm.quick.rotateItem180')]"
                 />
               </span>
               <AppSelect v-model="quickRotation" :options="quickRotationOptions" />
             </label>
             <label class="quick-field-mirror">
               <span class="quick-field-label">
-                镜像
+                {{ t('compressForm.quick.mirrorLabel') }}
                 <InfoHint
-                  title="镜像"
+                  :title="t('compressForm.quick.mirrorLabel')"
                   command="hflip / vflip"
-                  body="在压制时对画面做横向或竖向镜像翻转，可与旋转同时使用。"
-                  :items="['横向镜像是左右翻转。', '竖向镜像是上下翻转。']"
+                  :body="t('compressForm.quick.mirrorBody')"
+                  :items="[t('compressForm.quick.mirrorItemH'), t('compressForm.quick.mirrorItemV')]"
                 />
               </span>
               <AppSelect v-model="quickMirror" :options="quickMirrorOptions" />
             </label>
             <label class="quick-field-scale">
               <span class="quick-field-label">
-                分辨率
+                {{ t('compressForm.quick.scaleLabel') }}
                 <InfoHint
-                  title="分辨率"
+                  :title="t('compressForm.quick.scaleLabel')"
                   command="scale"
-                  body="按预设或自定义表达式缩放输出画面，宽高会尽量保持原比例。"
-                  :items="['横屏预设按高度控制，例如 1080 表示输出高 1080。', '竖屏预设按宽度控制，例如 1080 表示输出宽 1080。']"
+                  :body="t('compressForm.quick.scaleBody')"
+                  :items="[t('compressForm.quick.scaleItemLandscape'), t('compressForm.quick.scaleItemPortrait')]"
                 />
               </span>
               <AppSelect v-model="quickScale" :options="quickScaleOptions" />
             </label>
             <label v-if="quickScale === 'custom'" class="quick-field-custom-scale">
               <span class="quick-field-label">
-                自定义缩放
+                {{ t('compressForm.quick.customScale') }}
                 <InfoHint
-                  title="自定义缩放"
-                  command="scale=宽:高"
-                  body="直接填写 ffmpeg scale 的宽高表达式，用于预设无法覆盖的尺寸。"
-                  :items="['例如 -1:1080 表示高度 1080，宽度按比例自动计算。', '例如 1080:-1 表示宽度 1080，高度按比例自动计算。']"
+                  :title="t('compressForm.quick.customScale')"
+                  :command="t('compressForm.quick.customScaleCommand')"
+                  :body="t('compressForm.quick.customScaleBody')"
+                  :items="[t('compressForm.quick.customScaleItemHeight'), t('compressForm.quick.customScaleItemWidth')]"
                 />
               </span>
               <input
                 v-model.trim="quickCustomScale"
                 type="text"
                 spellcheck="false"
-                placeholder="如 -1:1080 或 1080:-1"
+                :placeholder="t('compressForm.quick.customScalePlaceholder')"
               />
             </label>
             <label class="quick-field-fps">
               <span class="quick-field-label">
-                帧率
+                {{ t('compressForm.quick.frameRate') }}
                 <InfoHint
-                  title="帧率"
+                  :title="t('compressForm.quick.frameRate')"
                   command="fps"
-                  body="限制输出视频的帧率，常用于压低体积或统一发布规格。"
-                  :items="['留空表示不调整帧率。', '填写 30 会输出 30 fps；填写 60 会输出 60 fps。']"
+                  :body="t('compressForm.quick.frameRateBody')"
+                  :items="[t('compressForm.quick.frameRateItemEmpty'), t('compressForm.quick.frameRateItemValues')]"
                 />
               </span>
               <span class="quick-inline-input">
-                <input v-model.number="quickFrameRate" type="number" min="1" max="240" placeholder="不调整" />
+                <input v-model.number="quickFrameRate" type="number" min="1" max="240" :placeholder="t('compressForm.quick.noChange')" />
                 <em>fps</em>
               </span>
             </label>
             <label class="quick-field-bitrate">
               <span class="quick-field-label">
-                视频码率
+                {{ t('compressForm.quick.videoBitrate') }}
                 <InfoHint
-                  title="视频码率"
+                  :title="t('compressForm.quick.videoBitrate')"
                   command="-b:v"
-                  body="为视频流指定目标码率，主要用于控制输出体积和平台规格。"
-                  :items="['留空表示不额外指定视频码率，仍使用当前编码器和质量值。', '填写 5000 表示目标视频码率约 5000 Kbps。']"
+                  :body="t('compressForm.quick.videoBitrateBody')"
+                  :items="[t('compressForm.quick.videoBitrateItemEmpty'), t('compressForm.quick.videoBitrateItemValue')]"
                 />
               </span>
               <span class="quick-inline-input">
-                <input v-model.number="quickVideoBitrate" type="number" min="1" placeholder="不调整" />
+                <input v-model.number="quickVideoBitrate" type="number" min="1" :placeholder="t('compressForm.quick.noChange')" />
                 <em>Kbps</em>
               </span>
             </label>
@@ -610,7 +609,7 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
         <EncodeSettingsFields v-model="job" :encoder-options="encoderOptions">
           <template #encoder-trailing>
             <button type="button" class="secondary advanced-toggle" @click="advancedOpen = !advancedOpen">
-              {{ advancedOpen ? '隐藏附加参数' : '显示附加参数' }}
+              {{ advancedOpen ? t('compressForm.advanced.hide') : t('compressForm.advanced.show') }}
             </button>
           </template>
         </EncodeSettingsFields>
@@ -618,7 +617,7 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
         <div v-if="advancedOpen" class="advanced-panel">
           <label class="custom-args-field">
             <span>
-              附加 ffmpeg 视频参数
+              {{ t('compressForm.advanced.label') }}
             </span>
             <textarea
               v-model="job.customVideoArgs"
@@ -627,7 +626,7 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
             ></textarea>
           </label>
           <p class="advanced-note">
-            这些参数会追加到视频编码参数后；输入、滤镜、编码器、音频和输出路径仍由工作站管理。
+            {{ t('compressForm.advanced.note') }}
           </p>
         </div>
       </section>
@@ -638,24 +637,24 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
             <label class="switch-row">
               <input v-model="job.needYadif" type="checkbox" />
               <span class="switch"></span>
-              <span>使用反交错压制</span>
+              <span>{{ t('compressForm.options.yadif') }}</span>
               <InfoHint
-                title="反交错压制"
+                :title="t('compressForm.options.yadifTitle')"
                 command="-vf yadif"
-                body="把交错信号合成连续画面，消除横向锯齿或梳状伪影。"
-                :items="['TV 录制、转录、DV、磁带数字化素材常见隔行，建议开启。', '网络发布视频通常已经是逐行扫描，一般不需要开启。']"
+                :body="t('compressForm.options.yadifBody')"
+                :items="[t('compressForm.options.yadifItemInterlaced'), t('compressForm.options.yadifItemProgressive')]"
               />
             </label>
 
           <label class="switch-row">
             <input v-model="job.needLogo" type="checkbox" />
             <span class="switch"></span>
-            <span>压制 LOGO</span>
+            <span>{{ t('compressForm.logo.title') }}</span>
             <InfoHint
               placement="right"
-              title="压制 LOGO"
-              body="在视频画面上叠加一张 LOGO 图片，可视化设置图片、位置与大小。"
-              :items="['点击「配置 LOGO」进入编辑器。', '关闭开关时，已保存的 LOGO 布局会保留，但不会参与压制。']"
+              :title="t('compressForm.logo.title')"
+              :body="t('compressForm.logo.body')"
+              :items="[t('compressForm.logo.itemConfigure'), t('compressForm.logo.itemKeepLayout')]"
             />
           </label>
 
@@ -665,13 +664,13 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
                 class="secondary logo-config-btn"
                 :class="{ disabled: logoButtonDisabled }"
                 :disabled="logoButtonDisabled"
-                v-tooltip="logoButtonDisabled ? logoButtonDisabledReason : '打开 LOGO 编辑器，可视化设置图片、位置与大小'"
+                v-tooltip="logoButtonDisabled ? logoButtonDisabledReason : t('compressForm.logo.openTip')"
                 @click="onOpenLogoEditor"
               >
-                {{ job.logoLayout ? '重新配置 LOGO' : '配置 LOGO' }}
+                {{ job.logoLayout ? t('compressForm.logo.reconfigure') : t('compressForm.logo.configure') }}
               </button>
               <span v-if="logoSummary" class="logo-summary">{{ logoSummary }}</span>
-              <span v-else class="logo-summary muted">尚未配置 LOGO</span>
+              <span v-else class="logo-summary muted">{{ t('compressForm.logo.notConfigured') }}</span>
             </div>
           </div>
 
@@ -683,30 +682,30 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
               :disabled="avsToggleDisabled"
             />
             <span class="switch"></span>
-            <span>AVS 压制模式</span>
-            <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">检测到特殊标签</span>
-            <span v-if="lavCheckingHint" class="avs-checking" :data-tip="lavCheckingTip" tabindex="0">LAV 检测中…</span>
-            <span v-else-if="lavMissingHint" class="avs-warn" :data-tip="lavMissingTip" tabindex="0">LAV 缺失</span>
+            <span>{{ t('compressForm.avs.title') }}</span>
+            <span v-if="avsAutoEnabledReason" class="avs-hint" :data-tip="`${detectedTagsDisplay.join('、')}`">{{ t('compressForm.avs.detectedSpecialTags') }}</span>
+            <span v-if="lavCheckingHint" class="avs-checking" :data-tip="lavCheckingTip" tabindex="0">{{ t('compressForm.avs.lavChecking') }}</span>
+            <span v-else-if="lavMissingHint" class="avs-warn" :data-tip="lavMissingTip" tabindex="0">{{ t('compressForm.avs.lavMissing') }}</span>
             <InfoHint
               placement="left"
-              title="AVS 压制模式"
+              :title="t('compressForm.avs.title')"
               command="AviSynth+ + VSFilterMod TextSubMod"
-              body="启用 AviSynth+ 脚本作为 ffmpeg 输入，字幕由 VSFilterMod 渲染；LOGO overlay 与 yadif 仍然有效。"
-              :items="['仅 Windows 支持，需要本机安装 AviSynth+，且 ffmpeg 启用 --enable-avisynth。', '适合复杂 ASS 特效字幕；不勾选则走 ffmpeg filter 模式。']"
+              :body="t('compressForm.avs.body')"
+              :items="[t('compressForm.avs.itemWindows'), t('compressForm.avs.itemUseCase')]"
             />
           </label>
 
             <div v-if="job.needLogo" class="logo-layer-control" :class="{ 'logo-layer-disabled': logoLayerDisabled }">
             <span class="logo-layer-label">
-              LOGO 层级
+              {{ t('compressForm.logo.layer') }}
               <InfoHint
                 placement="right"
-                title="LOGO 层级"
-                body="控制字幕和 LOGO 的覆盖顺序。"
+                :title="t('compressForm.logo.layer')"
+                :body="t('compressForm.logo.layerBody')"
                 :items="[
-                  '字幕在上 LOGO 在下：LOGO 会被字幕遮挡。',
-                  'LOGO 在上 字幕在下：LOGO 完整覆盖字幕。',
-                  'AVS 模式下字幕由 AVS 渲染，LOGO 层级会锁定为 LOGO 在上。'
+                  t('compressForm.logo.layerItemBottom'),
+                  t('compressForm.logo.layerItemTop'),
+                  t('compressForm.logo.layerItemAvs')
                 ]"
               />
             </span>
@@ -715,8 +714,8 @@ function normalizePositiveInteger(value: number | undefined): number | undefined
               class="logo-layer-select"
               :disabled="logoLayerDisabled"
               :options="[
-                { value: 'bottom', label: '字幕在上 LOGO 在下', title: 'LOGO 会被字幕遮挡' },
-                { value: 'top', label: 'LOGO 在上 字幕在下', title: 'LOGO 完整覆盖字幕' }
+                { value: 'bottom', label: t('compressForm.logo.layerBottom'), title: t('compressForm.logo.layerBottomTitle') },
+                { value: 'top', label: t('compressForm.logo.layerTop'), title: t('compressForm.logo.layerTopTitle') }
               ]"
             />
             </div>

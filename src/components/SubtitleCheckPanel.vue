@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { SubtitleAnalysisResult } from '../api/compress'
 import type { ColorMatrixCheck, CheckLevel } from '../utils/colorMatrix'
+import { useI18n } from '../i18n'
 
 type CheckItem = {
   id: string
@@ -21,6 +22,7 @@ const props = defineProps<{
   analyzing?: boolean
 }>()
 
+const { t } = useI18n()
 const expanded = ref(true)
 const openItems = ref<Record<string, boolean>>({})
 
@@ -37,9 +39,9 @@ const items = computed<CheckItem[]>(() => {
       detail: matrix.detail,
       suggestion: matrix.suggestion,
       meta: [
-        { label: 'ASS 声明', value: matrix.assRaw || '未声明' },
-        { label: '视频色域', value: matrix.videoStandard || '未知' },
-        { label: '视频量化范围', value: matrix.videoRangeKind || '未知' },
+        { label: t('subtitleCheck.matrix.assRaw'), value: matrix.assRaw || t('subtitleCheck.matrix.undeclared') },
+        { label: t('subtitleCheck.matrix.videoStandard'), value: matrix.videoStandard || t('subtitleCheck.matrix.unknown') },
+        { label: t('subtitleCheck.matrix.videoRange'), value: matrix.videoRangeKind || t('subtitleCheck.matrix.unknown') },
       ],
     })
   }
@@ -50,11 +52,11 @@ const items = computed<CheckItem[]>(() => {
       id: 'missing-img-paths',
       level: 'error',
       label: levelLabel('error'),
-      title: '字幕引用的图片路径不存在',
-      detail: 'ASS/SSA 中的 \\img / \\1img-\\4img 图片填充标签引用了本机不存在的文件，AVS/VSFilterMod 渲染时会缺图或失败。',
-      suggestion: '请把图片文件放回原路径，或修改字幕中的 img 路径后重新检测。',
+      title: t('subtitleCheck.missingImage.title'),
+      detail: t('subtitleCheck.missingImage.detail'),
+      suggestion: t('subtitleCheck.missingImage.suggestion'),
       meta: missingImgPaths.slice(0, 12).map((item) => ({
-        label: `第 ${item.line} 行 ${item.tag}`,
+        label: t('subtitleCheck.lineTag', { line: item.line, tag: item.tag }),
         value: item.resolvedPath || item.path,
       })),
     })
@@ -66,12 +68,12 @@ const items = computed<CheckItem[]>(() => {
       id: 'missing-fonts',
       level: 'error',
       label: levelLabel('error'),
-      title: '字幕使用的字体未检测到安装',
+      title: t('subtitleCheck.missingFont.title'),
       metaLayout: 'font-grid',
-      detail: '缺失字体会触发系统或渲染器字体替换，可能导致字形、字重、排版宽度和特效位置变化。',
-      suggestion: '请安装字幕包附带字体，或把 ASS 样式 Fontname 改为本机已安装字体。',
+      detail: t('subtitleCheck.missingFont.detail'),
+      suggestion: t('subtitleCheck.missingFont.suggestion'),
       meta: missingFonts.slice(0, 12).map((item) => ({
-        label: item.line ? `第 ${item.line} 行` : item.source,
+        label: item.line ? t('subtitleCheck.line', { line: item.line }) : item.source,
         value: item.font,
       })),
     })
@@ -83,11 +85,11 @@ const items = computed<CheckItem[]>(() => {
       id: 'missing-styles',
       level: 'error',
       label: levelLabel('error'),
-      title: '字幕行引用了不存在的样式',
-      detail: 'Events 段中的 Dialogue/Comment 行引用了 Styles 段未定义的样式名，渲染时会回退默认样式或出现异常效果。',
-      suggestion: '请在 [V4+ Styles] 中补齐对应 Style，或把事件行的 Style 字段改为已有样式。',
+      title: t('subtitleCheck.missingStyle.title'),
+      detail: t('subtitleCheck.missingStyle.detail'),
+      suggestion: t('subtitleCheck.missingStyle.suggestion'),
       meta: missingStyles.slice(0, 12).map((item) => ({
-        label: `第 ${item.line} 行`,
+        label: t('subtitleCheck.line', { line: item.line }),
         value: item.style,
       })),
     })
@@ -105,11 +107,11 @@ const items = computed<CheckItem[]>(() => {
       label: levelLabel('info'),
       title: effectTitle(),
       detail: effectDetail(hasImg, hasModTag, hasBanner),
-      suggestion: hasImg ? '建议启用 AVS 压制模式，或确认非 AVS 输出是否符合预期。' : undefined,
+      suggestion: hasImg ? t('subtitleCheck.effectSuggestion') : undefined,
       // 命中行号详情（仅 banner 需要，VSFilterMod override 标签无行号信息）
       meta: hasBanner
         ? bannerHits.slice(0, 12).map((hit) => ({
-            label: `第 ${hit.line} 行`,
+            label: t('subtitleCheck.line', { line: hit.line }),
             value: hit.raw,
           }))
         : undefined,
@@ -121,10 +123,10 @@ const items = computed<CheckItem[]>(() => {
 })
 
 const issueCount = computed(() => items.value.length)
-const headerTitle = computed(() => props.analyzing ? '字幕检查中' : '字幕检查')
+const headerTitle = computed(() => props.analyzing ? t('subtitleCheck.titleChecking') : t('subtitleCheck.title'))
 const headerSummary = computed(() => {
-  if (props.analyzing) return '正在分析字幕特效、字体和资源引用'
-  return `发现 ${issueCount.value} 个需要确认的项目`
+  if (props.analyzing) return t('subtitleCheck.analyzingSummary')
+  return t('subtitleCheck.summary', { count: issueCount.value })
 })
 const highestLevel = computed<CheckLevel>(() => {
   if (items.value.some((item) => item.level === 'error')) return 'error'
@@ -155,27 +157,27 @@ function levelRank(level: CheckLevel) {
 }
 
 function levelLabel(level: CheckLevel) {
-  if (level === 'error') return '错误'
-  if (level === 'warn') return '警告'
-  if (level === 'info') return '建议'
-  return '正常'
+  if (level === 'error') return t('subtitleCheck.level.error')
+  if (level === 'warn') return t('subtitleCheck.level.warn')
+  if (level === 'info') return t('subtitleCheck.level.info')
+  return t('subtitleCheck.level.ok')
 }
 
 function effectTitle() {
-  return '检测到 VSFilterMod 标签，建议启用 AVS 压制模式'
+  return t('subtitleCheck.effects.title')
 }
 
 function effectDetail(hasImg: boolean, hasModTag: boolean, hasBanner: boolean) {
   if (hasBanner) {
-    return '检测到 ASS Effect 字段的 Banner 滚动横幅（带 fadeawaywidth 或小写 banner），ffmpeg libass 渲染不支持该效果，必须使用 AVS+VSFilterMod 才能正确还原。'
+    return t('subtitleCheck.effects.banner')
   }
   if (hasImg) {
-    return '这些标签通常依赖 AVS/VSFilterMod 渲染；请确认素材资源完整，并开启 AVS 压制以尽量还原字幕效果。'
+    return t('subtitleCheck.effects.image')
   }
   if (hasModTag) {
-    return '这些标签通常依赖 AVS/VSFilterMod 渲染；建议开启 AVS 压制以尽量还原字幕效果。'
+    return t('subtitleCheck.effects.modTag')
   }
-  return '字幕中包含建议使用 AVS 压制的标签，请在压制前确认 AVS 模式已开启。'
+  return t('subtitleCheck.effects.fallback')
 }
 
 function toggleItem(id: string) {
@@ -194,7 +196,7 @@ function toggleItem(id: string) {
         <p>{{ headerSummary }}</p>
       </div>
       <button v-if="issueCount" type="button" class="subtitle-check-toggle" @click="expanded = !expanded">
-        {{ expanded ? '收起' : '展开' }}
+        {{ expanded ? t('subtitleCheck.collapse') : t('subtitleCheck.expand') }}
       </button>
     </div>
 
@@ -209,7 +211,7 @@ function toggleItem(id: string) {
             class="check-detail-toggle"
             @click="toggleItem(item.id)"
           >
-            {{ openItems[item.id] ? '收起详情' : '查看详情' }}
+            {{ openItems[item.id] ? t('subtitleCheck.collapseDetail') : t('subtitleCheck.viewDetail') }}
           </button>
         </div>
         <div v-if="openItems[item.id]" class="check-detail">
@@ -221,7 +223,7 @@ function toggleItem(id: string) {
               <dd>{{ entry.value }}</dd>
             </div>
           </dl>
-          <div v-if="item.tagValues?.length" class="check-tag-list" aria-label="命中标签">
+          <div v-if="item.tagValues?.length" class="check-tag-list" :aria-label="t('subtitleCheck.hitTags')">
             <span v-for="tag in item.tagValues" :key="tag" class="check-tag">{{ tag }}</span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { isWindows } from '../stores/platformStore'
+import { useI18n } from '../i18n'
 import AppSelect from './AppSelect.vue'
 
 const props = defineProps<{
@@ -9,11 +10,12 @@ const props = defineProps<{
 }>()
 
 const copyHint = ref('')
+const { t } = useI18n()
 
 type Quoting = 'posix' | 'windows' | 'raw'
 
 const nativeQuoting = computed<'posix' | 'windows'>(() => isWindows.value ? 'windows' : 'posix')
-const nativePlatformText = computed(() => isWindows.value ? '本机 Windows' : '本机 POSIX')
+const nativePlatformText = computed(() => isWindows.value ? t('commandPreview.localWindows') : t('commandPreview.localPosix'))
 
 // 默认直接选中当前平台的真实格式；平台提示用旁边的状态 chip 表达，避免在菜单里塞一个冗余的“自动”选项。
 const quoteTouched = ref(false)
@@ -172,26 +174,26 @@ const commandText = computed(() => {
 const viewHintText = computed(() => {
   switch (quoting.value) {
     case 'raw':
-      return '原始数组拼接（含空格/特殊字符路径不能直接粘到终端）'
+      return t('commandPreview.hints.raw')
     case 'windows':
-      return '已按 Windows 规则加引号，可粘到 cmd / PowerShell / Windows Terminal'
+      return t('commandPreview.hints.windows')
     case 'posix':
-      return '已按 POSIX 规则加引号，可粘到 bash / zsh / Linux & macOS 终端'
+      return t('commandPreview.hints.posix')
   }
   return ''
 })
 
 async function copyCommand() {
   if (!commandText.value.trim()) {
-    copyHint.value = '无命令'
+    copyHint.value = t('commandPreview.noCommand')
     setTimeout(() => (copyHint.value = ''), 1500)
     return
   }
   try {
     await navigator.clipboard.writeText(commandText.value)
-    copyHint.value = '已复制'
+    copyHint.value = t('common.copied')
   } catch {
-    copyHint.value = '复制失败'
+    copyHint.value = t('common.copyFailed')
   }
   setTimeout(() => (copyHint.value = ''), 1500)
 }
@@ -201,21 +203,21 @@ async function copyCommand() {
   <section class="panel command-preview">
     <div class="command-head">
       <div>
-        <h2>命令预览</h2>
+        <h2>{{ t('commandPreview.title') }}</h2>
         <p>{{ viewHintText }}</p>
       </div>
       <div class="command-tools">
-        <span class="quote-platform-chip" v-tooltip="`默认使用${nativePlatformText}对应的命令格式`">
+        <span class="quote-platform-chip" v-tooltip="t('commandPreview.nativeFormatTip', { platform: nativePlatformText })">
           {{ nativePlatformText }}
         </span>
         <AppSelect
           v-model="quoteModel"
           class="quote-select"
-          title="选择终端方言"
+          :title="t('commandPreview.terminalDialect')"
           :options="[
-            { value: 'windows', label: 'Windows · cmd/PowerShell' },
-            { value: 'posix', label: 'POSIX · bash/zsh' },
-            { value: 'raw', label: '原始（数组拼接，不转义）' }
+            { value: 'windows', label: t('commandPreview.options.windows') },
+            { value: 'posix', label: t('commandPreview.options.posix') },
+            { value: 'raw', label: t('commandPreview.options.raw') }
           ]"
         />
         <button
@@ -224,22 +226,22 @@ async function copyCommand() {
           class="quote-restore"
           @click="restoreNativeQuoting"
         >
-          恢复本机
+          {{ t('commandPreview.restoreNative') }}
         </button>
         <button
           class="copy-btn"
           :class="{ active: copyHint }"
           :disabled="!command.length"
           @click="copyCommand"
-          data-tip="复制完整命令"
+          :data-tip="t('commandPreview.copyCommandTip')"
         >
           <span v-if="copyHint">{{ copyHint }}</span>
-          <span v-else>复制</span>
+          <span v-else>{{ t('common.copy') }}</span>
         </button>
       </div>
     </div>
     <pre v-if="command.length" class="command" :class="{ stale }">{{ commandText }}</pre>
-    <p v-else class="muted">填写视频路径后将自动生成命令。</p>
+    <p v-else class="muted">{{ t('commandPreview.emptyTip') }}</p>
   </section>
 </template>
 

@@ -4,6 +4,7 @@ import type { CompressJob } from '../types'
 import type { EncoderOption } from '../composables/useEncoderOptions'
 import AppSelect from './AppSelect.vue'
 import InfoHint from './InfoHint.vue'
+import { useI18n } from '../i18n'
 
 type BitrateMode = 'none' | 'auto' | 'custom'
 
@@ -18,6 +19,7 @@ defineProps<{
 }>()
 
 const settings = defineModel<EncodeSettingsModel>({ required: true })
+const { t } = useI18n()
 
 const encoderModel = computed({
   get() {
@@ -92,13 +94,13 @@ const customBitrate = computed<number | undefined>({
   <div class="param-row encode-settings-fields">
     <label class="crf-cell">
       <span>
-        质量值
+        {{ t('encodeSettings.quality') }}
         <InfoHint
           placement="right"
-          title="质量值"
-          :command="settings.crf === null ? '留空：不生成 -crf / -cq / -qp 参数' : `x264/x265: -crf ${settings.crf}  |  NVENC: -cq ${settings.crf}`"
-          body="数值越小画质越好、文件越大；留空则不携带质量参数，适合只按码率控制。"
-          :items="['libx264 / libx265 推荐 18-28：18 视觉无损，23 默认，28 偏低质量。', 'NVENC / AMF 推荐 18-28：通常 19-23 比较均衡。', 'VideoToolbox 不使用该质量值，建议通过最大码率控制。']"
+          :title="t('encodeSettings.qualityTitle')"
+          :command="settings.crf === null ? t('encodeSettings.qualityEmptyCommand') : t('encodeSettings.qualityCommand', { crf: settings.crf })"
+          :body="t('encodeSettings.qualityBody')"
+          :items="[t('encodeSettings.qualityItems.x264'), t('encodeSettings.qualityItems.hardware'), t('encodeSettings.qualityItems.videotoolbox')]"
         />
       </span>
       <input
@@ -106,20 +108,20 @@ const customBitrate = computed<number | undefined>({
         type="number"
         min="0"
         max="51"
-        placeholder="留空"
+        :placeholder="t('encodeSettings.emptyPlaceholder')"
         @input="onQualityInput"
       />
     </label>
 
     <label class="bitrate-cell">
       <span>
-        最大码率
+        {{ t('encodeSettings.maxBitrate') }}
         <InfoHint
           placement="right"
-          title="最大码率"
-          command="-maxrate {值}k -bufsize {值×2}k"
-          body="限制视频码率峰值，防止画面剧烈变化时码率失控。"
-          :items="['不限制：完全跟随质量值。', '自动：取原视频码率 + 1000 Kbps。', '自定义：按填写的 Kbps 直接生效。']"
+          :title="t('encodeSettings.maxBitrateTitle')"
+          :command="t('encodeSettings.maxBitrateCommand')"
+          :body="t('encodeSettings.maxBitrateBody')"
+          :items="[t('encodeSettings.maxBitrateItems.none'), t('encodeSettings.maxBitrateItems.auto'), t('encodeSettings.maxBitrateItems.custom')]"
         />
       </span>
       <div class="bitrate-control">
@@ -127,9 +129,9 @@ const customBitrate = computed<number | undefined>({
           v-model="bitrateMode"
           class="bitrate-select"
           :options="[
-            { value: 'none', label: '不限制' },
-            { value: 'auto', label: '自动（视频原码率 + 1000 Kbps）' },
-            { value: 'custom', label: '自定义' }
+            { value: 'none', label: t('encodeSettings.bitrateOptions.none') },
+            { value: 'auto', label: t('encodeSettings.bitrateOptions.auto') },
+            { value: 'custom', label: t('encodeSettings.bitrateOptions.custom') }
           ]"
         />
         <span v-if="bitrateMode === 'custom'" class="bitrate-input-wrap">
@@ -138,7 +140,7 @@ const customBitrate = computed<number | undefined>({
             type="number"
             min="1"
             class="bitrate-input"
-            placeholder="如3000"
+            :placeholder="t('encodeSettings.bitratePlaceholder')"
           />
           <span>Kbps</span>
         </span>
@@ -147,13 +149,13 @@ const customBitrate = computed<number | undefined>({
 
     <label class="encoder-cell">
       <span>
-        编码器
+        {{ t('encodeSettings.encoder') }}
         <InfoHint
           placement="right"
-          title="编码器"
+          :title="t('encodeSettings.encoderTitle')"
           :command="`-c:v ${settings.encoder}`"
-          body="选择视频编码后端，会影响速度、体积、兼容性和 AVS 支持。"
-          :items="['libx264：H.264 CPU 软编，兼容性最好、画质稳定，支持 AVS。', 'libx265：H.265/HEVC CPU 软编，体积更小，速度较慢。', 'h264_nvenc / h264_amf：显卡硬编，速度快，不支持 AVS。', 'h264_videotoolbox：macOS 硬编，不支持 AVS。']"
+          :body="t('encodeSettings.encoderBody')"
+          :items="[t('encodeSettings.encoderItems.x264'), t('encodeSettings.encoderItems.x265'), t('encodeSettings.encoderItems.hardware'), t('encodeSettings.encoderItems.videotoolbox')]"
         />
       </span>
       <div class="encoder-control">

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
+    #[serde(default = "default_language")]
+    pub language: String,
     pub ffmpeg_mode: FfmpegMode,
     pub ffmpeg_path: Option<String>,
     pub default_crf: u8,
@@ -135,6 +137,7 @@ pub enum FfmpegMode {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            language: default_language(),
             ffmpeg_mode: FfmpegMode::System,
             ffmpeg_path: None,
             default_crf: 18,
@@ -143,8 +146,8 @@ impl Default for AppConfig {
             default_encoder: "libx264".to_string(),
             output_templates: vec![OutputNameTemplate {
                 id: "default".to_string(),
-                name: "默认".to_string(),
-                pattern: "{video_name} 中字.mp4".to_string(),
+                name: "Default".to_string(),
+                pattern: "{video_name} subtitles.mp4".to_string(),
                 output_dir_mode: OutputDirMode::SameAsVideo,
                 fixed_output_dir: None,
                 is_default: true,
@@ -210,4 +213,8 @@ impl Default for AppConfig {
             environment_cache: EnvironmentCache::default(),
         }
     }
+}
+
+fn default_language() -> String {
+    "system".to_string()
 }

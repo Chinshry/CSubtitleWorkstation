@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import { useI18n } from '../i18n'
 
 const props = withDefaults(defineProps<{
   label: string
@@ -13,12 +14,13 @@ const props = withDefaults(defineProps<{
   placeholder: '',
   disabled: false,
   readonly: true,
-  buttonLabel: '选择',
+  buttonLabel: undefined,
   compact: false,
   compactAction: 'pick'
 })
 
 const model = defineModel<string>({ default: '' })
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'pick'): void
@@ -34,7 +36,7 @@ const effectiveReadonly = computed(() => (
     : props.readonly
 ))
 const compactButtonText = computed(() => {
-  if (!props.compact) return props.buttonLabel
+  if (!props.compact) return props.buttonLabel ?? t('common.choose')
   if (props.compactAction === 'clear') return model.value ? '✕' : '+'
   if (props.compactAction === 'edit') return '✎'
   return model.value ? '✎' : '+'
@@ -101,7 +103,7 @@ function onAction() {
         v-else
         class="path-text"
         :class="{ readonly: props.compactAction !== 'edit' }"
-        v-tooltip="model || props.placeholder || '未设置'"
+        v-tooltip="model || props.placeholder || t('common.unset')"
       >
         {{ model || '—' }}
       </span>
@@ -110,7 +112,7 @@ function onAction() {
         class="path-action"
         :class="`compact-${props.compactAction}`"
         :disabled="props.disabled"
-        :aria-label="props.buttonLabel"
+        :aria-label="props.buttonLabel ?? t('common.choose')"
         @click="onAction"
       >
         {{ compactButtonText }}
@@ -133,10 +135,10 @@ function onAction() {
         type="button"
         class="secondary"
         :disabled="props.disabled"
-        :aria-label="props.buttonLabel"
+        :aria-label="props.buttonLabel ?? t('common.choose')"
         @click="onAction"
       >
-        {{ props.buttonLabel }}
+        {{ props.buttonLabel ?? t('common.choose') }}
       </button>
     </div>
   </label>

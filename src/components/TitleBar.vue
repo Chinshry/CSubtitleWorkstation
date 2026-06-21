@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { useI18n } from '../i18n'
 
 // 沉浸式自定义标题栏：
 // - 顶部 36px 隐形拖拽条（横跨整个窗口顶部）
@@ -9,6 +10,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 // - 最大化状态下切换为"还原"双框图标
 const appWindow = getCurrentWindow()
 const isMaximized = ref(false)
+const { t } = useI18n()
 let unlistenResize: (() => void) | null = null
 
 async function refreshMaximized() {
@@ -55,8 +57,8 @@ onUnmounted(() => {
       <button
         type="button"
         class="title-btn"
-        :title="'最小化'"
-        aria-label="最小化"
+        :title="t('titleBar.minimize')"
+        :aria-label="t('titleBar.minimize')"
         @click="onMinimize"
       >
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -67,8 +69,8 @@ onUnmounted(() => {
       <button
         type="button"
         class="title-btn"
-        :title="isMaximized ? '向下还原' : '最大化'"
-        :aria-label="isMaximized ? '向下还原' : '最大化'"
+        :title="isMaximized ? t('titleBar.restore') : t('titleBar.maximize')"
+        :aria-label="isMaximized ? t('titleBar.restore') : t('titleBar.maximize')"
         @click="onToggleMaximize"
       >
         <!-- 最大化：单方框 -->
@@ -121,8 +123,8 @@ onUnmounted(() => {
       <button
         type="button"
         class="title-btn close-btn"
-        :title="'关闭'"
-        aria-label="关闭"
+        :title="t('titleBar.close')"
+        :aria-label="t('titleBar.close')"
         @click="onClose"
       >
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">

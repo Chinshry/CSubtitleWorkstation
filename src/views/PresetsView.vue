@@ -10,18 +10,21 @@ import {
   saveConfig,
 } from '../api/config'
 import type { AppConfig, OutputNameTemplate, VideoEncodePreset } from '../types'
-import { DEFAULT_ENCODE_PRESETS, normalizeEncodePresets } from '../utils/encodePresets'
+import { createDefaultEncodePresets, normalizeEncodePresets } from '../utils/encodePresets'
 import { useEncoderOptions } from '../composables/useEncoderOptions'
 import { useToast } from '../composables/useToast'
 import { currentVideoPath } from '../stores/currentJobStore'
 import AppSelect from '../components/AppSelect.vue'
 import EncodeSettingsFields, { type EncodeSettingsModel } from '../components/EncodeSettingsFields.vue'
 import {
-  DEFAULT_OUTPUT_TEMPLATE,
   TEMPLATE_VARIABLES,
+  createDefaultOutputTemplate,
   normalizeOutputTemplates,
   renderOutputName,
 } from '../utils/outputTemplates'
+import { useI18n } from '../i18n'
+
+const { t } = useI18n()
 
 const appConfig = ref<AppConfig | null>(null)
 const outputTemplates = ref<OutputNameTemplate[]>(normalizeOutputTemplates(null))
@@ -40,13 +43,13 @@ const toast = useToast()
 const outputDirModeOptions = [
   {
     value: 'sameAsVideo',
-    label: '跟随视频目录',
-    description: '输出到源视频所在文件夹',
+    label: t('presets.outputDir.sameAsVideo'),
+    description: t('presets.outputDir.sameAsVideoDescription'),
   },
   {
     value: 'fixed',
-    label: '固定目录',
-    description: '始终输出到你选择的文件夹',
+    label: t('presets.outputDir.fixed'),
+    description: t('presets.outputDir.fixedDescription'),
   },
 ]
 
@@ -90,7 +93,7 @@ const templatePreview = computed(() => {
   if (!tpl) return ''
   return renderOutputName(tpl.pattern, {
     id: 'preview',
-    videoPath: currentVideoPath.value || 'E:\\Videos\\预览测试.mp4',
+    videoPath: currentVideoPath.value || 'E:\\Videos\\preview-test.mp4',
     subtitlePath: '',
     outputPath: '',
     crf: 18,
@@ -113,13 +116,13 @@ async function loadPresetConfig() {
     || 'balanced-x264'
 }
 
-async function persistOutputTemplates(message = '命名模板已保存') {
+async function persistOutputTemplates(message = t('presets.toast.outputTemplateSaved')) {
   if (!appConfig.value) return
   const hasEmptyFixedDir = outputTemplates.value.some(
     (item) => item.outputDirMode === 'fixed' && !item.fixedOutputDir?.trim()
   )
   if (hasEmptyFixedDir) {
-    toast.error('固定目录不能为空，请先选择目录')
+    toast.error(t('presets.toast.fixedDirRequired'))
     return
   }
   const defaultId = outputTemplates.value.find((item) => item.isDefault)?.id ?? selectedTemplateId.value
@@ -141,21 +144,21 @@ async function persistOutputTemplates(message = '命名模板已保存') {
         || outputTemplates.value[0]?.id
         || 'default'
     }
-    toast.error(`保存失败：${err instanceof Error ? err.message : String(err)}`)
+    toast.error(t('presets.toast.saveFailed', { message: err instanceof Error ? err.message : String(err) }))
   }
 }
 
 function newTemplate() {
   const tpl: OutputNameTemplate = {
     id: crypto.randomUUID(),
-    name: `模板 ${outputTemplates.value.length + 1}`,
-    pattern: DEFAULT_OUTPUT_TEMPLATE.pattern,
+    name: t('presets.outputTemplate.defaultName', { index: outputTemplates.value.length + 1 }),
+    pattern: createDefaultOutputTemplate().pattern,
     outputDirMode: 'sameAsVideo',
     isDefault: false,
   }
   outputTemplates.value = [...outputTemplates.value, tpl]
   selectedTemplateId.value = tpl.id
-  void persistOutputTemplates('已新建命名模板')
+  void persistOutputTemplates(t('presets.toast.outputTemplateCreated'))
 }
 
 function duplicateTemplate(id = selectedTemplateId.value) {
@@ -164,25 +167,25 @@ function duplicateTemplate(id = selectedTemplateId.value) {
   const tpl: OutputNameTemplate = {
     ...source,
     id: crypto.randomUUID(),
-    name: `${source.name} 副本`,
+    name: t('presets.copyName', { name: source.name }),
     isDefault: false,
   }
   outputTemplates.value = [...outputTemplates.value, tpl]
   selectedTemplateId.value = tpl.id
-  void persistOutputTemplates('已复制命名模板')
+  void persistOutputTemplates(t('presets.toast.outputTemplateDuplicated'))
 }
 
 function deleteTemplate(id = selectedTemplateId.value) {
   const tpl = outputTemplates.value.find((item) => item.id === id)
   if (!tpl || tpl.id === 'default') return
-  if (!confirm(`删除模板「${tpl.name}」？此操作不会影响已经生成的输出路径。`)) return
+  if (!confirm(t('presets.confirm.deleteOutputTemplate', { name: tpl.name }))) return
   outputTemplates.value = outputTemplates.value.filter((item) => item.id !== tpl.id)
   if (selectedTemplateId.value === tpl.id) {
     selectedTemplateId.value = outputTemplates.value.find((item) => item.isDefault)?.id
       ?? outputTemplates.value[0]?.id
       ?? 'default'
   }
-  void persistOutputTemplates('已删除命名模板')
+  void persistOutputTemplates(t('presets.toast.outputTemplateDeleted'))
 }
 
 function setDefaultTemplate() {
@@ -191,7 +194,7 @@ function setDefaultTemplate() {
     ...item,
     isDefault: item.id === id,
   }))
-  void persistOutputTemplates('已设为默认命名模板')
+  void persistOutputTemplates(t('presets.toast.outputTemplateDefault'))
 }
 
 function updateSelectedTemplate(patch: Partial<OutputNameTemplate>) {
@@ -229,7 +232,7 @@ async function setOutputDirMode(value: string) {
     }
     const fixedOutputDir = await chooseFixedOutputDirPath()
     if (!fixedOutputDir) {
-      toast.error('固定目录不能为空，请先选择目录')
+      toast.error(t('presets.toast.fixedDirRequired'))
       return
     }
     updateSelectedTemplate({ outputDirMode: 'fixed', fixedOutputDir })
@@ -247,7 +250,7 @@ async function chooseFixedOutputDir() {
 
 async function chooseFixedOutputDirPath() {
   const selected = await open({
-    title: '选择固定输出目录',
+    title: t('presets.dialog.fixedOutputDir'),
     directory: true,
     multiple: false,
   })
@@ -260,7 +263,7 @@ function rememberPatternCursor(event: Event) {
   patternCursor.value = input.selectionStart ?? input.value.length
 }
 
-async function persistEncodePresets(message = '压制预设已保存') {
+async function persistEncodePresets(message = t('presets.toast.encodePresetSaved')) {
   if (!appConfig.value) return
   const selectedId = encodePresets.value.some((item) => item.id === selectedEncodePresetId.value)
     ? selectedEncodePresetId.value
@@ -283,7 +286,7 @@ async function persistEncodePresets(message = '压制预设已保存') {
         || encodePresets.value[0]?.id
         || 'balanced-x264'
     }
-    toast.error(`保存失败：${err instanceof Error ? err.message : String(err)}`)
+    toast.error(t('presets.toast.saveFailed', { message: err instanceof Error ? err.message : String(err) }))
   }
 }
 
@@ -305,7 +308,7 @@ function finishTemplateDrag() {
   const targetId = hoveredTemplateId.value
   if (draggedId && targetId && draggedId !== targetId) {
     outputTemplates.value = reorderById(outputTemplates.value, draggedId, targetId)
-    void persistOutputTemplates('已调整命名模板顺序')
+    void persistOutputTemplates(t('presets.toast.outputTemplateReordered'))
   }
   draggedTemplateId.value = null
   hoveredTemplateId.value = null
@@ -319,18 +322,18 @@ function cancelTemplateDrag() {
 
 async function exportOutputTemplateFile() {
   const path = await save({
-    title: '导出输出命名模板',
+    title: t('presets.dialog.exportOutputTemplates'),
     defaultPath: 'output-templates.json',
     filters: [{ name: 'JSON', extensions: ['json'] }],
   })
   if (!path) return
   await exportOutputTemplates(path, outputTemplates.value)
-  toast.success('输出命名模板已导出')
+  toast.success(t('presets.toast.outputTemplateExported'))
 }
 
 async function importOutputTemplateFile() {
   const selected = await open({
-    title: '导入输出命名模板',
+    title: t('presets.dialog.importOutputTemplates'),
     multiple: false,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   })
@@ -338,7 +341,7 @@ async function importOutputTemplateFile() {
   if (!path) return
   const imported = sanitizeImportedOutputTemplates(await importOutputTemplates(path))
   if (!imported.length) {
-    toast.warning('未找到可导入的输出命名模板')
+    toast.warning(t('presets.toast.noOutputTemplatesImported'))
     return
   }
   const importedById = new Map(imported.map((item) => [item.id, item]))
@@ -347,23 +350,23 @@ async function importOutputTemplateFile() {
     ...imported.filter((item) => !outputTemplates.value.some((current) => current.id === item.id)),
   ]
   selectedTemplateId.value = imported[0].id
-  void persistOutputTemplates(`已导入 ${imported.length} 个输出命名模板`)
+  void persistOutputTemplates(t('presets.toast.outputTemplateImported', { count: imported.length }))
 }
 
 async function exportEncodePresetFile() {
   const path = await save({
-    title: '导出压制预设',
+    title: t('presets.dialog.exportEncodePresets'),
     defaultPath: 'encode-presets.json',
     filters: [{ name: 'JSON', extensions: ['json'] }],
   })
   if (!path) return
   await exportEncodePresets(path, encodePresets.value)
-  toast.success('压制预设已导出')
+  toast.success(t('presets.toast.encodePresetExported'))
 }
 
 async function importEncodePresetFile() {
   const selected = await open({
-    title: '导入压制预设',
+    title: t('presets.dialog.importEncodePresets'),
     multiple: false,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   })
@@ -371,7 +374,7 @@ async function importEncodePresetFile() {
   if (!path) return
   const imported = sanitizeImportedEncodePresets(await importEncodePresets(path))
   if (!imported.length) {
-    toast.warning('未找到可导入的压制预设')
+    toast.warning(t('presets.toast.noEncodePresetsImported'))
     return
   }
   const importedById = new Map(imported.map((item) => [item.id, item]))
@@ -380,13 +383,13 @@ async function importEncodePresetFile() {
     ...imported.filter((item) => !encodePresets.value.some((current) => current.id === item.id)),
   ]
   selectedEncodePresetId.value = imported[0].id
-  void persistEncodePresets(`已导入 ${imported.length} 个压制预设`)
+  void persistEncodePresets(t('presets.toast.encodePresetImported', { count: imported.length }))
 }
 
 function newEncodePreset() {
   const tpl: VideoEncodePreset = {
     id: crypto.randomUUID(),
-    name: `压制预设 ${encodePresets.value.length + 1}`,
+    name: t('presets.encodePreset.defaultName', { index: encodePresets.value.length + 1 }),
     encoder: 'libx264',
     crf: 18,
     customVideoArgs: '-preset slow -profile:v high -pix_fmt yuv420p',
@@ -394,7 +397,7 @@ function newEncodePreset() {
   }
   encodePresets.value = [...encodePresets.value, tpl]
   selectedEncodePresetId.value = tpl.id
-  void persistEncodePresets('已新建压制预设')
+  void persistEncodePresets(t('presets.toast.encodePresetCreated'))
 }
 
 function duplicateEncodePreset(id = selectedEncodePresetId.value) {
@@ -403,24 +406,24 @@ function duplicateEncodePreset(id = selectedEncodePresetId.value) {
   const tpl: VideoEncodePreset = {
     ...source,
     id: crypto.randomUUID(),
-    name: `${source.name} 副本`,
+    name: t('presets.copyName', { name: source.name }),
     isDefault: false,
   }
   encodePresets.value = [...encodePresets.value, tpl]
   selectedEncodePresetId.value = tpl.id
-  void persistEncodePresets('已复制压制预设')
+  void persistEncodePresets(t('presets.toast.encodePresetDuplicated'))
 }
 
 function deleteEncodePreset(id = selectedEncodePresetId.value) {
   const tpl = encodePresets.value.find((item) => item.id === id)
   if (!tpl || encodePresets.value.length <= 1) return
-  if (!confirm(`删除压制预设「${tpl.name}」？`)) return
+  if (!confirm(t('presets.confirm.deleteEncodePreset', { name: tpl.name }))) return
   encodePresets.value = encodePresets.value.filter((item) => item.id !== tpl.id)
   if (selectedEncodePresetId.value === tpl.id) {
     selectedEncodePresetId.value = encodePresets.value[0]?.id
       ?? 'balanced-x264'
   }
-  void persistEncodePresets('已删除压制预设')
+  void persistEncodePresets(t('presets.toast.encodePresetDeleted'))
 }
 
 function startEncodePresetDrag(id: string, event: PointerEvent) {
@@ -441,7 +444,7 @@ function finishEncodePresetDrag() {
   const targetId = hoveredEncodePresetId.value
   if (draggedId && targetId && draggedId !== targetId) {
     encodePresets.value = reorderById(encodePresets.value, draggedId, targetId)
-    void persistEncodePresets('已调整压制预设顺序')
+    void persistEncodePresets(t('presets.toast.encodePresetReordered'))
   }
   draggedEncodePresetId.value = null
   hoveredEncodePresetId.value = null
@@ -454,17 +457,18 @@ function cancelEncodePresetDrag() {
 }
 
 function resetEncodePresets() {
-  if (!confirm('恢复内置压制预设将重置 5 个内置预设（x264 平衡 / NVENC 快速 / AMF 快速 / Apple 快速 / x265 体积优先）的参数，您自定义新增的预设不会被删除。是否继续？')) return
-  const builtInIds = new Set(DEFAULT_ENCODE_PRESETS.map((item) => item.id))
+  if (!confirm(t('presets.confirm.resetEncodePresets'))) return
+  const defaultEncodePresets = createDefaultEncodePresets()
+  const builtInIds = new Set(defaultEncodePresets.map((item) => item.id))
   const customPresets = encodePresets.value.filter((item) => !builtInIds.has(item.id))
   encodePresets.value = [
-    ...DEFAULT_ENCODE_PRESETS.map((item) => ({ ...item })),
+    ...defaultEncodePresets.map((item) => ({ ...item })),
     ...customPresets,
   ]
   if (!encodePresets.value.some((item) => item.id === selectedEncodePresetId.value)) {
     selectedEncodePresetId.value = encodePresets.value[0].id
   }
-  void persistEncodePresets('已恢复内置压制预设（自定义预设保留）')
+  void persistEncodePresets(t('presets.toast.encodePresetReset'))
 }
 
 function updateSelectedEncodePreset(patch: Partial<VideoEncodePreset>) {
@@ -513,8 +517,8 @@ function sanitizeImportedOutputTemplates(items: OutputNameTemplate[]): OutputNam
         item.outputDirMode === 'fixed' && fixedOutputDir ? 'fixed' : 'sameAsVideo'
       return {
         id: item.id,
-        name: item.name.trim() || '未命名模板',
-        pattern: item.pattern.trim() || DEFAULT_OUTPUT_TEMPLATE.pattern,
+        name: item.name.trim() || t('presets.outputTemplate.untitled'),
+        pattern: item.pattern.trim() || createDefaultOutputTemplate().pattern,
         outputDirMode,
         fixedOutputDir,
         isDefault: false,
@@ -571,13 +575,13 @@ onBeforeUnmount(() => {
     <section class="panel template-panel encode-section">
       <div class="panel-heading">
         <div>
-          <h2>压制预设</h2>
-          <p>管理常用编码器、CRF、最大码率和高级 ffmpeg 视频参数；压制页可直接选择并应用。</p>
+          <h2>{{ t('presets.encodePreset.title') }}</h2>
+          <p>{{ t('presets.encodePreset.description') }}</p>
         </div>
         <div class="panel-heading-actions">
-          <button class="secondary" @click="importEncodePresetFile">批量导入</button>
-          <button class="secondary" @click="exportEncodePresetFile">批量导出</button>
-          <button class="secondary" @click="resetEncodePresets">恢复内置</button>
+          <button class="secondary" @click="importEncodePresetFile">{{ t('presets.import') }}</button>
+          <button class="secondary" @click="exportEncodePresetFile">{{ t('presets.export') }}</button>
+          <button class="secondary" @click="resetEncodePresets">{{ t('presets.resetBuiltIn') }}</button>
         </div>
       </div>
 
@@ -592,7 +596,7 @@ onBeforeUnmount(() => {
               <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              新建
+              {{ t('common.create') }}
             </button>
           </div>
           <div
@@ -624,8 +628,8 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action"
-                v-tooltip="'复制'"
-                aria-label="复制"
+                v-tooltip="t('common.copy')"
+                :aria-label="t('common.copy')"
                 @click.stop="duplicateEncodePreset(preset.id)"
               >
                 <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -636,8 +640,8 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action danger"
-                v-tooltip="'删除'"
-                aria-label="删除"
+                v-tooltip="t('common.delete')"
+                :aria-label="t('common.delete')"
                 :disabled="encodePresets.length <= 1"
                 @click.stop="deleteEncodePreset(preset.id)"
               >
@@ -651,7 +655,7 @@ onBeforeUnmount(() => {
 
         <div class="template-editor">
           <label>
-            <span>预设名称</span>
+            <span>{{ t('presets.encodePreset.nameLabel') }}</span>
             <input
               :value="selectedEncodePreset.name"
               @input="updateSelectedEncodePreset({ name: ($event.target as HTMLInputElement).value })"
@@ -664,7 +668,7 @@ onBeforeUnmount(() => {
           />
 
           <label>
-            <span>高级 ffmpeg 视频参数</span>
+            <span>{{ t('presets.encodePreset.advancedArgs') }}</span>
             <textarea
               :value="selectedEncodePreset.customVideoArgs ?? ''"
               rows="3"
@@ -675,15 +679,14 @@ onBeforeUnmount(() => {
           </label>
 
           <div class="template-preview">
-            <span>应用后会覆盖</span>
+            <span>{{ t('presets.encodePreset.applyPreview') }}</span>
             <code>
-              编码器 {{ selectedEncodePreset.encoder }} / CRF {{ selectedEncodePreset.crf }} /
-              码率 {{ selectedEncodePreset.maxBitrate === undefined ? '不限制' : selectedEncodePreset.maxBitrate === 0 ? '自动' : `${selectedEncodePreset.maxBitrate} Kbps` }}
+              {{ t('presets.encodePreset.encoderSummary', { encoder: selectedEncodePreset.encoder, crf: selectedEncodePreset.crf, bitrate: selectedEncodePreset.maxBitrate === undefined ? t('encodeSettings.bitrateOptions.none') : selectedEncodePreset.maxBitrate === 0 ? t('encodeSettings.bitrateOptions.auto') : `${selectedEncodePreset.maxBitrate} Kbps` }) }}
             </code>
           </div>
 
           <div class="actions left">
-            <button @click="persistEncodePresets()">保存预设</button>
+            <button @click="persistEncodePresets()">{{ t('presets.encodePreset.save') }}</button>
           </div>
         </div>
       </div>
@@ -692,12 +695,12 @@ onBeforeUnmount(() => {
     <section class="panel template-panel output-section">
       <div class="panel-heading">
         <div>
-          <h2>输出命名模板</h2>
-          <p>建立常用命名规则，在压制页选择模板后可一键套用到输出路径。</p>
+          <h2>{{ t('presets.outputTemplate.title') }}</h2>
+          <p>{{ t('presets.outputTemplate.description') }}</p>
         </div>
         <div class="panel-heading-actions">
-          <button class="secondary" @click="importOutputTemplateFile">批量导入</button>
-          <button class="secondary" @click="exportOutputTemplateFile">批量导出</button>
+          <button class="secondary" @click="importOutputTemplateFile">{{ t('presets.import') }}</button>
+          <button class="secondary" @click="exportOutputTemplateFile">{{ t('presets.export') }}</button>
         </div>
       </div>
 
@@ -712,7 +715,7 @@ onBeforeUnmount(() => {
               <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              新建
+              {{ t('common.create') }}
             </button>
           </div>
           <div
@@ -745,8 +748,8 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action"
-                v-tooltip="'复制'"
-                aria-label="复制"
+                v-tooltip="t('common.copy')"
+                :aria-label="t('common.copy')"
                 @click.stop="duplicateTemplate(tpl.id)"
               >
                 <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -757,8 +760,8 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="mini-action danger"
-                v-tooltip="'删除'"
-                aria-label="删除"
+                v-tooltip="t('common.delete')"
+                :aria-label="t('common.delete')"
                 :disabled="tpl.id === 'default'"
                 @click.stop="deleteTemplate(tpl.id)"
               >
@@ -772,7 +775,7 @@ onBeforeUnmount(() => {
 
         <div class="template-editor">
           <label>
-            <span>模板名称</span>
+            <span>{{ t('presets.outputTemplate.nameLabel') }}</span>
             <input
               :value="selectedTemplate.name"
               @input="updateSelectedTemplate({ name: ($event.target as HTMLInputElement).value })"
@@ -780,7 +783,7 @@ onBeforeUnmount(() => {
           </label>
 
           <label>
-            <span>文件名模板</span>
+            <span>{{ t('presets.outputTemplate.patternLabel') }}</span>
             <input
               ref="patternInputRef"
               :value="selectedTemplate.pattern"
@@ -792,10 +795,10 @@ onBeforeUnmount(() => {
             />
           </label>
 
-          <div class="variable-toolbar" aria-label="可插入的文件名变量">
+          <div class="variable-toolbar" :aria-label="t('presets.outputTemplate.variablesLabel')">
             <div class="variable-toolbar-title">
-              <span>插入变量</span>
-              <small>点击后插入到光标位置</small>
+              <span>{{ t('presets.outputTemplate.insertVariable') }}</span>
+              <small>{{ t('presets.outputTemplate.insertVariableHint') }}</small>
             </div>
             <div class="variable-row">
               <button
@@ -806,13 +809,13 @@ onBeforeUnmount(() => {
                 @click="insertVariable(item.key)"
               >
                 <span class="variable-token-key">{{ item.key }}</span>
-                <span class="variable-token-meta">{{ item.label }} · {{ item.sample }}</span>
+                <span class="variable-token-meta">{{ t(item.labelKey) }} · {{ item.sample }}</span>
               </button>
             </div>
           </div>
 
           <label>
-            <span>输出目录</span>
+            <span>{{ t('presets.outputTemplate.outputDir') }}</span>
             <AppSelect
               v-model="selectedOutputDirMode"
               class="output-dir-select"
@@ -821,11 +824,11 @@ onBeforeUnmount(() => {
           </label>
 
           <label v-if="selectedTemplate.outputDirMode === 'fixed'">
-            <span>固定目录</span>
+            <span>{{ t('presets.outputDir.fixed') }}</span>
             <div class="fixed-dir-row">
               <input
                 :value="selectedTemplate.fixedOutputDir ?? ''"
-                placeholder="请点击右侧按钮选择目录"
+                :placeholder="t('presets.outputTemplate.fixedDirPlaceholder')"
                 readonly
               />
               <button
@@ -833,20 +836,20 @@ onBeforeUnmount(() => {
                 class="secondary fixed-dir-pick"
                 @click="chooseFixedOutputDir"
               >
-                选择目录
+                {{ t('presets.outputTemplate.chooseDir') }}
               </button>
             </div>
-            <small class="field-hint">固定目录必须通过系统目录选择器设置</small>
+            <small class="field-hint">{{ t('presets.outputTemplate.fixedDirHint') }}</small>
           </label>
 
           <div class="template-preview">
-            <span>示例预览</span>
+            <span>{{ t('presets.outputTemplate.preview') }}</span>
             <code>{{ templatePreview }}</code>
           </div>
 
           <div class="actions left">
-            <button @click="persistOutputTemplates()">保存模板</button>
-            <button class="secondary" @click="setDefaultTemplate">设为默认</button>
+            <button @click="persistOutputTemplates()">{{ t('presets.outputTemplate.save') }}</button>
+            <button class="secondary" @click="setDefaultTemplate">{{ t('presets.outputTemplate.setDefault') }}</button>
           </div>
         </div>
       </div>

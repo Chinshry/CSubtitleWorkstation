@@ -973,6 +973,7 @@ select option {
   background: #1e293b;
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 8px;
+  box-sizing: border-box;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.38);
   color: #dbeafe;
   display: grid;
@@ -989,7 +990,9 @@ select option {
   transform: translateX(-50%) translateY(-4px);
   transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
   visibility: hidden;
+  white-space: normal;
   width: max-content;
+  overflow-wrap: anywhere;
   z-index: 210;
 }
 
@@ -1006,6 +1009,8 @@ select option {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rich-hint-card code {
@@ -1015,6 +1020,8 @@ select option {
   color: #bae6fd;
   display: block;
   font: 600 12px/1.45 "Cascadia Mono", Consolas, monospace;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 5px 7px;
   white-space: normal;
 }
@@ -1023,6 +1030,8 @@ select option {
   color: #cbd5e1;
   font-size: 12.5px;
   line-height: 1.55;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rich-hint-list {
@@ -1036,8 +1045,11 @@ select option {
   color: #e2e8f0;
   font-size: 12px;
   line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding-left: 12px;
   position: relative;
+  white-space: normal;
 }
 
 .rich-hint-list span::before {
@@ -2339,4 +2351,36 @@ select option {
 .app-tooltip.app-tooltip-bottom .app-tooltip-arrow {
   bottom: auto;
   top: -3px;
+}
+
+/* Viewport-level rich hint cards rendered through Teleport. */
+.rich-hint-card.is-visible {
+  left: 0;
+  max-height: calc(100vh - 24px);
+  opacity: 1;
+  overflow: auto;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  transform: none;
+  visibility: visible;
+  z-index: 10000;
+}
+
+.rich-hint-card-left {
+  max-width: min(560px, calc(100vw - 24px));
+  min-width: min(360px, calc(100vw - 24px));
+  width: min(560px, calc(100vw - 24px));
+}
+
+.rich-hint-card-right,
+.rich-hint-card-center {
+  max-width: min(420px, calc(100vw - 24px));
+  min-width: min(300px, calc(100vw - 24px));
+  width: min(420px, calc(100vw - 24px));
+}
+
+.rich-hint-card-top,
+.rich-hint-card-bottom {
+  transform: none;
 }

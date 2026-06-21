@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useToast } from '../composables/useToast'
+import { useI18n } from '../i18n'
 
 const { items, dismiss } = useToast()
+const { t } = useI18n()
 </script>
 
 <template>
   <Teleport to="body">
-    <div class="toast-stack" role="region" aria-live="polite" aria-label="通知">
+    <div class="toast-stack" role="region" aria-live="polite" :aria-label="t('toast.regionLabel')">
       <transition-group name="toast-fade" tag="div" class="toast-stack-inner">
         <div
           v-for="item in items"

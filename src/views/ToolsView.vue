@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import {
   activeTool,
   isMediaToolId,
   type ToolId
 } from '../stores/toolStore'
 import InfoHint from '../components/InfoHint.vue'
+import { isChineseLocale, useI18n } from '../i18n'
 
 const loadTextConversionView = () => import('./TextConversionView.vue')
 const loadProofreadView = () => import('./ProofreadView.vue')
@@ -13,13 +14,7 @@ const loadCcSubtitleView = () => import('./CcSubtitleView.vue')
 const loadSubtitleFormatView = () => import('./SubtitleFormatView.vue')
 const loadMediaRemuxView = () => import('./MediaRemuxView.vue')
 
-const ToolLoadingView = {
-  template: '<div class="tool-loading"><span class="tool-loading-spinner"></span><strong>正在准备工具</strong><p>首次打开需要加载工具页面，完成后会自动显示。</p></div>'
-}
-
 const asyncToolOptions = {
-  loadingComponent: ToolLoadingView,
-  delay: 0,
   timeout: 20000
 }
 
@@ -44,15 +39,7 @@ const MediaRemuxView = defineAsyncComponent({
   loader: loadMediaRemuxView
 })
 
-const ccRuleHintItems = [
-  '先读取样式参考 ASS，解析 [V4+ Styles]；必须手动选择听轴样式和花字样式。',
-  'SRT 输入会转换为 ASS 输出；ASS / SSA 输入会处理已有 Dialogue 行。',
-  '遇到 [方括号标签]：括号内文本去掉 []，使用花字样式。',
-  '方括号标签后面的台词会另起一条，使用听轴样式。',
-  '没有方括号标签的普通台词整条使用听轴样式。',
-  '台词只处理 \\N 换行和多余空格；',
-  '启用自定义词库时，会按词库规则替换名称或固定写法。'
-]
+const { t } = useI18n()
 
 type ToolItem = {
   id: ToolId
@@ -60,154 +47,149 @@ type ToolItem = {
   description: string
 }
 
-const textTools: ToolItem[] = [
-  {
-    id: 'cc-subtitle',
-    name: 'CC 字幕整理',
-    description: '整理 CC 字幕，把 [] 内文字拆成花字行，其余整理为听轴行；支持读取参考 ASS 样式并导出 ASS。'
-  },
-  {
-    id: 'text-conversion',
-    name: '繁简转换',
-    description: '使用 zhconv 转换繁简文本，自定义词库会优先保护和替换指定词条，适合字幕和普通文本批量处理。'
-  },
-  {
-    id: 'proofread',
-    name: '字幕校对',
-    description: '使用 jieba-rs 分词与词性标注，检查“的 / 地 / 得”疑似误用；自定义词库会提示专有名词、艺人名和固定译名的统一写法。'
-  }
-]
+const ccRuleHintItems = computed(() => [
+  t('tools.ccRule.items.readStyle'),
+  t('tools.ccRule.items.convertInput'),
+  t('tools.ccRule.items.bracketText'),
+  t('tools.ccRule.items.dialogAfterBracket'),
+  t('tools.ccRule.items.plainDialog'),
+  t('tools.ccRule.items.cleanText'),
+  t('tools.ccRule.items.dictionary')
+])
 
-const formatTools: ToolItem[] = [
+const textTools = computed<ToolItem[]>(() => {
+  const tools: ToolItem[] = [{
+    id: 'cc-subtitle',
+    name: t('tools.items.ccSubtitle.name'),
+    description: t('tools.items.ccSubtitle.description')
+  }]
+  if (isChineseLocale.value) {
+    tools.push(
+      {
+        id: 'text-conversion',
+        name: t('tools.items.textConversion.name'),
+        description: t('tools.items.textConversion.description')
+      },
+      {
+        id: 'proofread',
+        name: t('tools.items.proofread.name'),
+        description: t('tools.items.proofread.description')
+      }
+    )
+  }
+  return tools
+})
+
+const formatTools = computed<ToolItem[]>(() => [
   {
     id: 'subtitle-format',
-    name: '字幕格式转换',
-    description: '使用 ffmpeg 在 ASS / SSA / SRT / VTT 之间转换；转到 SRT / VTT 时会丢弃原格式不支持的样式和特效。'
+    name: t('tools.items.subtitleFormat.name'),
+    description: t('tools.items.subtitleFormat.description')
   },
   {
     id: 'media-remux',
-    name: '视频转 MP4',
-    description: '把常见视频容器重新封装为 MP4，默认只复制音视频流，不重新编码；TS / M2TS / MTS 会自动整理 AAC 音频封装头。'
+    name: t('tools.items.mediaRemux.name'),
+    description: t('tools.items.mediaRemux.description')
   }
-]
+])
 
-const mediaTools: ToolItem[] = [
+const mediaTools = computed<ToolItem[]>(() => [
   {
     id: 'media-concat-ts',
-    name: 'TS 分片合并',
-    description: '按文件顺序合并 TS / M2TS / MTS 分片，可输出 MP4 或 TS；MP4 会自动整理 AAC 音频封装头，不重新编码。'
+    name: t('tools.items.mediaConcatTs.name'),
+    description: t('tools.items.mediaConcatTs.description')
   },
   {
     id: 'media-merge-av',
-    name: '合并音视频',
-    description: '保留视频画面，合并单独的音频来源输出 MP4；适合替换或补齐外部音轨。'
+    name: t('tools.items.mediaMergeAv.name'),
+    description: t('tools.items.mediaMergeAv.description')
   },
   {
     id: 'media-cover',
-    name: '添加封面',
-    description: '给 MP4 写入 JPG / PNG 封面，原视频和音频会原样复制，不重新编码。'
+    name: t('tools.items.mediaCover.name'),
+    description: t('tools.items.mediaCover.description')
   }
-]
+])
 
-const toolGroups = [
+const toolGroups = computed(() => [
   {
     id: 'text',
-    name: '文字处理',
-    description: '字幕文本和词库类的轻量处理。',
-    tools: textTools
+    name: t('tools.groups.text.name'),
+    description: t('tools.groups.text.description'),
+    tools: textTools.value
   },
   {
     id: 'format',
-    name: '格式转换',
-    description: '字幕格式和容器格式转换入口。',
-    tools: formatTools
+    name: t('tools.groups.format.name'),
+    description: t('tools.groups.format.description'),
+    tools: formatTools.value
   },
   {
     id: 'media',
-    name: '媒体处理',
-    description: '不重新压制的媒体文件辅助操作。',
-    tools: mediaTools
+    name: t('tools.groups.media.name'),
+    description: t('tools.groups.media.description'),
+    tools: mediaTools.value
   }
-]
+])
 
-const allTools = [...textTools, ...formatTools, ...mediaTools]
+const allTools = computed(() => [...textTools.value, ...formatTools.value, ...mediaTools.value])
 const selectedTool = ref<ToolId>(activeTool.value)
-const renderedTool = ref<ToolId>(activeTool.value)
-const preparingTool = ref(false)
-let toolSwitchSeq = 0
 
-const activeToolMeta = computed(() => allTools.find((tool) => tool.id === selectedTool.value) ?? textTools[0])
+const activeToolMeta = computed(() => allTools.value.find((tool) => tool.id === selectedTool.value) ?? textTools.value[0])
 
 const activeToolComponent = computed(() => (
-  isMediaToolId(renderedTool.value)
+  isMediaToolId(selectedTool.value)
     ? MediaRemuxView
-    : renderedTool.value === 'text-conversion'
+    : selectedTool.value === 'text-conversion'
       ? TextConversionView
-      : renderedTool.value === 'cc-subtitle'
+      : selectedTool.value === 'cc-subtitle'
         ? CcSubtitleView
-        : renderedTool.value === 'subtitle-format'
+        : selectedTool.value === 'subtitle-format'
           ? SubtitleFormatView
         : ProofreadView
 ))
 
-function loadToolView(tool: ToolId) {
-  if (isMediaToolId(tool)) return loadMediaRemuxView()
-  if (tool === 'text-conversion') return loadTextConversionView()
-  if (tool === 'cc-subtitle') return loadCcSubtitleView()
-  if (tool === 'subtitle-format') return loadSubtitleFormatView()
-  return loadProofreadView()
-}
-
-function waitForPaint() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve())
-    })
-  })
-}
-
-async function switchTool(toolId: ToolId, syncActiveTool: boolean) {
-  if (renderedTool.value === toolId && !preparingTool.value) return
-  const seq = ++toolSwitchSeq
-  selectedTool.value = toolId
-  preparingTool.value = true
-  await nextTick()
-  await waitForPaint()
-  try {
-    await loadToolView(toolId)
-  } catch {
-    // Let the async component render its normal failure state if the loader fails.
+function switchTool(toolId: ToolId, syncActiveTool: boolean) {
+  if (selectedTool.value === toolId) {
+    if (syncActiveTool && activeTool.value !== toolId) {
+      activeTool.value = toolId
+    }
+    return
   }
-  if (seq !== toolSwitchSeq) return
+  selectedTool.value = toolId
   if (syncActiveTool && activeTool.value !== toolId) {
     activeTool.value = toolId
-  }
-  renderedTool.value = toolId
-  await nextTick()
-  if (seq === toolSwitchSeq) {
-    preparingTool.value = false
   }
 }
 
 function selectTool(tool: ToolItem) {
-  void switchTool(tool.id, true)
+  switchTool(tool.id, true)
 }
 
 watch(activeTool, (toolId) => {
   if (toolId === selectedTool.value) return
-  void switchTool(toolId, false)
+  if (!allTools.value.some((tool) => tool.id === toolId)) {
+    switchTool('cc-subtitle', true)
+    return
+  }
+  switchTool(toolId, false)
+})
+
+watch(allTools, (tools) => {
+  if (tools.some((tool) => tool.id === selectedTool.value)) return
+  switchTool('cc-subtitle', true)
 })
 
 </script>
 
 <template>
   <main class="workspace tools-workspace">
-    <aside class="tool-sidebar" aria-label="工具目录">
+    <aside class="tool-sidebar" :aria-label="t('tools.sidebarLabel')">
       <header class="tool-sidebar-header">
-        <h2>工具</h2>
+        <h2>{{ t('nav.tools') }}</h2>
       </header>
 
-      <div class="tool-groups" aria-label="工具分组">
+      <div class="tool-groups" :aria-label="t('tools.groupListLabel')">
         <section
           v-for="group in toolGroups"
           :key="group.id"
@@ -218,7 +200,7 @@ watch(activeTool, (toolId) => {
             <span class="tool-group-title">{{ group.name }}</span>
           </div>
 
-          <div class="tool-list" role="tablist" :aria-label="`${group.name}工具`">
+          <div class="tool-list" role="tablist" :aria-label="t('tools.groupToolsLabel', { group: group.name })">
             <button
               v-for="tool in group.tools"
               :key="tool.id"
@@ -230,7 +212,7 @@ watch(activeTool, (toolId) => {
             >
               <strong>{{ tool.name }}</strong>
             </button>
-            <span v-if="!group.tools.length" class="tool-empty">待添加</span>
+            <span v-if="!group.tools.length" class="tool-empty">{{ t('tools.empty') }}</span>
           </div>
         </section>
       </div>
@@ -247,11 +229,11 @@ watch(activeTool, (toolId) => {
           <p>
             <span>{{ activeToolMeta.description }}</span>
             <span v-if="selectedTool === 'cc-subtitle'" class="tool-header-rule">
-              <span>整理规则</span>
+              <span>{{ t('tools.ccRule.label') }}</span>
               <InfoHint
-                title="CC 字幕整理规则"
-                command="读取样式 → 选择听轴/花字 → 导入待整理字幕"
-                body="用于把 Web CC 字幕整理成适合 Aegisub 后续精修的 ASS 结构。"
+                :title="t('tools.ccRule.title')"
+                :command="t('tools.ccRule.command')"
+                :body="t('tools.ccRule.body')"
                 :items="ccRuleHintItems"
                 placement="left"
               />
@@ -260,14 +242,8 @@ watch(activeTool, (toolId) => {
         </div>
       </header>
 
-      <div v-if="preparingTool" class="tool-loading">
-        <span class="tool-loading-spinner"></span>
-        <strong>正在准备工具</strong>
-        <p>正在加载当前工具页面，完成后会自动显示。</p>
-      </div>
-
       <KeepAlive>
-        <component v-if="!preparingTool" :is="activeToolComponent" :key="renderedTool" />
+        <component :is="activeToolComponent" :key="selectedTool" />
       </KeepAlive>
     </section>
   </main>
@@ -426,48 +402,6 @@ watch(activeTool, (toolId) => {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.tool-loading {
-  align-items: center;
-  align-self: stretch;
-  background: #f7fafc;
-  border: 1px solid #d8e2e8;
-  border-radius: 8px;
-  color: #667582;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  justify-content: center;
-  min-height: 280px;
-  text-align: center;
-}
-
-.tool-loading strong {
-  color: #102030;
-  font-size: 16px;
-}
-
-.tool-loading p {
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.tool-loading-spinner {
-  border: 3px solid #d8e8ee;
-  border-top-color: #176b87;
-  border-radius: 999px;
-  display: inline-block;
-  height: 30px;
-  width: 30px;
-  animation: tool-spin 0.85s linear infinite;
-}
-
-@keyframes tool-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .tool-content-header {
   border-bottom: 1px solid #d8e2e8;
   display: block;
@@ -500,9 +434,12 @@ watch(activeTool, (toolId) => {
 }
 
 .tool-header-rule :deep(.rich-hint-card) {
-  max-width: min(560px, calc(100vw - 72px));
-  min-width: min(460px, calc(100vw - 72px));
+  max-width: min(760px, calc(100vw - 48px));
+  min-width: min(420px, calc(100vw - 48px));
   padding: 14px 16px;
+  white-space: normal;
+  width: min(760px, calc(100vw - 48px));
+  overflow-wrap: anywhere;
 }
 
 .tool-header-rule :deep(.tip-left .rich-hint-card) {
@@ -518,6 +455,13 @@ watch(activeTool, (toolId) => {
 .tool-header-rule :deep(.rich-hint-list span) {
   font-size: 12.5px;
   line-height: 1.55;
+}
+
+.tool-header-rule :deep(.rich-hint-card code),
+.tool-header-rule :deep(.rich-hint-body),
+.tool-header-rule :deep(.rich-hint-list span) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 920px) {

@@ -1,31 +1,40 @@
 import type { AppConfig, CompressJob, OutputNameTemplate, VideoMeta } from '../types'
+import { t } from '../i18n'
 
 export const DEFAULT_OUTPUT_TEMPLATE: OutputNameTemplate = {
   id: 'default',
-  name: '默认',
-  pattern: '{video_name} 中字.mp4',
+  name: 'Default',
+  pattern: '{video_name} subtitles.mp4',
   outputDirMode: 'sameAsVideo',
   isDefault: true,
 }
 
+export function createDefaultOutputTemplate(): OutputNameTemplate {
+  return {
+    ...DEFAULT_OUTPUT_TEMPLATE,
+    name: t('outputTemplates.defaultName'),
+    pattern: t('outputTemplates.defaultPattern'),
+  }
+}
+
 export const TEMPLATE_VARIABLES = [
-  { key: '{date:YYYYMMDD}', label: '日期格式1', sample: '20260101' },
-  { key: '{date:YYMMDD}', label: '日期格式2', sample: '260101' },
-  { key: '{video_name}', label: '视频文件名', sample: 'input' },
-  { key: '{resolution}', label: '分辨率', sample: '1080' },
-  { key: '{encoder}', label: '编码器', sample: 'libx264' },
-  { key: '{crf}', label: 'CRF', sample: '18' },
+  { key: '{date:YYYYMMDD}', labelKey: 'outputTemplates.variables.dateYmd', sample: '20260101' },
+  { key: '{date:YYMMDD}', labelKey: 'outputTemplates.variables.dateShort', sample: '260101' },
+  { key: '{video_name}', labelKey: 'outputTemplates.variables.videoName', sample: 'input' },
+  { key: '{resolution}', labelKey: 'outputTemplates.variables.resolution', sample: '1080' },
+  { key: '{encoder}', labelKey: 'outputTemplates.variables.encoder', sample: 'libx264' },
+  { key: '{crf}', labelKey: 'outputTemplates.variables.crf', sample: '18' },
 ]
 
 export function normalizeOutputTemplates(config: AppConfig | null): OutputNameTemplate[] {
   const templates = config?.outputTemplates ?? []
   const normalized = templates.length
     ? templates
-    : [{ ...DEFAULT_OUTPUT_TEMPLATE }]
+    : [createDefaultOutputTemplate()]
   return normalized.map((item, index) => ({
     ...item,
-    name: item.name || `模板 ${index + 1}`,
-    pattern: item.pattern || DEFAULT_OUTPUT_TEMPLATE.pattern,
+    name: item.name || t('presets.outputTemplate.defaultName', { index: index + 1 }),
+    pattern: item.pattern || t('outputTemplates.defaultPattern'),
     outputDirMode: item.outputDirMode === 'fixed' ? 'fixed' : 'sameAsVideo',
     isDefault: item.isDefault || item.id === (config?.defaultOutputTemplateId ?? DEFAULT_OUTPUT_TEMPLATE.id),
   }))
@@ -52,7 +61,7 @@ export function renderOutputName(
     crf: job.crf === null ? '' : String(job.crf),
     date: formatDateTime(date, 'YYYYMMDD'),
   }
-  let out = pattern || DEFAULT_OUTPUT_TEMPLATE.pattern
+  let out = pattern || t('outputTemplates.defaultPattern')
   for (const [key, value] of Object.entries(values)) {
     out = out.split(`{${key}}`).join(sanitizeFilenamePart(value))
   }

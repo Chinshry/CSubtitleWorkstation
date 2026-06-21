@@ -29,6 +29,9 @@ import type { AvsStagingPlan, SubtitleAnalysisResult } from '../api/compress'
 import { checkColorMatrix } from '../utils/colorMatrix'
 import { buildOutputPath, getDefaultOutputTemplate, normalizeOutputTemplates } from '../utils/outputTemplates'
 import { applyEncodePresetToJob, getDefaultEncodePreset, normalizeEncodePresets } from '../utils/encodePresets'
+import { useI18n } from '../i18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const running = ref(false)
@@ -227,8 +230,8 @@ const logoButtonDisabled = computed(() => {
 })
 
 const logoButtonDisabledReason = computed(() => {
-  if (!job.value.videoPath) return '请先选择视频文件'
-  if (!videoMeta.value?.width || !videoMeta.value?.height) return '视频分辨率未解析完毕'
+  if (!job.value.videoPath) return t('home.logoDisabled.noVideo')
+  if (!videoMeta.value?.width || !videoMeta.value?.height) return t('home.logoDisabled.metaPending')
   return ''
 })
 
@@ -344,20 +347,20 @@ async function runJob() {
   elapsedSeconds.value = 0
   smoothSpeed.value = 0
   if (!job.value.videoPath) {
-    const msg = '错误：视频路径为空，请先填写或拖入视频文件'
+    const msg = t('home.logs.emptyVideoPath')
     logs.value.push(msg)
     pushDiag(msg)
     return
   }
-  logs.value.push('正在检查视频与 AVS 预处理需求...')
+  logs.value.push(t('home.logs.checkingAvsStaging'))
   const canContinue = await confirmAvsStagingIfNeeded()
   if (!canContinue) {
-    logs.value.push('已取消压制：VP9 AVS 兼容模式需要临时复制源视频。')
+    logs.value.push(t('home.logs.avsStagingCancelled'))
     pushDiag('runJob cancelled by AVS staging confirmation')
     return
   }
   if (job.value.useAvs) {
-    logs.value.push('正在准备 AVS 临时文件；如果源视频是 VP9，大文件复制期间 ffmpeg 进度会暂时保持 0%。')
+    logs.value.push(t('home.logs.preparingAvsStaging'))
     statusLine.value = 'Preparing AVS temporary files...'
   }
   running.value = true
@@ -374,7 +377,7 @@ async function runJob() {
     running.value = false
     stopElapsedTicker()
     const msg = formatError(error)
-    logs.value.push(`runJob 异常：${msg}`)
+    logs.value.push(t('home.logs.runJobError', { message: msg }))
     pushDiag(`runJob exception: ${msg}`)
   }
 }
@@ -400,7 +403,7 @@ async function cancelJob() {
   try {
     await cancelCompress(job.value.id)
     cancelled.value = true
-    logs.value.push('已发送取消请求')
+    logs.value.push(t('home.logs.cancelRequested'))
     // 注意：不在此处置 running=false / stopElapsedTicker。
     // ffmpeg 收到 q 后要花时间写文件尾，期间仍在运行；
     // 状态收尾统一由 compress-log 中匹配 "Compression (completed|failed|exited)" 的监听器处理，
@@ -433,7 +436,7 @@ watch(
     if (!job.value.outputPath || job.value.outputPath === lastAutoOutput.value) {
       const tpl = selectedOutputTemplate.value
       const next = buildOutputPath(tpl, job.value, videoMeta.value)
-        || joinOutput(newParts.dir, newParts.sep, `${newParts.stem} 中字`, '.mp4')
+        || joinOutput(newParts.dir, newParts.sep, `${newParts.stem}${t('home.defaultOutputSuffix')}`, '.mp4')
       job.value.outputPath = next
       lastAutoOutput.value = next
       return
@@ -514,9 +517,9 @@ watch(
       try {
         await saveConfig(cfg)
         appConfig.value = cfg
-        pushDiag('LOGO 布局已保存为默认配置')
+        pushDiag(t('diagnostics.logoLayoutSavedDefault'))
       } catch (err) {
-        pushDiag(`保存 LOGO 布局失败：${formatError(err)}`)
+        pushDiag(t('diagnostics.logoLayoutSaveFailed', { message: formatError(err) }))
       }
     }, 400)
   },
@@ -538,7 +541,7 @@ function onLogoEditorSave(
   recentLogos.value = nextRecent
   logoLayouts.value = nextLogoLayouts
   logoEditorOpen.value = false
-  pushDiag(`LOGO 配置已保存：${layout.path}`)
+  pushDiag(t('diagnostics.logoConfigSaved', { path: layout.path }))
   // 关闭时清理后端抽帧缓存（异步，失败可忽略）
   void clearFrameCache().catch(() => undefined)
 }
@@ -641,13 +644,13 @@ onUnmounted(() => {
 <template>
   <main class="workspace" :class="{ 'initial-drop-workspace': isInitialDropOnly }">
     <div v-if="!isInitialDropOnly && ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
-      <strong>正在检测 ffmpeg 环境</strong>
-      <span>正在检测 ffmpeg / ffprobe / subtitles/libass，请稍候。</span>
+      <strong>{{ t('ffmpegPanel.checkingTitle') }}</strong>
+      <span>{{ t('ffmpegPanel.checkingSubtitleWithLibass') }}</span>
     </div>
     <div v-else-if="!isInitialDropOnly && !loading && ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
-      <strong>{{ ffmpegStatus.ffmpegPath ? 'ffmpeg 功能不完整' : '未检测到 ffmpeg' }}</strong>
-      <span>{{ ffmpegStatus.message ?? '请前往左侧「设置」面板配置 ffmpeg 路径，或安装后将其加入系统 PATH。' }}</span>
-      <button class="secondary" @click="refreshFfmpeg">重新检测</button>
+      <strong>{{ ffmpegStatus.ffmpegPath ? t('ffmpegPanel.incomplete') : t('ffmpegPanel.missing') }}</strong>
+      <span>{{ ffmpegStatus.message ?? t('ffmpegPanel.missingHelp') }}</span>
+      <button class="secondary" @click="refreshFfmpeg">{{ t('ffmpegPanel.refresh') }}</button>
     </div>
 
     <VideoMetaCard
@@ -696,13 +699,13 @@ onUnmounted(() => {
         class="secondary command-toggle"
         :class="{ active: showCommandPreview }"
         :disabled="!command.length"
-        v-tooltip="command.length ? '' : '等待视频与参数就绪后自动生成命令'"
+        v-tooltip="command.length ? '' : t('home.commandPreviewDisabledTip')"
         @click="showCommandPreview = !showCommandPreview"
       >
-        {{ showCommandPreview ? '隐藏命令预览' : '显示命令预览' }}
+        {{ showCommandPreview ? t('common.hideCommandPreview') : t('common.showCommandPreview') }}
       </button>
-      <button v-if="running" class="danger" @click="cancelJob">取消压制</button>
-      <button v-else :disabled="!ffmpegStatus?.available" @click="runJob">开始压制</button>
+      <button v-if="running" class="danger" @click="cancelJob">{{ t('home.cancel') }}</button>
+      <button v-else :disabled="!ffmpegStatus?.available" @click="runJob">{{ t('home.start') }}</button>
     </section>
 
     <JobLogPanel
@@ -742,26 +745,26 @@ onUnmounted(() => {
       <section class="avs-staging-dialog" role="dialog" aria-modal="true" aria-labelledby="avs-staging-title">
         <div class="avs-staging-icon" aria-hidden="true">!</div>
         <div class="avs-staging-content">
-          <p class="avs-staging-kicker">AVS 兼容模式</p>
-          <h2 id="avs-staging-title">需要临时复制 VP9 源视频</h2>
+          <p class="avs-staging-kicker">{{ t('home.avsStaging.kicker') }}</p>
+          <h2 id="avs-staging-title">{{ t('home.avsStaging.title') }}</h2>
           <p class="avs-staging-summary">
-            检测到 VP9 视频。本次会先把源视频复制到 ASCII 临时路径，再通过本机 64 位 DirectShow 解码链读取视频；通常需要 64 位 LAV Filters。
+            {{ t('home.avsStaging.summary') }}
           </p>
 
           <dl class="avs-staging-facts">
             <div>
-              <dt>临时占用</dt>
+              <dt>{{ t('home.avsStaging.tempSize') }}</dt>
               <dd>{{ avsStagingPlan.sourceSizeLabel }}</dd>
             </div>
             <div class="avs-staging-path">
-              <span>临时路径</span>
+              <span>{{ t('home.avsStaging.tempPath') }}</span>
               <code>{{ avsStagingPlan.tempPath }}</code>
             </div>
           </dl>
 
           <div class="avs-staging-actions">
-            <button class="secondary" type="button" @click="resolveAvsStagingConfirm(false)">取消</button>
-            <button type="button" @click="resolveAvsStagingConfirm(true)">继续压制</button>
+            <button class="secondary" type="button" @click="resolveAvsStagingConfirm(false)">{{ t('common.cancel') }}</button>
+            <button type="button" @click="resolveAvsStagingConfirm(true)">{{ t('home.avsStaging.continue') }}</button>
           </div>
         </div>
       </section>

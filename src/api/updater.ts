@@ -1,5 +1,6 @@
 import type { AppUpdateInfo } from '../types'
 import appPackage from '../../package.json'
+import { t } from '../i18n'
 
 const UPDATE_MANIFEST_URL = 'https://chinshry.github.io/CSubtitleWorkstation/updates/latest.json'
 
@@ -19,12 +20,12 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
   const response = await fetch(UPDATE_MANIFEST_URL, { cache: 'no-store' })
 
   if (!response.ok) {
-    throw new Error(`更新服务器返回 ${response.status}`)
+    throw new Error(t('update.error.serverStatus', { status: response.status }))
   }
 
   const manifest = (await response.json()) as UpdateManifest
   if (!manifest.version) {
-    throw new Error('更新清单缺少 version 字段')
+    throw new Error(t('update.error.missingVersion'))
   }
 
   const platform = manifest.platforms?.['windows-x86_64'] ?? Object.values(manifest.platforms ?? {})[0]

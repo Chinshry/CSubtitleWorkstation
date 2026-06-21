@@ -7,6 +7,7 @@ import {
   writeCachedAvsStatus,
   writeCachedLavFiltersStatus
 } from '../utils/environmentCache'
+import { t } from '../i18n'
 
 const realStatus = ref<AvsStatus | null>(null)
 const realLavStatus = ref<LavFiltersStatus | null>(null)
@@ -103,10 +104,10 @@ export const avsStatus = computed<AvsStatus | null>(() => {
 
   next.available = next.ffmpegDemuxerAvailable && next.avisynthInstalled
   const parts: string[] = []
-  if (avisynthMissingMock.value) parts.push('AviSynth+ 缺失')
-  if (demuxerMissingMock.value) parts.push('ffmpeg avisynth demuxer 缺失')
-  if (lavFiltersMissingMock.value) parts.push('LAV Filters 缺失')
-  next.message = `[调试] 模拟 ${parts.join(' + ')}`
+  if (avisynthMissingMock.value) parts.push(t('settings.debug.mockAvisynthMissingShort'))
+  if (demuxerMissingMock.value) parts.push(t('settings.debug.mockAvsDemuxerMissingShort'))
+  if (lavFiltersMissingMock.value) parts.push(t('settings.debug.mockLavFiltersMissingShort'))
+  next.message = t('debugMock.avs', { parts: parts.join(' + ') })
   return next
 })
 

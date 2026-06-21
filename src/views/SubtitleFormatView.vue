@@ -13,6 +13,7 @@ import CommandPreviewCard from '../components/CommandPreviewCard.vue'
 import CommandTaskActions from '../components/CommandTaskActions.vue'
 import JobLogPanel from '../components/JobLogPanel.vue'
 import PathPickerField from '../components/PathPickerField.vue'
+import { useI18n } from '../i18n'
 
 const inputPath = ref('')
 const outputPath = ref('')
@@ -23,6 +24,7 @@ const running = ref(false)
 const jobFailed = ref(false)
 const showCommandPreview = ref(false)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
+const { t } = useI18n()
 
 const formatOptions: { value: SubtitleTargetFormat; label: string }[] = [
   { value: 'srt', label: 'SRT' },
@@ -37,15 +39,15 @@ const outputConflictsWithInput = computed(() => (
 ))
 
 const runDisabledTip = computed(() => {
-  if (ffmpegChecking.value) return '正在检测 ffmpeg'
-  if (ffmpegStatus.value && !ffmpegStatus.value.available) return '请先在设置页配置可用的 ffmpeg'
-  if (!inputPath.value.trim()) return '请选择输入字幕'
-  if (!outputPath.value.trim()) return '请选择输出字幕路径'
-  if (outputConflictsWithInput.value) return '输出路径不能和输入字幕相同'
-  return '可以开始转换'
+  if (ffmpegChecking.value) return t('subtitleFormat.disabled.checking')
+  if (ffmpegStatus.value && !ffmpegStatus.value.available) return t('subtitleFormat.disabled.ffmpegUnavailable')
+  if (!inputPath.value.trim()) return t('subtitleFormat.disabled.input')
+  if (!outputPath.value.trim()) return t('subtitleFormat.disabled.output')
+  if (outputConflictsWithInput.value) return t('subtitleFormat.disabled.conflict')
+  return t('subtitleFormat.ready')
 })
 
-const canRun = computed(() => runDisabledTip.value === '可以开始转换')
+const canRun = computed(() => runDisabledTip.value === t('subtitleFormat.ready'))
 const failed = computed(() => jobFailed.value)
 const completed = computed(() => !running.value && logs.value.length > 0 && !failed.value)
 const progressPercent = computed(() => {
@@ -93,7 +95,7 @@ function isSubtitlePath(path: string) {
 function outputForInput(path: string) {
   if (!path.trim()) return ''
   const parts = splitPath(path)
-  const file = `${parts.stem} 转换.${targetFormat.value}`
+  const file = t('subtitleFormat.outputFile', { stem: parts.stem, format: targetFormat.value })
   return parts.dir ? `${parts.dir}${parts.sep}${file}` : file
 }
 
@@ -119,9 +121,9 @@ function applyDroppedPaths(paths: string[], subtitlePath?: string) {
 async function pickInputFile() {
   if (running.value) return
   const selected = await open({
-    title: '选择要转换格式的字幕',
+    title: t('subtitleFormat.dialog.inputTitle'),
     multiple: false,
-    filters: [{ name: '字幕', extensions: ['ass', 'ssa', 'srt', 'vtt', 'sub'] }]
+    filters: [{ name: t('subtitleFormat.dialog.subtitleFilter'), extensions: ['ass', 'ssa', 'srt', 'vtt', 'sub'] }]
   })
   if (typeof selected === 'string') {
     inputPath.value = selected
@@ -132,7 +134,7 @@ async function pickInputFile() {
 async function pickOutputPath() {
   if (running.value) return
   const selected = await save({
-    title: '选择输出字幕路径',
+    title: t('subtitleFormat.dialog.outputTitle'),
     defaultPath: outputPath.value || outputForInput(inputPath.value) || `subtitle.${targetFormat.value}`,
     filters: [{ name: targetFormat.value.toUpperCase(), extensions: [targetFormat.value] }]
   })
@@ -162,7 +164,7 @@ async function runJob() {
   try {
     await previewCommand()
     const result = await convertSubtitleFormat(createJob())
-    logs.value = result.logs.length ? result.logs : [`已输出：${result.outputPath}`]
+    logs.value = result.logs.length ? result.logs : [t('subtitleFormat.outputLog', { path: result.outputPath })]
   } catch (error) {
     jobFailed.value = true
     logs.value = formatError(error).split('\n').filter(Boolean)
@@ -207,34 +209,34 @@ onUnmounted(() => {
 <template>
   <section class="subtitle-format-workspace">
     <div v-if="ffmpegChecking" class="ffmpeg-missing ffmpeg-checking">
-      <strong>正在检测 ffmpeg 环境</strong>
-      <span>正在检测 ffmpeg / ffprobe，请稍候。</span>
+      <strong>{{ t('ffmpegPanel.checkingTitle') }}</strong>
+      <span>{{ t('ffmpegPanel.checkingSubtitle') }}</span>
     </div>
     <div v-else-if="ffmpegStatus && !ffmpegStatus.available" class="ffmpeg-missing">
-      <strong>{{ ffmpegStatus.ffmpegPath ? 'ffmpeg 功能不完整' : '未检测到 ffmpeg' }}</strong>
-      <span>{{ ffmpegStatus.message ?? '请前往左侧「设置」面板配置 ffmpeg 路径，或安装后将其加入系统 PATH。' }}</span>
-      <button class="secondary" @click="refreshFfmpeg">重新检测</button>
+      <strong>{{ ffmpegStatus.ffmpegPath ? t('ffmpegPanel.incomplete') : t('ffmpegPanel.missing') }}</strong>
+      <span>{{ ffmpegStatus.message ?? t('ffmpegPanel.missingHelp') }}</span>
+      <button class="secondary" @click="refreshFfmpeg">{{ t('ffmpegPanel.refresh') }}</button>
     </div>
 
     <section class="panel subtitle-format-panel" :class="{ 'is-empty': !inputPath, 'drag-target': globalDragActive }">
       <div v-if="!inputPath" class="tool-dropzone">
         <div class="dropzone-icon">⬇︎</div>
-        <div class="dropzone-title">拖入字幕开始转换</div>
+        <div class="dropzone-title">{{ t('subtitleFormat.dropzone.title') }}</div>
         <div class="dropzone-sub">
-          <span class="dropzone-note">支持 ASS / SSA / SRT / VTT / SUB</span>
+          <span class="dropzone-note">{{ t('subtitleFormat.dropzone.note') }}</span>
           <br />
-          选择目标格式后会自动生成输出路径；转换到 SRT / VTT 时会简化不支持的样式。
+          {{ t('subtitleFormat.dropzone.description') }}
         </div>
         <div class="dropzone-actions">
-          <button class="secondary" type="button" @click="pickInputFile">选择字幕</button>
+          <button class="secondary" type="button" @click="pickInputFile">{{ t('subtitleFormat.dropzone.choose') }}</button>
         </div>
       </div>
 
       <div v-else class="subtitle-format-grid">
         <PathPickerField
           v-model="inputPath"
-          label="输入字幕"
-          placeholder="选择 ass / ssa / srt / vtt / sub 字幕文件"
+          :label="t('subtitleFormat.inputLabel')"
+          :placeholder="t('subtitleFormat.inputPlaceholder')"
           :disabled="running"
           compact
           compact-action="clear"
@@ -243,19 +245,19 @@ onUnmounted(() => {
         />
 
         <label class="format-field">
-          <span>目标格式</span>
+          <span>{{ t('subtitleFormat.targetFormat') }}</span>
           <AppSelect
             v-model="targetFormat"
             :disabled="running"
-            title="选择输出字幕格式"
+            :title="t('subtitleFormat.targetFormatTitle')"
             :options="formatOptions"
           />
         </label>
 
         <PathPickerField
           v-model="outputPath"
-          label="输出字幕"
-          placeholder="选择输出字幕路径"
+          :label="t('subtitleFormat.outputLabel')"
+          :placeholder="t('subtitleFormat.outputPlaceholder')"
           :disabled="running || !inputPath"
           compact
           compact-action="edit"
@@ -264,13 +266,13 @@ onUnmounted(() => {
       </div>
 
       <p v-if="outputConflictsWithInput" class="form-warning">
-        输出路径不能和输入字幕相同，请选择一个新文件。
+        {{ t('subtitleFormat.conflictWarning') }}
       </p>
 
       <div class="tool-note">
-        <strong>处理说明</strong>
-        <span>ASS / SSA 保留样式能力更强；SRT / VTT 更通用，但只能表达基础文本和时间轴。</span>
-        <span>如果源字幕包含复杂定位、特效、字体样式，转换成 SRT / VTT 后这些信息会按目标格式能力被简化。</span>
+        <strong>{{ t('subtitleFormat.noteTitle') }}</strong>
+        <span>{{ t('subtitleFormat.noteAss') }}</span>
+        <span>{{ t('subtitleFormat.noteSimplify') }}</span>
       </div>
     </section>
 
@@ -281,19 +283,19 @@ onUnmounted(() => {
       :command="command"
       :running="running"
       :can-run="canRun"
-      start-label="开始转换"
-      cancel-label="取消转换"
-      running-label="转换中..."
+      :start-label="t('subtitleFormat.start')"
+      :cancel-label="t('subtitleFormat.cancel')"
+      :running-label="t('subtitleFormat.running')"
       :cancelable="false"
-      preview-disabled-tip="选择输入和输出后自动生成命令"
+      :preview-disabled-tip="t('common.commandPreviewDisabledTip')"
       :run-disabled-tip="runDisabledTip"
       @run="runJob"
     />
 
     <JobLogPanel
-      title="转换进度"
-      idle-title="尚未开始转换"
-      idle-tip="选择输入、目标格式和输出路径后点击上方「开始转换」。"
+      :title="t('subtitleFormat.progressTitle')"
+      :idle-title="t('subtitleFormat.idleTitle')"
+      :idle-tip="t('subtitleFormat.idleTip')"
       :lines="logs"
       :command="command"
       :percent="progressPercent"

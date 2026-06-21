@@ -32,7 +32,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   windows: 'Windows',
   macos: 'macOS',
   linux: 'Linux',
-  other: '其它平台'
+  other: 'Other Platform'
 }
 
 export function platformLabel(value: Platform): string {

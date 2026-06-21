@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { checkAppUpdate } from '../api/updater'
 import type { AppUpdateInfo } from '../types'
+import { t } from '../i18n'
 
 export type UpdateState = 'idle' | 'success' | 'error' | 'progress'
 
@@ -23,7 +24,7 @@ export async function refreshAppUpdate(options: { silent?: boolean } = {}) {
   updateChecking.value = true
   updateState.value = 'progress'
   if (!options.silent) {
-    updateMessage.value = '正在连接更新服务器...'
+    updateMessage.value = t('update.message.connecting')
   }
 
   try {
@@ -31,15 +32,15 @@ export async function refreshAppUpdate(options: { silent?: boolean } = {}) {
     updateInfo.value = info
     updateState.value = info.available ? 'success' : 'idle'
     if (info.available) {
-      updateMessage.value = `发现新版本：${info.latestVersion}`
+      updateMessage.value = t('update.message.available', { version: info.latestVersion })
     } else if (!options.silent) {
-      updateMessage.value = '当前已是最新版本'
+      updateMessage.value = t('update.message.latest')
     }
     return info
   } catch (err) {
     updateState.value = 'error'
     if (!options.silent) {
-      updateMessage.value = formatUpdateError(err, '检查')
+      updateMessage.value = formatUpdateError(err)
     }
     return null
   } finally {
@@ -47,11 +48,11 @@ export async function refreshAppUpdate(options: { silent?: boolean } = {}) {
   }
 }
 
-function formatUpdateError(err: unknown, action: '检查') {
+function formatUpdateError(err: unknown) {
   const raw = err instanceof Error ? err.message : String(err)
-  const message = raw.replace(/^检查更新失败[:：]?\s*/u, '')
+  const message = raw.trim()
   if (/failed to fetch|networkerror|load failed/i.test(message)) {
-    return `更新${action}失败：无法访问更新清单，请确认 GitHub Pages 已启用，且 docs/updates/latest.json 已提交并推送到远程仓库。`
+    return t('update.error.manifestUnavailable')
   }
-  return `更新${action}失败：${message}`
+  return t('update.error.generic', { message })
 }

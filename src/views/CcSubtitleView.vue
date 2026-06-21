@@ -15,6 +15,7 @@ import { useToast } from '../composables/useToast'
 import { globalDragActive, pendingDrop, pushDiag } from '../stores/dropStore'
 import type { CcStyleProfile, CcSubtitleConfig } from '../types'
 import { parseRuleDictionary, serializeValidRuleDictionary } from '../utils/ruleDictionary'
+import { useI18n } from '../i18n'
 
 const INPUT_PREVIEW_LIMIT = 200_000
 const RESULT_PREVIEW_LIMIT = 200_000
@@ -44,6 +45,7 @@ const ccGrid = ref<HTMLDivElement | null>(null)
 const sourcePanePercent = ref(50)
 const resizing = ref(false)
 const toast = useToast()
+const { t } = useI18n()
 let organizeTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
 let organizeSeq = 0
@@ -73,9 +75,9 @@ const currentStyleProfile = computed(() => {
   return styleProfiles.value.find((profile) => profile.id === selectedStyleProfileId.value) ?? null
 })
 const styleProfileSummary = computed(() => {
-  if (!currentStyleProfile.value) return '尚未配置样式方案'
-  if (!styleReady.value) return '请选择听轴样式和花字样式'
-  return `听轴 ${speakStyleName.value} / 花字 ${screenStyleName.value}`
+  if (!currentStyleProfile.value) return t('ccSubtitle.style.noProfile')
+  if (!styleReady.value) return t('ccSubtitle.style.chooseStyles')
+  return t('ccSubtitle.style.summary', { speak: speakStyleName.value, screen: screenStyleName.value })
 })
 const styleOptions = computed(() => activeStyleNames.value.map((style) => ({ value: style, label: style })))
 const replacementRuleCount = computed(() => replacementRules.value.length)
@@ -167,7 +169,7 @@ function scheduleOrganize() {
   }
   if (!styleReady.value) {
     result.value = null
-    statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式。'
+    statusText.value = t('ccSubtitle.status.needStyle')
     return
   }
   organizeTimer = setTimeout(() => {
@@ -187,7 +189,7 @@ async function organizeCurrentText() {
     await ensureReplacementDictionaryLoaded()
     if (!styleReady.value) {
       result.value = null
-      statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式。'
+      statusText.value = t('ccSubtitle.status.needStyle')
       return
     }
     const next = await organizeCcSubtitleText(
@@ -203,7 +205,7 @@ async function organizeCurrentText() {
   } catch (err) {
     if (seq !== organizeSeq) return
     statusText.value = String(err)
-    toast.error('CC 字幕整理失败', 2200)
+    toast.error(t('ccSubtitle.toast.organizeFailed'), 2200)
   } finally {
     organizing.value = false
     organizeInFlight = false
@@ -231,8 +233,8 @@ async function createStyleProfileFromAss() {
     const text = await readCcSubtitleFile(selected)
     const styles = parseAssStyleNames(text)
     if (!styles.length) {
-      statusText.value = '没有在样式参考 ASS 的 [V4+ Styles] 中解析到样式。'
-      toast.error('未解析到样式', 2200)
+      statusText.value = t('ccSubtitle.status.noStylesParsed')
+      toast.error(t('ccSubtitle.toast.noStylesParsed'), 2200)
       return
     }
     pendingStyleProfileAssHeader.value = extractReusableAssHeader(text)
@@ -241,7 +243,7 @@ async function createStyleProfileFromAss() {
     styleProfileNameOpen.value = true
   } catch (err) {
     statusText.value = String(err)
-    toast.error('读取样式失败', 2200)
+    toast.error(t('ccSubtitle.toast.readStyleFailed'), 2200)
   } finally {
     busy.value = false
   }
@@ -274,8 +276,8 @@ function confirmStyleProfileName() {
     selectedStyleProfileId.value = profile.id
     applySelectedStyleProfile()
     result.value = null
-    statusText.value = `已新建样式方案「${name}」，请选择听轴样式和花字样式。`
-    toast.success('已新建样式方案', 1600)
+    statusText.value = t('ccSubtitle.status.profileCreated', { name })
+    toast.success(t('ccSubtitle.toast.profileCreated'), 1600)
     scheduleOrganize()
   } else {
     const current = currentStyleProfile.value
@@ -292,7 +294,7 @@ function confirmStyleProfileName() {
 function deleteCurrentStyleProfile() {
   const current = currentStyleProfile.value
   if (!current) return
-  if (!confirm(`删除样式方案「${current.name}」？`)) return
+  if (!confirm(t('ccSubtitle.confirmDeleteProfile', { name: current.name }))) return
   const next = styleProfiles.value.filter((profile) => profile.id !== current.id)
   styleProfiles.value = next
   selectedStyleProfileId.value = next[0]?.id ?? ''
@@ -335,7 +337,7 @@ function normalizeStyleProfiles(profiles: CcStyleProfile[]) {
   return profiles
     .map((profile) => ({
       id: profile.id || crypto.randomUUID(),
-      name: profile.name?.trim() || '未命名方案',
+      name: profile.name?.trim() || t('ccSubtitle.style.untitled'),
       assHeader: profile.assHeader ?? '',
       screenStyleName: profile.screenStyleName ?? '',
       speakStyleName: profile.speakStyleName ?? ''
@@ -350,19 +352,19 @@ function basenameWithoutExtension(path: string) {
 }
 
 function describeStyleProfile(profile: CcStyleProfile) {
-  const speak = profile.speakStyleName || '未选听轴'
-  const screen = profile.screenStyleName || '未选花字'
+  const speak = profile.speakStyleName || t('ccSubtitle.style.speakUnset')
+  const screen = profile.screenStyleName || t('ccSubtitle.style.screenUnset')
   return `${speak} / ${screen}`
 }
 
 async function loadFile(path: string) {
   if (!styleReady.value) {
-    statusText.value = '请先读取样式参考 ASS，并选择听轴样式和花字样式，再导入需要整理的 SRT。'
-    toast.error('请先读取样式', 2200)
+    statusText.value = t('ccSubtitle.status.needStyleBeforeImport')
+    toast.error(t('ccSubtitle.toast.needStyle'), 2200)
     return
   }
   busy.value = true
-  statusText.value = '正在读取字幕文件...'
+  statusText.value = t('ccSubtitle.status.readingSubtitle')
   try {
     await ensureReplacementDictionaryLoaded()
     const text = await readCcSubtitleFile(path)
@@ -372,7 +374,7 @@ async function loadFile(path: string) {
     await organizeCurrentText()
   } catch (err) {
     statusText.value = String(err)
-    toast.error('读取字幕失败', 2200)
+    toast.error(t('ccSubtitle.toast.readSubtitleFailed'), 2200)
   } finally {
     busy.value = false
   }
@@ -435,7 +437,7 @@ function uniqueStyleNames(values: string[]) {
 
 function previewText(text: string, limit: number) {
   if (text.length <= limit) return text
-  return `${text.slice(0, limit)}\n\n... 已省略预览 ${formatCount(text.length - limit)} 字，复制和导出仍使用完整内容。`
+  return `${text.slice(0, limit)}\n\n${t('ccSubtitle.previewTruncated', { count: formatCount(text.length - limit) })}`
 }
 
 function formatCount(count: number) {
@@ -484,9 +486,9 @@ async function copyResult() {
   if (!resultText.value) return
   try {
     await navigator.clipboard.writeText(resultText.value)
-    toast.success('已复制', 1600)
+    toast.success(t('common.copied'), 1600)
   } catch {
-    toast.error('复制失败', 2200)
+    toast.error(t('common.copyFailed'), 2200)
   }
 }
 
@@ -502,7 +504,7 @@ function clearText() {
 async function exportAs() {
   if (!resultText.value || busy.value) return
   const outputPath = await save({
-    title: '导出 CC 字幕整理结果',
+    title: t('ccSubtitle.dialog.exportTitle'),
     defaultPath: buildDefaultExportPath(pendingFilePath.value),
     filters: [
       { name: 'ASS subtitles', extensions: ['ass', 'ssa'] },
@@ -514,11 +516,11 @@ async function exportAs() {
   busy.value = true
   try {
     const saved = await saveCcSubtitleToPath(outputPath, resultText.value)
-    statusText.value = `已导出：${saved.outputPath}`
-    toast.success('已导出', 1800)
+    statusText.value = t('ccSubtitle.status.exported', { path: saved.outputPath })
+    toast.success(t('ccSubtitle.toast.exported'), 1800)
   } catch (err) {
     statusText.value = String(err)
-    toast.error('导出失败', 2200)
+    toast.error(t('ccSubtitle.toast.exportFailed'), 2200)
   } finally {
     busy.value = false
   }
@@ -531,7 +533,7 @@ function buildDefaultExportPath(sourcePath: string) {
   const fileName = separatorIndex >= 0 ? sourcePath.slice(separatorIndex + 1) : sourcePath
   const dotIndex = fileName.lastIndexOf('.')
   const stem = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName
-  return `${directory}${stem}_cc整理.ass`
+  return `${directory}${stem}${t('ccSubtitle.outputSuffix')}.ass`
 }
 
 watch([sourceText, replacementEnabled, screenStyleName, speakStyleName], scheduleOrganize)
@@ -573,7 +575,7 @@ onUnmounted(() => {
 
 <template>
   <section class="cc-subtitle-workspace">
-    <div v-if="globalDragActive" class="drop-overlay">松开以读取 ASS / SSA / SRT 字幕</div>
+    <div v-if="globalDragActive" class="drop-overlay">{{ t('ccSubtitle.dropOverlay') }}</div>
 
     <section class="panel cc-panel">
       <div class="cc-toolbar">
@@ -581,26 +583,26 @@ onUnmounted(() => {
           <p v-if="statusText" class="cc-status-summary">{{ statusText }}</p>
         </div>
         <div class="cc-actions">
-          <section class="cc-summary-group style-summary-group" aria-label="样式方案">
+          <section class="cc-summary-group style-summary-group" :aria-label="t('ccSubtitle.style.title')">
             <div>
-              <strong>{{ currentStyleProfile?.name ?? '未配置样式方案' }}</strong>
+              <strong>{{ currentStyleProfile?.name ?? t('ccSubtitle.style.noProfile') }}</strong>
               <span>{{ styleProfileSummary }}</span>
             </div>
-            <button type="button" class="secondary summary-action" @click="openStyleProfileDialog">配置样式方案</button>
+            <button type="button" class="secondary summary-action" @click="openStyleProfileDialog">{{ t('ccSubtitle.style.configure') }}</button>
           </section>
 
-          <section class="cc-summary-group dictionary-group" aria-label="替换词库">
+          <section class="cc-summary-group dictionary-group" :aria-label="t('ccSubtitle.dictionary.title')">
             <div>
-              <strong>替换词库</strong>
-              <span>{{ replacementRuleCount }} 条规则 · {{ replacementEnabled ? '已启用' : '未启用' }}</span>
+              <strong>{{ t('ccSubtitle.dictionary.title') }}</strong>
+              <span>{{ t('ccSubtitle.dictionary.summary', { count: replacementRuleCount, status: replacementEnabled ? t('ccSubtitle.dictionary.enabled') : t('ccSubtitle.dictionary.disabled') }) }}</span>
             </div>
             <div class="dictionary-row">
               <label class="switch-row">
                 <input v-model="replacementEnabled" type="checkbox" />
                 <span class="switch"></span>
-                <span>启用</span>
+                <span>{{ t('ccSubtitle.dictionary.enable') }}</span>
               </label>
-              <button type="button" class="secondary summary-action" @click="openDictionary">编辑</button>
+              <button type="button" class="secondary summary-action" @click="openDictionary">{{ t('common.edit') }}</button>
             </div>
           </section>
         </div>
@@ -614,11 +616,11 @@ onUnmounted(() => {
       >
         <div class="cc-field">
           <span class="field-head">
-            <strong>输入</strong>
+            <strong>{{ t('ccSubtitle.input') }}</strong>
             <span class="field-tools">
-              <small>{{ formatCount(sourceCount) }} 字</small>
-              <small v-if="sourcePreviewTruncated">仅预览前 {{ formatCount(INPUT_PREVIEW_LIMIT) }} 字</small>
-              <button class="field-tool" type="button" :disabled="!styleReady || !sourceText || busy" @click="clearText">清空</button>
+              <small>{{ t('ccSubtitle.charCount', { count: formatCount(sourceCount) }) }}</small>
+              <small v-if="sourcePreviewTruncated">{{ t('ccSubtitle.previewLimit', { count: formatCount(INPUT_PREVIEW_LIMIT) }) }}</small>
+              <button class="field-tool" type="button" :disabled="!styleReady || !sourceText || busy" @click="clearText">{{ t('common.clear') }}</button>
             </span>
           </span>
           <textarea
@@ -626,7 +628,7 @@ onUnmounted(() => {
             spellcheck="false"
             readonly
             aria-readonly="true"
-            placeholder="拖入 ASS / SSA / SRT 字幕文件后在这里预览内容"
+            :placeholder="t('ccSubtitle.inputPlaceholder')"
           ></textarea>
         </div>
 
@@ -635,19 +637,19 @@ onUnmounted(() => {
           class="pane-resizer"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整输入和结果宽度"
+          :aria-label="t('ccSubtitle.resizeLabel')"
           @pointerdown.prevent="startPaneResize"
         ></button>
 
         <div class="cc-field">
           <span class="field-head">
-            <strong>结果</strong>
+            <strong>{{ t('ccSubtitle.result') }}</strong>
             <span class="field-tools">
-              <small v-if="organizing">整理中...</small>
-              <small>{{ formatCount(resultCount) }} 字</small>
-              <small v-if="resultPreviewTruncated">仅预览前 {{ formatCount(RESULT_PREVIEW_LIMIT) }} 字</small>
-              <button class="field-tool" type="button" :disabled="!styleReady || !hasResult" @click="copyResult">复制</button>
-              <button class="field-tool primary" type="button" :disabled="!styleReady || !hasResult || busy || organizing" @click="exportAs">导出</button>
+              <small v-if="organizing">{{ t('ccSubtitle.organizing') }}</small>
+              <small>{{ t('ccSubtitle.charCount', { count: formatCount(resultCount) }) }}</small>
+              <small v-if="resultPreviewTruncated">{{ t('ccSubtitle.previewLimit', { count: formatCount(RESULT_PREVIEW_LIMIT) }) }}</small>
+              <button class="field-tool" type="button" :disabled="!styleReady || !hasResult" @click="copyResult">{{ t('common.copy') }}</button>
+              <button class="field-tool primary" type="button" :disabled="!styleReady || !hasResult || busy || organizing" @click="exportAs">{{ t('common.export') }}</button>
             </span>
           </span>
           <pre class="cc-result">{{ resultPreviewText }}</pre>
@@ -659,34 +661,34 @@ onUnmounted(() => {
     <RuleDictionaryModal
       v-model:open="dictionaryOpen"
       v-model="replacementDictionary"
-      title="自定义词库"
-      description="维护 CC 说话人和台词里的名称规则，整理字幕时会把命中的文本替换为标准写法。"
-      target-label="标准写法"
-      pattern-label="匹配规则(支持正则)"
-      target-placeholder="例如 示例名称"
-      pattern-placeholder="例如 (?i)EXAMPLE\\s*NAME"
-      raw-placeholder="&quot;示例名称&quot; = &quot;(?i)EXAMPLE\\s*NAME&quot;"
-      ariaLabel="CC 字幕自定义词库"
+      :title="t('ccSubtitle.dictionary.modalTitle')"
+      :description="t('ccSubtitle.dictionary.description')"
+      :target-label="t('ccSubtitle.dictionary.targetLabel')"
+      :pattern-label="t('ccSubtitle.dictionary.patternLabel')"
+      :target-placeholder="t('ccSubtitle.dictionary.targetPlaceholder')"
+      :pattern-placeholder="t('ccSubtitle.dictionary.patternPlaceholder')"
+      :raw-placeholder="t('ccSubtitle.dictionary.rawPlaceholder')"
+      :ariaLabel="t('ccSubtitle.dictionary.ariaLabel')"
     />
 
     <div v-if="styleProfileOpen" class="style-profile-modal app-modal-active" role="presentation" @click.self="styleProfileOpen = false">
       <section class="style-profile-dialog" role="dialog" aria-modal="true" aria-labelledby="style-profile-title">
         <header class="style-profile-dialog-head">
           <div>
-            <h2 id="style-profile-title">样式方案</h2>
-            <p>为不同字幕组保存参考 ASS 模板和默认听轴/花字样式。</p>
+            <h2 id="style-profile-title">{{ t('ccSubtitle.style.title') }}</h2>
+            <p>{{ t('ccSubtitle.style.description') }}</p>
           </div>
-          <button type="button" class="secondary close-action" @click="styleProfileOpen = false">关闭</button>
+          <button type="button" class="secondary close-action" @click="styleProfileOpen = false">{{ t('common.close') }}</button>
         </header>
 
         <div v-if="styleProfiles.length" class="style-profile-manager">
-          <aside class="style-profile-list" aria-label="样式方案列表">
+          <aside class="style-profile-list" :aria-label="t('ccSubtitle.style.listLabel')">
             <div class="style-profile-list-toolbar">
               <button type="button" class="style-profile-list-create" :disabled="busy" @click="createStyleProfileFromAss">
                 <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                新建
+                {{ t('common.create') }}
               </button>
             </div>
             <div
@@ -702,14 +704,14 @@ onUnmounted(() => {
               >
                 <strong>{{ profile.name }}</strong>
                 <span>{{ describeStyleProfile(profile) }}</span>
-                <small>{{ parseAssStyleNames(profile.assHeader).length }} 个样式</small>
+                <small>{{ t('ccSubtitle.style.styleCount', { count: parseAssStyleNames(profile.assHeader).length }) }}</small>
               </button>
               <div class="style-profile-list-actions">
                 <button
                   type="button"
                   class="style-profile-mini-action"
-                  v-tooltip="'改名'"
-                  aria-label="改名"
+                  v-tooltip="t('common.rename')"
+                  :aria-label="t('common.rename')"
                   :disabled="busy"
                   @click.stop="selectedStyleProfileId = profile.id; renameCurrentStyleProfile()"
                 >
@@ -721,8 +723,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="style-profile-mini-action danger"
-                  v-tooltip="'删除'"
-                  aria-label="删除"
+                  v-tooltip="t('common.delete')"
+                  :aria-label="t('common.delete')"
                   :disabled="busy"
                   @click.stop="selectedStyleProfileId = profile.id; deleteCurrentStyleProfile()"
                 >
@@ -738,26 +740,26 @@ onUnmounted(() => {
             <div class="style-profile-editor-head">
               <div>
                 <strong>{{ currentStyleProfile?.name }}</strong>
-                <span>{{ activeStyleNames.length }} 个样式</span>
+                <span>{{ t('ccSubtitle.style.styleCount', { count: activeStyleNames.length }) }}</span>
               </div>
             </div>
 
             <div class="style-profile-fields">
               <label class="style-select style-select-control">
-                <span>听轴样式</span>
+                <span>{{ t('ccSubtitle.style.speakStyle') }}</span>
                 <AppSelect
                   v-model="speakStyleName"
                   :options="styleOptions"
-                  placeholder="未选择"
+                  :placeholder="t('common.unselected')"
                   :disabled="!activeStyleNames.length || busy"
                 />
               </label>
               <label class="style-select style-select-control">
-                <span>花字样式</span>
+                <span>{{ t('ccSubtitle.style.screenStyle') }}</span>
                 <AppSelect
                   v-model="screenStyleName"
                   :options="styleOptions"
-                  placeholder="未选择"
+                  :placeholder="t('common.unselected')"
                   :disabled="!activeStyleNames.length || busy"
                 />
               </label>
@@ -766,9 +768,9 @@ onUnmounted(() => {
         </div>
 
         <div v-else class="style-profile-empty">
-          <strong>尚未配置样式方案</strong>
-          <p>新建时会选择一个参考 ASS / SSA 文件，并用文件名作为默认方案名。</p>
-          <button type="button" :disabled="busy" @click="createStyleProfileFromAss">新建样式方案</button>
+          <strong>{{ t('ccSubtitle.style.noProfile') }}</strong>
+          <p>{{ t('ccSubtitle.style.emptyDescription') }}</p>
+          <button type="button" :disabled="busy" @click="createStyleProfileFromAss">{{ t('ccSubtitle.style.create') }}</button>
         </div>
       </section>
     </div>
@@ -780,9 +782,9 @@ onUnmounted(() => {
       @click.self="closeStyleProfileNameDialog"
     >
       <section class="style-profile-name-dialog" role="dialog" aria-modal="true" aria-labelledby="style-profile-name-title">
-        <h2 id="style-profile-name-title">{{ styleProfileNameMode === 'create' ? '新建样式方案' : '重命名样式方案' }}</h2>
+        <h2 id="style-profile-name-title">{{ styleProfileNameMode === 'create' ? t('ccSubtitle.style.create') : t('ccSubtitle.style.rename') }}</h2>
         <label class="style-profile-name-field">
-          <span>方案名称</span>
+          <span>{{ t('ccSubtitle.style.nameLabel') }}</span>
           <input
             v-model="styleProfileNameInput"
             type="text"
@@ -791,8 +793,8 @@ onUnmounted(() => {
           />
         </label>
         <div class="style-profile-name-actions">
-          <button type="button" class="secondary" @click="closeStyleProfileNameDialog">取消</button>
-          <button type="button" :disabled="!styleProfileNameInput.trim()" @click="confirmStyleProfileName">确定</button>
+          <button type="button" class="secondary" @click="closeStyleProfileNameDialog">{{ t('common.cancel') }}</button>
+          <button type="button" :disabled="!styleProfileNameInput.trim()" @click="confirmStyleProfileName">{{ t('common.confirm') }}</button>
         </div>
       </section>
     </div>

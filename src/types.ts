@@ -48,7 +48,10 @@ export type EnvironmentCache = {
   updatedAt?: number
 }
 
+export type LanguagePreference = 'system' | 'zh-CN' | 'en-US'
+
 export type AppConfig = {
+  language: LanguagePreference
   ffmpegMode: 'system' | 'custom'
   ffmpegPath?: string
   defaultCrf: number
