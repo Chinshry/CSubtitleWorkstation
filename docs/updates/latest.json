@@ -1,13 +1,13 @@
 {
-  "version": "0.1.13",
-  "notes": "## ✨ 新增功能\n\n- 媒体工具页新增封装转换（remux）、媒体拼接、音视频合并等处理能力，支持更完整的无重编码整理流程。\n- 重构媒体封装视图，拆分更清晰的输入、输出和任务设置区域，工具加载状态更直观。\n- 新增字幕格式转换工具，并打磨字幕文件选择、输出路径和转换流程。\n- 音频来源文件支持更灵活的路径选择，便于在合并和封装转换流程中复用已有素材。\n\n## 🐞 问题修复\n\n- 修复配置文件持续膨胀后导致应用加载卡顿的问题，减少历史任务和缓存数据对启动体验的影响。\n- 修复 macOS 版本发布构建时 AVS 检测模块的条件编译错误。\n\n## 🎨 体验改进\n\n- 优化媒体工具页的任务组织和控件布局，让封装转换、拼接合并、字幕转换等工具入口更集中。\n- 改进工具加载提示和路径选择交互，降低首次进入媒体工具页时的等待感。",
-  "pub_date": "2026-06-18T12:03:08Z",
+  "version": "0.1.14",
+  "notes": "## ✅ 新增功能\n\n- 新增界面多语言支持，为后续中英文界面切换打好基础。\n\n## 🎉 体验改进\n\n- 优化富提示浮层显示方式，避免被工具页容器裁切，并根据视口空间自动调整浮出位置。\n- 收窄 CC 字幕整理规则提示卡片宽度，阅读更集中，不再横向铺满页面。\n- 增加英文 README，方便英文用户了解项目用途、安装方式和使用入口。",
+  "pub_date": "2026-06-21T12:58:34Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.13/CSubtitleWorkstation_0.1.13_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.14/CSubtitleWorkstation_0.1.14_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.13/CSubtitleWorkstation_0.1.13_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.14/CSubtitleWorkstation_0.1.14_universal.dmg"
     }
   }
 }
