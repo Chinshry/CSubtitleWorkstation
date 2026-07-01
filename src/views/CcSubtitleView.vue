@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { loadCcSubtitleConfig, saveCcSubtitleConfig } from '../api/toolConfig'
 import AppSelect from '../components/AppSelect.vue'
 import RuleDictionaryModal from '../components/RuleDictionaryModal.vue'
@@ -48,6 +48,7 @@ const toast = useToast()
 const { t } = useI18n()
 let organizeTimer: ReturnType<typeof setTimeout> | null = null
 let dictionarySaveTimer: ReturnType<typeof setTimeout> | null = null
+let dictionarySavePending = false
 let organizeSeq = 0
 let organizeInFlight = false
 let organizeAgain = false
@@ -132,8 +133,10 @@ function openStyleProfileDialog() {
 
 function scheduleSaveReplacementDictionary() {
   if (!dictionaryLoaded) return
+  dictionarySavePending = true
   if (dictionarySaveTimer) clearTimeout(dictionarySaveTimer)
   dictionarySaveTimer = setTimeout(() => {
+    dictionarySavePending = false
     void saveReplacementDictionary()
   }, 600)
 }
@@ -553,8 +556,17 @@ watch([screenStyleName, speakStyleName], () => {
 
 watch(selectedStyleProfileId, () => {
   applySelectedStyleProfile()
-  scheduleSaveReplacementDictionary()
+  if (dictionaryLoaded) {
+    dictionarySavePending = false
+    if (dictionarySaveTimer) clearTimeout(dictionarySaveTimer)
+    dictionarySaveTimer = null
+    void saveReplacementDictionary()
+  }
   scheduleOrganize()
+})
+
+onMounted(() => {
+  void ensureReplacementDictionaryLoaded()
 })
 
 watch(pendingDrop, (drop) => {
@@ -569,6 +581,10 @@ watch(pendingDrop, (drop) => {
 onUnmounted(() => {
   if (organizeTimer) clearTimeout(organizeTimer)
   if (dictionarySaveTimer) clearTimeout(dictionarySaveTimer)
+  if (dictionarySavePending) {
+    dictionarySavePending = false
+    void saveReplacementDictionary()
+  }
   stopPaneResize()
 })
 </script>
