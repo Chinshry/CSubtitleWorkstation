@@ -109,6 +109,11 @@ fn organize_cc_subtitle(
     style_names: &CcStyleNames,
     ass_header: Option<&str>,
 ) -> CcSubtitleResult {
+    if looks_like_vtt(text) {
+        let ass_text = vtt_to_ass(text, style_names, ass_header);
+        return organize_cc_subtitle(&ass_text, replacement_rules, style_names, None);
+    }
+
     if looks_like_srt(text) {
         return organize_srt_as_ass(text, replacement_rules, style_names, ass_header);
     }
@@ -379,7 +384,7 @@ fn default_event_format() -> Vec<String> {
     .collect()
 }
 
-struct SrtCue {
+struct TimedCue {
     start: String,
     end: String,
     text: String,
@@ -388,15 +393,25 @@ struct SrtCue {
 fn looks_like_srt(text: &str) -> bool {
     text.lines()
         .take(12)
-        .any(|line| parse_srt_timing(line.trim()).is_some())
+        .any(|line| parse_subtitle_timing(line.trim()).is_some())
 }
 
-fn parse_srt_cues(text: &str) -> Vec<SrtCue> {
+fn looks_like_vtt(text: &str) -> bool {
+    text.trim_start_matches('\u{feff}')
+        .lines()
+        .take(12)
+        .any(|line| {
+            let trimmed = line.trim();
+            trimmed.eq_ignore_ascii_case("WEBVTT") || parse_vtt_timing(trimmed).is_some()
+        })
+}
+
+fn parse_srt_cues(text: &str) -> Vec<TimedCue> {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
     normalized.split("\n\n").filter_map(parse_srt_cue).collect()
 }
 
-fn parse_srt_cue(block: &str) -> Option<SrtCue> {
+fn parse_srt_cue(block: &str) -> Option<TimedCue> {
     let mut lines = block
         .lines()
         .map(str::trim_end)
@@ -407,27 +422,96 @@ fn parse_srt_cue(block: &str) -> Option<SrtCue> {
     } else {
         first
     };
-    let (start, end) = parse_srt_timing(timing_line.trim())?;
+    let (start, end) = parse_subtitle_timing(timing_line.trim())?;
     let text = lines.collect::<Vec<_>>().join("\\N");
     if text.trim().is_empty() {
         return None;
     }
 
-    Some(SrtCue { start, end, text })
+    Some(TimedCue { start, end, text })
 }
 
-fn parse_srt_timing(line: &str) -> Option<(String, String)> {
+fn parse_vtt_cues(text: &str) -> Vec<TimedCue> {
+    let normalized = text
+        .trim_start_matches('\u{feff}')
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+
+    normalized.split("\n\n").filter_map(parse_vtt_cue).collect()
+}
+
+fn vtt_to_ass(text: &str, style_names: &CcStyleNames, ass_header: Option<&str>) -> String {
+    let mut output = ass_document_header(style_names, ass_header);
+    for cue in parse_vtt_cues(text) {
+        output.push_str(&format!(
+            "Dialogue: 0,{},{},Default,,0,0,0,,{}\n",
+            cue.start, cue.end, cue.text
+        ));
+    }
+    output
+}
+
+fn parse_vtt_cue(block: &str) -> Option<TimedCue> {
+    let mut lines = block
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty());
+    let first = lines.next()?;
+    let first_trimmed = first.trim();
+    if first_trimmed.eq_ignore_ascii_case("WEBVTT")
+        || first_trimmed.starts_with("WEBVTT ")
+        || first_trimmed.eq_ignore_ascii_case("STYLE")
+        || first_trimmed.eq_ignore_ascii_case("REGION")
+        || first_trimmed.starts_with("NOTE")
+    {
+        return None;
+    }
+
+    let (start, end) = if let Some(timing) = parse_vtt_timing(first_trimmed) {
+        timing
+    } else {
+        parse_vtt_timing(lines.next()?.trim())?
+    };
+    let text = lines.map(strip_vtt_markup).collect::<Vec<_>>().join("\\N");
+    if text.trim().is_empty() {
+        return None;
+    }
+
+    Some(TimedCue { start, end, text })
+}
+
+fn parse_vtt_timing(line: &str) -> Option<(String, String)> {
+    let (start, rest) = line.split_once("-->")?;
+    let end = rest.split_whitespace().next()?;
+    Some((
+        subtitle_time_to_ass(start.trim())?,
+        subtitle_time_to_ass(end.trim())?,
+    ))
+}
+
+fn parse_subtitle_timing(line: &str) -> Option<(String, String)> {
     let (start, end) = line.split_once("-->")?;
-    Some((srt_time_to_ass(start.trim())?, srt_time_to_ass(end.trim())?))
+    Some((
+        subtitle_time_to_ass(start.trim())?,
+        subtitle_time_to_ass(end.trim())?,
+    ))
 }
 
-fn srt_time_to_ass(value: &str) -> Option<String> {
+fn subtitle_time_to_ass(value: &str) -> Option<String> {
     let time = value.split_whitespace().next()?;
-    let mut parts = time.split([':', ',']);
-    let hours = parts.next()?.parse::<u32>().ok()?;
-    let minutes = parts.next()?.parse::<u32>().ok()?;
-    let seconds = parts.next()?.parse::<u32>().ok()?;
-    let millis = parts.next()?.parse::<u32>().ok()?;
+    let parts = time.split(':').collect::<Vec<_>>();
+    let (hours, minutes, second_part) = match parts.as_slice() {
+        [minutes, seconds] => (0, minutes.parse::<u32>().ok()?, *seconds),
+        [hours, minutes, seconds] => (
+            hours.parse::<u32>().ok()?,
+            minutes.parse::<u32>().ok()?,
+            *seconds,
+        ),
+        _ => return None,
+    };
+    let mut second_parts = second_part.split(['.', ',']);
+    let seconds = second_parts.next()?.parse::<u32>().ok()?;
+    let millis = normalize_millis(second_parts.next()?);
     let total_centis = (((hours * 60 + minutes) * 60 + seconds) * 1000 + millis + 5) / 10;
     let centis = total_centis % 100;
     let total_seconds = total_centis / 100;
@@ -439,6 +523,35 @@ fn srt_time_to_ass(value: &str) -> Option<String> {
         "{}:{:02}:{:02}.{:02}",
         hours, minutes, seconds, centis
     ))
+}
+
+fn normalize_millis(value: &str) -> u32 {
+    let digits = value
+        .chars()
+        .filter(|value| value.is_ascii_digit())
+        .collect::<String>();
+    let padded = format!("{digits:0<3}");
+    padded[..3.min(padded.len())].parse::<u32>().unwrap_or(0)
+}
+
+fn strip_vtt_markup(line: &str) -> String {
+    let without_tags = vtt_tag_regex().replace_all(line, "");
+    decode_vtt_entities(&without_tags)
+}
+
+fn decode_vtt_entities(value: &str) -> String {
+    value
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&lrm;", "")
+        .replace("&rlm;", "")
+        .replace("&nbsp;", " ")
+}
+
+fn vtt_tag_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"</?[^>]+>").expect("VTT tag regex should be valid"))
 }
 
 fn sanitize_style_name(value: Option<&str>, fallback: &str) -> String {
@@ -684,5 +797,23 @@ mod tests {
             .text
             .contains("Dialogue: 0,0:00:00.00,0:00:01.00,1080_横_听轴,,0,0,0,,Line"));
         assert!(!output.text.contains("[Aegisub Project Garbage]"));
+    }
+    #[test]
+    fn converts_vtt_to_ass_and_splits_speaker_tag() {
+        let input = "WEBVTT\n\nintro\n00:00.000 --> 00:01.277 align:start position:0%\n[EXAMPLE NAME]<c.highlight>Hello &amp; welcome</c>\n\n00:01.278 --> 00:02.348\nPlain <i>line</i>\n";
+        let output = organize_cc_subtitle(input, &rules(), &style_names(), None);
+
+        assert!(output.text.contains("[Script Info]"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.28,花字,,0,0,0,,示例名称"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:01.28,听轴,,0,0,0,,Hello & welcome"));
+        assert!(output
+            .text
+            .contains("Dialogue: 0,0:00:01.28,0:00:02.35,听轴,,0,0,0,,Plain line"));
+        assert_eq!(output.inserted_lines, 1);
+        assert_eq!(output.replacement_count, 1);
     }
 }

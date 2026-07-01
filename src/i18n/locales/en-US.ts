@@ -283,7 +283,7 @@ export default {
     items: {
       ccSubtitle: {
         name: 'CC Subtitle Organizer',
-        description: 'Organize CC subtitles by splitting [] text into styled screen-text lines and the rest into dialogue lines. Supports reading reference ASS styles and exporting ASS.'
+        description: 'Organize CC subtitles by splitting [] text into styled screen-text lines and the rest into dialogue lines. Supports importing ASS / SSA / SRT / VTT, reading reference ASS styles, and exporting ASS.'
       },
       textConversion: {
         name: 'Simplified/Traditional Conversion',
@@ -295,7 +295,7 @@ export default {
       },
       subtitleFormat: {
         name: 'Subtitle Format Conversion',
-        description: 'Use ffmpeg to convert between ASS / SSA / SRT / VTT. Converting to SRT / VTT discards styles and effects unsupported by the target format.'
+        description: 'Convert between ASS / SSA / SRT / VTT. TTML can be used as input and converted to SRT.'
       },
       mediaRemux: {
         name: 'Video to MP4',
@@ -321,7 +321,7 @@ export default {
       body: 'Organizes Web CC subtitles into an ASS structure suitable for further editing in Aegisub.',
       items: {
         readStyle: 'Read a reference ASS first and parse [V4+ Styles]; dialogue and screen-text styles must be selected manually.',
-        convertInput: 'SRT input is converted to ASS output; ASS / SSA input processes existing Dialogue lines.',
+        convertInput: 'SRT / VTT input is converted to ASS output; ASS / SSA input processes existing Dialogue lines.',
         bracketText: 'For [bracket tags], text inside [] is stripped of brackets and uses the screen-text style.',
         dialogAfterBracket: 'Dialogue after a bracket tag is moved into a separate line using the dialogue style.',
         plainDialog: 'Plain dialogue without bracket tags uses the dialogue style for the whole line.',
@@ -331,20 +331,20 @@ export default {
     }
   },
   ccSubtitle: {
-    dropOverlay: 'Release to read ASS / SSA / SRT subtitles',
+    dropOverlay: 'Release to read ASS / SSA / SRT / VTT subtitles',
     input: 'Input',
     result: 'Result',
     charCount: '{count} chars',
     previewLimit: 'Previewing first {count} chars',
     previewTruncated: '... Preview omitted {count} chars. Copy and export still use the full content.',
-    inputPlaceholder: 'Drop an ASS / SSA / SRT subtitle file here to preview its content',
+    inputPlaceholder: 'Drop an ASS / SSA / SRT / VTT subtitle file here to preview its content',
     resizeLabel: 'Resize input and result panes',
     organizing: 'Organizing...',
     outputSuffix: '_cc_organized',
     confirmDeleteProfile: 'Delete style profile "{name}"?',
     status: {
       needStyle: 'Read a reference ASS first, then select dialogue and screen-text styles.',
-      needStyleBeforeImport: 'Read a reference ASS and select dialogue and screen-text styles before importing the SRT to organize.',
+      needStyleBeforeImport: 'Read a reference ASS and select dialogue and screen-text styles before importing the subtitle to organize.',
       noStylesParsed: 'No styles were parsed from [V4+ Styles] in the reference ASS.',
       profileCreated: 'Created style profile "{name}". Select dialogue and screen-text styles.',
       readingSubtitle: 'Reading subtitle file...',
@@ -936,19 +936,19 @@ export default {
     outputLog: 'Output: {path}',
     dropzone: {
       title: 'Drop a subtitle to convert',
-      note: 'Supports ASS / SSA / SRT / VTT / SUB',
-      description: 'The output path is generated after selecting the target format. Converting to SRT / VTT simplifies unsupported styles.',
+      note: 'Input supports ASS / SSA / SRT / VTT / TTML / SUB',
+      description: 'The output path is generated after selecting the target format. TTML input only converts to SRT and simplifies unsupported styles.',
       choose: 'Choose Subtitle'
     },
     inputLabel: 'Input Subtitle',
-    inputPlaceholder: 'Choose ass / ssa / srt / vtt / sub subtitle file',
+    inputPlaceholder: 'Choose ass / ssa / srt / vtt / ttml / sub subtitle file',
     targetFormat: 'Target Format',
     targetFormatTitle: 'Choose output subtitle format',
     outputLabel: 'Output Subtitle',
     outputPlaceholder: 'Choose output subtitle path',
     conflictWarning: 'Output path cannot be the same as the input subtitle. Choose a new file.',
     noteTitle: 'Processing Notes',
-    noteAss: 'ASS / SSA preserve richer styling. SRT / VTT are more universal, but only support basic text and timing.',
+    noteAss: 'ASS / SSA preserve richer styling. SRT / VTT are more universal; TTML input is converted to SRT with basic text and timing.',
     noteSimplify: 'If the source subtitle contains complex positioning, effects, or font styling, these details are simplified according to the target format.',
     start: 'Start Conversion',
     cancel: 'Cancel Conversion',

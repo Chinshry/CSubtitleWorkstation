@@ -26,12 +26,18 @@ const showCommandPreview = ref(false)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 const { t } = useI18n()
 
-const formatOptions: { value: SubtitleTargetFormat; label: string }[] = [
+const baseFormatOptions: { value: SubtitleTargetFormat; label: string }[] = [
   { value: 'srt', label: 'SRT' },
   { value: 'ass', label: 'ASS' },
   { value: 'ssa', label: 'SSA' },
   { value: 'vtt', label: 'VTT' }
 ]
+
+const formatOptions = computed(() => (
+  isTtmlPath(inputPath.value)
+    ? baseFormatOptions.filter((option) => option.value === 'srt')
+    : baseFormatOptions
+))
 
 const outputConflictsWithInput = computed(() => (
   normalizePathForCompare(inputPath.value) !== '' &&
@@ -89,7 +95,15 @@ function normalizePathForCompare(path: string) {
 }
 
 function isSubtitlePath(path: string) {
-  return /\.(ass|ssa|srt|vtt|sub)$/i.test(path)
+  return /\.(ass|ssa|srt|vtt|ttml|sub)$/i.test(path)
+}
+
+function isTtmlPath(path: string) {
+  return /\.ttml$/i.test(path.trim())
+}
+
+function ensureTargetCompatibleWithInput() {
+  if (isTtmlPath(inputPath.value)) targetFormat.value = 'srt'
 }
 
 function outputForInput(path: string) {
@@ -115,6 +129,7 @@ function applyDroppedPaths(paths: string[], subtitlePath?: string) {
   const path = subtitlePath || paths.find(isSubtitlePath)
   if (!path) return
   inputPath.value = path
+  ensureTargetCompatibleWithInput()
   applyAutoOutput()
 }
 
@@ -123,10 +138,11 @@ async function pickInputFile() {
   const selected = await open({
     title: t('subtitleFormat.dialog.inputTitle'),
     multiple: false,
-    filters: [{ name: t('subtitleFormat.dialog.subtitleFilter'), extensions: ['ass', 'ssa', 'srt', 'vtt', 'sub'] }]
+    filters: [{ name: t('subtitleFormat.dialog.subtitleFilter'), extensions: ['ass', 'ssa', 'srt', 'vtt', 'ttml', 'sub'] }]
   })
   if (typeof selected === 'string') {
     inputPath.value = selected
+    ensureTargetCompatibleWithInput()
     applyAutoOutput()
   }
 }

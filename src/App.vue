@@ -46,7 +46,7 @@ function classifyPaths(paths: string[]) {
       !out.videoPath
     ) {
       out.videoPath = p
-    } else if (/\.(ass|ssa|srt|vtt|sub)$/.test(lower) && !out.subtitlePath) {
+    } else if (/\.(ass|ssa|srt|vtt|ttml|sub)$/.test(lower) && !out.subtitlePath) {
       out.subtitlePath = p
       if (!out.textPath) out.textPath = p
     } else if (/\.txt$/.test(lower) && !out.textPath) {
@@ -71,7 +71,7 @@ function isLikelyMediaToolPath(path: string) {
 }
 
 function isSubtitlePath(path: string) {
-  return /\.(ass|ssa|srt|vtt|sub)$/i.test(path)
+  return /\.(ass|ssa|srt|vtt|ttml|sub)$/i.test(path)
 }
 
 function isTextPath(path: string) {

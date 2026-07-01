@@ -283,7 +283,7 @@ export default {
     items: {
       ccSubtitle: {
         name: 'CC 字幕整理',
-        description: '整理 CC 字幕，把 [] 内文字拆成花字行，其余整理为听轴行；支持读取参考 ASS 样式并导出 ASS。'
+        description: '整理 CC 字幕，把 [] 内文字拆成花字行，其余整理为听轴行；支持导入 ASS / SSA / SRT / VTT，读取参考 ASS 样式并导出 ASS。'
       },
       textConversion: {
         name: '繁简转换',
@@ -295,7 +295,7 @@ export default {
       },
       subtitleFormat: {
         name: '字幕格式转换',
-        description: '使用 ffmpeg 在 ASS / SSA / SRT / VTT 之间转换；转到 SRT / VTT 时会丢弃原格式不支持的样式和特效。'
+        description: '支持 ASS / SSA / SRT / VTT 互转；TTML 可作为输入转为 SRT。'
       },
       mediaRemux: {
         name: '视频转 MP4',
@@ -321,7 +321,7 @@ export default {
       body: '用于把 Web CC 字幕整理成适合 Aegisub 后续精修的 ASS 结构。',
       items: {
         readStyle: '先读取样式参考 ASS，解析 [V4+ Styles]；必须手动选择听轴样式和花字样式。',
-        convertInput: 'SRT 输入会转换为 ASS 输出；ASS / SSA 输入会处理已有 Dialogue 行。',
+        convertInput: 'SRT / VTT 输入会转换为 ASS 输出；ASS / SSA 输入会处理已有 Dialogue 行。',
         bracketText: '遇到 [方括号标签]：括号内文本去掉 []，使用花字样式。',
         dialogAfterBracket: '方括号标签后面的台词会另起一条，使用听轴样式。',
         plainDialog: '没有方括号标签的普通台词整条使用听轴样式。',
@@ -331,20 +331,20 @@ export default {
     }
   },
   ccSubtitle: {
-    dropOverlay: '松开以读取 ASS / SSA / SRT 字幕',
+    dropOverlay: '松开以读取 ASS / SSA / SRT / VTT 字幕',
     input: '输入',
     result: '结果',
     charCount: '{count} 字',
     previewLimit: '仅预览前 {count} 字',
     previewTruncated: '... 已省略预览 {count} 字，复制和导出仍使用完整内容。',
-    inputPlaceholder: '拖入 ASS / SSA / SRT 字幕文件后在这里预览内容',
+    inputPlaceholder: '拖入 ASS / SSA / SRT / VTT 字幕文件后在这里预览内容',
     resizeLabel: '调整输入和结果宽度',
     organizing: '整理中...',
     outputSuffix: '_cc整理',
     confirmDeleteProfile: '删除样式方案「{name}」？',
     status: {
       needStyle: '请先读取样式参考 ASS，并选择听轴样式和花字样式。',
-      needStyleBeforeImport: '请先读取样式参考 ASS，并选择听轴样式和花字样式，再导入需要整理的 SRT。',
+      needStyleBeforeImport: '请先读取样式参考 ASS，并选择听轴样式和花字样式，再导入需要整理的字幕。',
       noStylesParsed: '没有在样式参考 ASS 的 [V4+ Styles] 中解析到样式。',
       profileCreated: '已新建样式方案「{name}」，请选择听轴样式和花字样式。',
       readingSubtitle: '正在读取字幕文件...',
@@ -1021,20 +1021,20 @@ export default {
     outputLog: '已输出：{path}',
     dropzone: {
       title: '拖入字幕开始转换',
-      note: '支持 ASS / SSA / SRT / VTT / SUB',
-      description: '选择目标格式后会自动生成输出路径；转换到 SRT / VTT 时会简化不支持的样式。',
+      note: '支持 ASS / SSA / SRT / VTT / TTML / SUB 输入',
+      description: '选择目标格式后会自动生成输出路径；TTML 输入仅支持转 SRT，并会简化不支持的样式。',
       choose: '选择字幕'
     },
     inputLabel: '输入字幕',
-    inputPlaceholder: '选择 ass / ssa / srt / vtt / sub 字幕文件',
+    inputPlaceholder: '选择 ass / ssa / srt / vtt / ttml / sub 字幕文件',
     targetFormat: '目标格式',
     targetFormatTitle: '选择输出字幕格式',
     outputLabel: '输出字幕',
     outputPlaceholder: '选择输出字幕路径',
     conflictWarning: '输出路径不能和输入字幕相同，请选择一个新文件。',
     noteTitle: '处理说明',
-    noteAss: 'ASS / SSA 保留样式能力更强；SRT / VTT 更通用，但只能表达基础文本和时间轴。',
-    noteSimplify: '如果源字幕包含复杂定位、特效、字体样式，转换成 SRT / VTT 后这些信息会按目标格式能力被简化。',
+    noteAss: 'ASS / SSA 保留样式能力更强；SRT / VTT 更通用；TTML 输入仅按基础文本和时间轴转 SRT。',
+    noteSimplify: '如果源字幕包含复杂定位、特效、字体样式，转换成 SRT / VTT 或从 TTML 导入时会按目标格式能力被简化。',
     start: '开始转换',
     cancel: '取消转换',
     running: '转换中...',
