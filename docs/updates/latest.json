@@ -1,13 +1,13 @@
 {
-  "version": "0.1.14",
-  "notes": "## ✅ 新增功能\n\n- 新增界面多语言支持，为后续中英文界面切换打好基础。\n\n## 🎉 体验改进\n\n- 优化富提示浮层显示方式，避免被工具页容器裁切，并根据视口空间自动调整浮出位置。\n- 收窄 CC 字幕整理规则提示卡片宽度，阅读更集中，不再横向铺满页面。\n- 增加英文 README，方便英文用户了解项目用途、安装方式和使用入口。",
-  "pub_date": "2026-06-21T12:58:34Z",
+  "version": "0.1.15",
+  "notes": "## ✨ 新增功能\n\n- CC 字幕整理支持导入 VTT 字幕，可将 VTT 内容转换为 ASS 后继续按花字/听轴规则整理。\n- 字幕格式转换工具支持 TTML 输入，并可转换为 SRT。\n- 字幕格式转换页面已同步支持 TTML 文件选择、拖拽识别和目标格式限制；TTML 输入时仅允许输出 SRT。\n\n## 🐞 问题修复\n\n- 修复 CC 字幕整理页面不会稳定记住样式方案选择的问题，切换方案后会立即保存，离开页面前也会补保存未落盘状态。",
+  "pub_date": "2026-07-08T12:10:23Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.14/CSubtitleWorkstation_0.1.14_x64-setup.exe"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.15/CSubtitleWorkstation_0.1.15_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.14/CSubtitleWorkstation_0.1.14_universal.dmg"
+      "url": "https://github.com/Chinshry/CSubtitleWorkstation/releases/download/v0.1.15/CSubtitleWorkstation_0.1.15_universal.dmg"
     }
   }
 }
